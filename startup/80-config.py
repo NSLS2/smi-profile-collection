@@ -150,12 +150,8 @@ def fly_scan(det, motor, cycle=1, cycle_t=10, phi=-0.6):
     # yield from bps.mv(attn_shutter, 'Insert')
 
 
-manual_PID_disable_pitch = EpicsSignal(
-    "XF:12IDB-BI:2{EM:BPM3}fast_pidY_incalc.CLCN", name="manual_PID_disable_pitch"
-)
-manual_PID_disable_roll = EpicsSignal(
-    "XF:12IDB-BI:2{EM:BPM3}fast_pidX_incalc.CLCN", name="manual_PID_disable_roll"
-)
+manual_PID_disable_pitch = energy.pitch_feedback_disabled
+manual_PID_disable_roll = energy.roll_feedback_disabled
 
 
 def feedback(action=None):
