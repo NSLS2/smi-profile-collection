@@ -3107,3 +3107,448 @@ def waxs_S_edge_chris_2025_1(t=1):
             yield from bps.mv(energy, 2480)
             yield from bps.sleep(2)
             yield from bps.mv(energy, 2445)
+
+
+
+
+
+
+def vert_sequence_scan_25_01_newsecurity():
+    """
+    Measuring samples mounted vertically:
+    - Alignement in the vertical orientation
+    - Take a direct and reflected beam at ai = 3 deg to verify the alignement precision
+    - Take few energies without translation for an energy variation reference (no sample inhomogemetiy)
+    - Scan the incident angle at 2450 eV
+    - Fine energy scan at 0.4, 0.8, 4 and 8 deg incident angles
+    """
+
+    # In McNeil_11
+    samples = ["A4_02p", "A1_02p", "Q1_01p", "Q1_02p", "Q1_03p", "A3_04p",
+               "A3_05p", "A3_06p", "A3_12p"]
+    ys =   [      -6000,    -6000,    -6000,    -5000,    -6000,    -4000,
+                      0,        0,        0]
+    xs =   [     -51000,   -35000,   -11326,    15300,    40300,    52000,
+                 -51000,   -35000,   -11326]
+    xshexa =   [     -8,        1,        1,        1,        1,       14,
+                     -8,        0,        0]
+    yshexa =   [     -8,       -10,       -10,       -8,       -10,       -5,
+                      2,        2,        2]
+
+    samples = [  "A3_06p", "A3_12p"]
+    ys =   [         0,        0]
+    xs =   [           -34000,   -10000]
+    xshexa =   [            1,        1]
+    yshexa =   [            3,        3]
+
+    wa=[20]
+    assert len(samples) == len(ys), f"Number of X coordinates ({len(samples)}) is different from number of samples ({len(y)})"
+    assert len(samples) == len(xs), f"Number of X coordinates ({len(samples)}) is different from number of samples ({len(names)})"
+    assert len(samples) == len(xshexa), f"Number of X coordinates ({len(samples)}) is different from number of samples ({len(names)})"
+    assert len(samples) == len(yshexa), f"Number of X coordinates ({len(samples)}) is different from number of samples ({len(names)})"
+
+
+    det_exposure_time(1, 1)
+
+    for i, (sample, y, x, xhexa, yhexa) in enumerate(zip(samples, ys, xs, xshexa, yshexa)):
+        if 'A4' in sample:
+            wa = [18]
+        elif 'Y1' in sample or 'A3' in sample or 'Q1' in sample:
+            wa = [20]
+
+        # Setup measurement for sample
+        yield from bps.mv(piezo.y, y)
+        yield from bps.mv(piezo.x, x)
+        yield from bps.mv(stage.x, xhexa)
+        yield from bps.mv(stage.y, yhexa)
+
+        yield from bps.mv(GV7.open_cmd, 1)
+        yield from bps.sleep(1)
+        yield from bps.mv(GV7.open_cmd, 1)
+        yield from bps.sleep(1)
+
+        yield from alignement_xrr_xmotor(angle=0.1)
+
+        yield from bps.mv(GV7.close_cmd, 1)
+        yield from bps.sleep(1)
+        yield from bps.mv(GV7.close_cmd, 1)
+        yield from bps.sleep(1)
+
+        # beam is 30um.
+        yield from calibrate_ai_ver(t=1, energies=2450, name=sample)
+
+        # beam is 30um.
+        yield from bps.mv(piezo.y, y - 30)
+
+        # beam is 30um.
+        yield from fixedposition_energysweep_ver_newsecurity(t=1, name=sample, ai_list=[0.4, 0.8, 4, 8], waxs_arc=wa)
+
+        # beam is 30um.
+        yield from bps.mv(piezo.y, y - 30)
+
+        yield from vert_aiscan_giwaxs_S_edge_2024_3_newsecurity(t=1, energies=2450, name=sample, waxs_arc=wa)
+        
+        # beam is 30um.
+        yield from bps.mv(piezo.y, y - 30)
+
+        # Run sample scan
+        yield from vert_giwaxs_S_edge_2024_3_newsecurity(
+            t=1, name=sample, ai_list = [0.4, 0.8, 4, 8], ystep=20, waxs_arc=wa) # steps 63 energies
+
+
+
+def fixedposition_energysweep_ver_newsecurity(t=1, name="Test", ai_list: list[int] = [], waxs_arc=[18]):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    dets = [pil900KW]
+
+    energies = [2450, 2465, 2475, 2485, 2510, 2540, 2477.5]
+    
+    ai0 = prs.position
+    ys = piezo.y.position
+
+    det_exposure_time(1, 1)
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            for k, ais in enumerate(ai_list):
+                yield from bps.mv(piezo.y, ys - k * 20)
+
+                yield from bps.mv(prs, ai0 - ais)
+                name_fmt = "fixedpossweep_{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+                
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(5)
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.sleep(2)
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+                    
+                    bpm = xbpm2.sumX.get()
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, xbpm="%4.3f"%bpm)
+                    s.put(sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+                
+                yield from bps.mv(energy, 2445)
+                yield from bps.sleep(2)
+
+            yield from bps.mv(prs, ai0)
+
+    (yield from inner())
+
+
+
+def vert_aiscan_giwaxs_S_edge_2024_3_newsecurity(t=1, energies=2450, name="Test", waxs_arc=[18]):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    dets = [pil900KW]
+    det_exposure_time(t, t)
+    
+    yield from bps.mv(energy, energies)
+    yield from bps.sleep(2)
+    yield from bps.mv(energy, energies)
+    yield from bps.sleep(2)
+
+    # waxs_arc = [18]
+    ai_list = (np.arange(0.2, 0.46, 0.02).tolist()+ np.arange(0.46, 0.7, 0.003).tolist()+ np.arange(0.7, 1.0, 0.02).tolist()+ np.arange(1.0, 4.0, 0.1).tolist())    
+
+    ai0 = prs.position
+
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+            
+            for k, ais in enumerate(ai_list):
+                yield from bps.mv(prs, ai0 - ais)
+                name_fmt = "wideincidentanglescan_{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+
+                bpm = xbpm2.sumX.get()
+                sample_name = name_fmt.format(sample=name,energy="%6.2f"%energies, ai="%3.3f"%ais, wax=waxs_arc[0], xbpm="%4.3f"%bpm)
+                s.put(sample_name)
+                print(f"\n\t=== Sample: {sample_name} ===\n")
+                yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+                yield from bps.sleep(1)
+
+            yield from bps.mv(prs, ai0)
+    (yield from inner())
+
+
+
+def vert_giwaxs_S_edge_2024_3_newsecurity(t=1, name="Test", ai_list: list[int] = [], ystep=10, waxs_arc=[18]):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    dets = [pil900KW]
+
+
+    # bottom left first
+    # name = 'A1_01_test'    
+
+    # 63 energies
+    energies = (np.arange(2445, 2470, 5).tolist()+ np.arange(2470, 2480, 0.25).tolist()+ np.arange(2480, 2490, 1).tolist()
+                + np.arange(2490, 2500, 5).tolist()+ np.arange(2500, 2560, 10).tolist())
+    
+    # waxs_arc = [18]
+
+    ai0 = prs.position
+    ys = piezo.y.position
+
+    det_exposure_time(1, 1)
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            counter = 0
+            for k, ais in enumerate(ai_list):
+
+                yield from bps.mv(prs, ai0 - ais)
+
+                name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+                
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(2)
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.sleep(2)
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+                    
+                    yield from bps.mv(piezo.y, ys - counter * ystep)
+                    counter += 1
+                    bpm = xbpm2.sumX.get()
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, xbpm="%4.3f"%bpm)
+                    s.put(sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+                
+                yield from bps.mv(energy, 2500)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2480)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2445)
+
+            yield from bps.mv(prs, ai0)
+
+    (yield from inner())
+
+
+
+def hor_sequence_scan_25_01_scan(): #_P3HT
+    """
+    Running multiple samples with various scans
+    """
+    wa = [0, 20]
+    
+    # Sample bar 2 left by Matt
+    #
+    samples = [  "A2_05", "A2_04", "A2_02", "A2_01", "A1_06", "A1_05",  "A1_02", "A1_01"] 
+    x_pos =   [   -52000,  -48000,  -26000,  -10000,    6000,   27000,    43000,   47000]
+    x_step = [        30,      30,      30,      30,      30,      30,       30,      30]
+    x_pos_hex = [    -12,       0,       0,       0,       0,       0,        0,      12]
+   
+    samples = [   "A1_02", "A1_01"] 
+    x_pos =   [  43000,   47000]
+    x_step = [        30,      30]
+    x_pos_hex = [   0,      12]
+   
+
+    for i, (sample, x, xstep, xhex) in enumerate(zip(samples, x_pos, x_step, x_pos_hex)):
+        
+        # Setup measurement for sample
+        det_exposure_time(1, 1)
+        yield from bps.mv(piezo.x, x)
+        yield from bps.mv(stage.x, xhex)
+
+        # Sample alignment - align at 0.3 because....
+        yield from alignement_gisaxs(angle=0.3)
+    
+        print('ai0 is ', piezo.th.position)
+
+        yield from calibrate_ai_hor(t=1, energies=2450, name=sample)
+    
+        # beam is 200um.
+        yield from fixedposition_energysweep_hor(t=1, name=sample, ai_list=[0.4, 0.8, 4, 8], waxs_arc=[0])
+
+        yield from bps.mvr(piezo.x, 300)
+        yield from incident_energy_scan_giwaxs_S_edge_2025_1_scan(t=1, energies=2450, name=sample)
+        # beam is 200um.
+        yield from bps.mvr(piezo.x, 300)
+
+        yield from sevralai_giwaxs_S_edge_2025_1_scan(t=1, 
+                                                    name=sample, 
+                                                    ai_list = [0.4, 0.8, 4.0, 8.0], 
+                                                    xstep=xstep,
+                                                    waxs_arc=wa) # steps 63 energies
+        
+
+
+def sevralai_giwaxs_S_edge_2025_1_scan(t=1, name="Test", ai_list: list[int] = [], xstep=10, waxs_arc = [0, 20]):
+    '''
+
+    '''
+    dets = [pil900KW, pil1M]
+   
+    # 63 energies
+    energies = (np.arange(2445, 2470, 5).tolist()+ np.arange(2470, 2480, 0.25).tolist()+ np.arange(2480, 2490, 1).tolist()
+                + np.arange(2490, 2500, 5).tolist()+ np.arange(2500, 2560, 10).tolist())
+    
+    ai0 = piezo.th.position
+    xs = piezo.x.position
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            counter = 0
+            for k, ais in enumerate(ai_list):
+                if ais==0.6:
+                    det_exposure_time(0.5, 0.5)
+                else:
+                    det_exposure_time(1, 1)
+
+                yield from bps.mv(piezo.th, ai0 + ais)
+
+                name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+                
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(2)
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+                    
+                    yield from bps.mv(piezo.x, xs + counter * xstep)
+                    counter += 1
+                    bpm = xbpm2.sumX.get()
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, xbpm="%4.3f"%bpm)
+                    s.put(sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+                
+                yield from bps.mv(energy, 2500)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2480)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2445)
+
+            yield from bps.mv(piezo.th, ai0)
+    (yield from inner())
+
+
+def incident_energy_scan_giwaxs_S_edge_2025_1_scan(t=1, energies=2450, name="Test"):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    dets = [pil900KW]
+    det_exposure_time(t, t)
+
+    # bottom left first
+    # name = 'A1_01_test'
+    
+    yield from bps.mv(energy, energies)
+    yield from bps.sleep(2)
+    yield from bps.mv(energy, energies)
+    yield from bps.sleep(2)
+
+    waxs_arc = [0]
+    ai_list = (np.arange(0.2, 0.46, 0.02).tolist()+ np.arange(0.46, 0.7, 0.003).tolist()+ np.arange(0.7, 1.0, 0.02).tolist()+ np.arange(1.0, 4.0, 0.1).tolist())    
+
+    ai0 = piezo.th.position
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+            
+            for k, ais in enumerate(ai_list):
+                yield from bps.mv(piezo.th, ai0 + ais)
+                name_fmt = "wideincidentanglescan_{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+
+                bpm = xbpm2.sumX.get()
+                sample_name = name_fmt.format(sample=name,energy="%6.2f"%energies, ai="%3.3f"%ais, wax=waxs_arc[0], xbpm="%4.3f"%bpm)
+                
+                s.put(sample_name)
+                print(f"\n\t=== Sample: {sample_name} ===\n")
+                yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+
+            yield from bps.mv(piezo.th, ai0)
+    (yield from inner())
+
+
+
+def fixedposition_energysweep_hor_scan(t=1, name="Test", ai_list: list[int] = [], waxs_arc=[18]):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    dets = [pil900KW]
+
+    energies = [2450, 2465, 2475, 2485, 2510, 2540, 2477.5]
+    
+    ai0 = piezo.th.position
+    xs = piezo.x.position
+
+    det_exposure_time(1, 1)
+
+    s = Signal(name='target_file_name', value='')
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            for k, ais in enumerate(ai_list):
+                yield from bps.mv(piezo.x, xs + k * 100)
+
+                yield from bps.mv(piezo.th, ai0 + ais)
+                name_fmt = "fixedpossweep_{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+                
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(5)
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.sleep(2)
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+                    
+                    bpm = xbpm2.sumX.get()
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, xbpm="%4.3f"%bpm)
+                    s.put(sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+
+                yield from bps.mv(energy, 2445)
+                yield from bps.sleep(2)
+
+            yield from bps.mv(piezo.th, ai0)
+
+    (yield from inner())

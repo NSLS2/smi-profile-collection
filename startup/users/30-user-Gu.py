@@ -1716,6 +1716,8 @@ def night_guorong(t=1):
 
 
 
+
+
 def wang_temperature_tender_2025_1(t=5):
     """
     Tender X-ray WAXS and SAXS Lakeshore heating stage, coarse energies
@@ -1790,3 +1792,307 @@ def wang_temperature_tender_2025_1(t=5):
 
     # Turn off the heating and set temperature to 23 deg C
     yield from turn_off_heating()
+
+
+
+
+
+
+
+
+import bluesky.preprocessors as bpp
+import bluesky.plans as bp
+import bluesky.plan_stubs as bps
+from ophyd import Signal
+
+def energy_Sedge_scan(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+    '''
+
+    # names =   ['sa00', 'sa04',  'sa10',  'sa15',  'sa06',   'sa16',  'sa03',  'sa13', 'sa05', 'sa14','empty']       
+    # piezo_x = [ 45000,  37200,   26500,   17300,   10200,      700,   -6500,  -16000, -26200, -35000, -42000]   
+    # piezo_y = [ -5100,  -4200,   -5200,   -4900,   -4900,    -4900,   -4200,   -5100,  -5100,  -4300,  -5100]
+
+    names =   ['sa00', 'sa04',  'sa10',  'sa15',  'sa06',   'sa16',  'sa03',  'sa13', 'sa05', 'sa14','empty']       
+    piezo_x = [ 45000,  37400,   26500,   17500,   10500,      700,   -6500,  -16000, -26200, -35200, -42000]   
+    piezo_y = [ -5100,  -4500,   -4800,   -5000,   -4700,    -4800,   -4200,   -5000,  -4600, -3800,  -5100]
+
+    assert len(names)   == len(piezo_x), f"Wrong list lenghts"
+    assert len(piezo_x) == len(piezo_y), f"Wrong list lenghts"
+
+    waxs_arc = [0, 20]
+    # 63 energies
+    energies = [2470, 2472, 2474, 2475, 2476, 2477, 2478, 2480]
+
+    dets = [pil900KW, pil1M]
+    det_exposure_time(t, t)
+
+    s = Signal(name='target_file_name', value='')
+
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+
+        # Read T and convert to deg C
+        temp_degC = ls.input_A.get() - 273.15
+
+        for wa in waxs_arc:
+            yield from bps.mv(waxs, wa)
+
+            for name, x, y in zip(names, piezo_x, piezo_y):
+                yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(2)
+
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.mv(energy, e)
+                
+                    # Metadata
+                    #e = energy.position.energy / 1000
+                    temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                    wa = str(np.round(float(wa), 1)).zfill(4)
+                    sdd = pil1m_pos.z.position / 1000
+
+                    print(temp, wa, sdd)
+
+                    # Sample name
+                    name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m_up")
+                    sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                    sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                    print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                    s.put(sample_name)
+                    
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                yield from bps.mv(energy, 2470)
+                yield from bps.sleep(2)
+
+    (yield from inner())
+
+
+
+
+
+
+
+
+
+import bluesky.preprocessors as bpp
+import bluesky.plans as bp
+import bluesky.plan_stubs as bps
+from ophyd import Signal
+
+def energy_Sedge_scan_withdetmotion(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+    '''
+
+    # names =   ['sa00', 'sa04',  'sa10',  'sa15',  'sa06',   'sa16',  'sa03',  'sa13', 'sa05', 'sa14','empty']       
+    # piezo_x = [ 45000,  37200,   26500,   17300,   10200,      700,   -6500,  -16000, -26200, -35000, -42000]   
+    # piezo_y = [ -5100,  -4200,   -5200,   -4900,   -4900,    -4900,   -4200,   -5100,  -5100,  -4300,  -5100]
+
+    names =   ['sa00', 'sa04',  'sa10',  'sa15',  'sa06',   'sa16',  'sa03',  'sa13', 'sa05', 'sa14','empty']       
+    piezo_x = [ 45000,  37400,   26500,   17500,   10500,      700,   -6500,  -16000, -26200, -35200, -42000]   
+    piezo_y = [ -5100,  -4500,   -4800,   -5000,   -4700,    -4800,   -4200,   -5000,  -4300, -3800,  -5100]
+
+    assert len(names)   == len(piezo_x), f"Wrong list lenghts"
+    assert len(piezo_x) == len(piezo_y), f"Wrong list lenghts"
+
+    waxs_arc = [20, 0]
+    # 63 energies
+    energies = [2470, 2472, 2474, 2475, 2476, 2477, 2478, 2480]
+
+    dets = [pil900KW, pil1M]
+    det_exposure_time(0.5, 2.5)
+
+    s = Signal(name='target_file_name', value='')
+
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+
+        # Read T and convert to deg C
+        temp_degC = ls.input_A.get() - 273.15
+
+        for wa in waxs_arc:
+            yield from bps.mv(waxs, wa)
+            if wa == 0:
+                yield from bps.mv(pil1m_pos.x, -50)
+                yield from bps.mv(pil1m_pos.y, -61)
+
+                for name, x, y in zip(names, piezo_x, piezo_y):
+                    yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                    for e in energies:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+
+                        if xbpm2.sumX.get() < 50:
+                            yield from bps.mv(energy, e)
+                    
+                        # Metadata
+                        #e = energy.position.energy / 1000
+                        temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                        wa = str(np.round(float(wa), 1)).zfill(4)
+                        sdd = pil1m_pos.z.position / 1000
+
+                        print(temp, wa, sdd)
+
+                        # Sample name
+                        name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m")
+                        sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                        s.put(sample_name)
+                        
+                        yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                    yield from bps.mv(energy, 2470)
+                    yield from bps.sleep(2)
+
+            if wa == 20:
+                yield from bps.mv(pil1m_pos.x, -52)
+                yield from bps.mv(pil1m_pos.y, -59)
+
+                for name, x, y in zip(names, piezo_x, piezo_y):
+                    yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                    for e in energies:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+
+                        if xbpm2.sumX.get() < 50:
+                            yield from bps.mv(energy, e)
+                    
+                        # Metadata
+                        #e = energy.position.energy / 1000
+                        temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                        wa = str(np.round(float(wa), 1)).zfill(4)
+                        sdd = pil1m_pos.z.position / 1000
+
+                        print(temp, wa, sdd)
+
+                        # Sample name
+                        name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m_dl")
+                        sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                        s.put(sample_name)
+                        
+                        yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                    yield from bps.mv(energy, 2470)
+                    yield from bps.sleep(2)
+
+            if wa == 20:
+                yield from bps.mv(pil1m_pos.x, -52)
+                yield from bps.mv(pil1m_pos.y, -61)
+
+                for name, x, y in zip(names, piezo_x, piezo_y):
+                    yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                    for e in energies:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+
+                        if xbpm2.sumX.get() < 50:
+                            yield from bps.mv(energy, e)
+                    
+                        # Metadata
+                        #e = energy.position.energy / 1000
+                        temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                        wa = str(np.round(float(wa), 1)).zfill(4)
+                        sdd = pil1m_pos.z.position / 1000
+
+                        print(temp, wa, sdd)
+
+                        # Sample name
+                        name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m_ul")
+                        sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                        s.put(sample_name)
+                        
+                        yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                    yield from bps.mv(energy, 2470)
+                    yield from bps.sleep(2)
+
+            if wa == 20:
+                yield from bps.mv(pil1m_pos.x, -50)
+                yield from bps.mv(pil1m_pos.y, -61)
+
+                for name, x, y in zip(names, piezo_x, piezo_y):
+                    yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                    for e in energies:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+
+                        if xbpm2.sumX.get() < 50:
+                            yield from bps.mv(energy, e)
+                    
+                        # Metadata
+                        #e = energy.position.energy / 1000
+                        temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                        wa = str(np.round(float(wa), 1)).zfill(4)
+                        sdd = pil1m_pos.z.position / 1000
+
+                        print(temp, wa, sdd)
+
+                        # Sample name
+                        name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m_ur")
+                        sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                        s.put(sample_name)
+                        
+                        yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                    yield from bps.mv(energy, 2470)
+                    yield from bps.sleep(2)
+
+
+            if wa == 20:
+                yield from bps.mv(pil1m_pos.x, -50)
+                yield from bps.mv(pil1m_pos.y, -59)
+
+                for name, x, y in zip(names, piezo_x, piezo_y):
+                    yield from bps.mv(piezo.x, x,piezo.y, y)
+
+                    for e in energies:
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+
+                        if xbpm2.sumX.get() < 50:
+                            yield from bps.mv(energy, e)
+                    
+                        # Metadata
+                        #e = energy.position.energy / 1000
+                        temp = str(np.round(float(temp_degC), 1)).zfill(5)
+                        wa = str(np.round(float(wa), 1)).zfill(4)
+                        sdd = pil1m_pos.z.position / 1000
+
+                        print(temp, wa, sdd)
+
+                        # Sample name
+                        name_fmt = ("{sample}_{temp}degC_{energy}eV_wa{wax}_sdd{sdd}m_dr")
+                        sample_name = name_fmt.format(sample = name,energy = "%.2f" % e ,temp = temp, wax = wa, sdd = "%.1f" % sdd)
+                        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                        s.put(sample_name)
+                        
+                        yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ls.input_A] + [s])
+
+                    yield from bps.mv(energy, 2470)
+                    yield from bps.sleep(2)
+
+    (yield from inner())
+
+
+    t_kelvin = 25 + 273.15
+    yield from ls.output1.mv_temp(t_kelvin)
+    yield from ls.output1.turn_off()
