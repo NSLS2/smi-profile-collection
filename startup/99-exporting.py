@@ -86,14 +86,19 @@ logger.setLevel("INFO")
 #             if "amptek" in run.metadata["start"]["detectors"]:
 #                 # retreive information from the start document
 #                 cycle = run.metadata["start"]["cycle"]
-#                 propos = (run.metadata["start"]["proposal_number"]+ "_"+ run.metadata["start"]["main_proposer"])
-#                 propos = (run.metadata["start"]["proposal_id"])
+#                 project = run.metadata["start"]["project_name"]
+#                 datasession = run.metadata["start"]["data_session"]
 
-#                 newDir = "user_data/%s/%s/Amptek/" % (cycle,propos)                
-#                 # create a new directory
-#                 if not os.path.exists(newDir):
-#                     os.makedirs(newDir)
-#                     os.chmod(newDir, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
+#                 # propos = (run.metadata["start"]["proposal_number"]+ "_"+ run.metadata["start"]["main_proposer"])
+#                 # propos = (run.metadata["start"]["proposal_id"])
+
+#                 newDir = "/nsls2/data/smi/proposals/%s/%s/projects/%s/user_data/Amptek/"% (cycle, datasession, project)       
+#                 # newDir = "user_data/%s/%s/Amptek/" % (cycle,propos)                
+         
+#                 # # create a new directory
+#                 # if not os.path.exists(newDir):
+#                 #     os.makedirs(newDir)
+#                 #     os.chmod(newDir, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
 
 #                 export_spectra_to_csv(run,
 #                                       dir=newDir,

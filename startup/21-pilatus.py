@@ -37,7 +37,8 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
     file_template = Cpt(SignalWithRBV, "FileTemplate", string=True)
     file_number = Cpt(SignalWithRBV, "FileNumber")
     auto_increment = Cpt(SignalWithRBV, "AutoIncrement")
-    energy = Cpt(SignalWithRBV, "Energy")
+    cam_energy = Cpt(SignalWithRBV, "Energy")
+    energyset = Cpt(Signal, name="Beamline Energy", value=energy.energy.readback.get()) # remember the energy of the beamline
 
 
     def __init__(self, *args, **kwargs):
@@ -56,11 +57,10 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
                 continue
             if hasattr(cpt, "ensure_nonblocking"):
                 cpt.ensure_nonblocking()
-    energyset = Cpt(Signal, name="Beamline Energy") # remember the energy of the beamline
-    file_path = Cpt(SignalWithRBV, "FilePath", string=True)
-    file_name = Cpt(SignalWithRBV, "FileName", string=True)
-    file_template = Cpt(SignalWithRBV, "FileName", string=True)
-    file_number = Cpt(SignalWithRBV, "FileNumber")
+    # file_path = Cpt(SignalWithRBV, "FilePath", string=True)
+    # file_name = Cpt(SignalWithRBV, "FileName", string=True)
+    # file_template = Cpt(SignalWithRBV, "FileName", string=True)
+    # file_number = Cpt(SignalWithRBV, "FileNumber")
 
     def stage(self):
         self.file_name.set(str(uuid.uuid4()))
@@ -152,7 +152,7 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
     trans1 = Cpt(TransformPlugin, "Trans1:")
 
     threshold = Cpt(EpicsSignal, "cam1:ThresholdEnergy")
-    energy = Cpt(EpicsSignal, "cam1:Energy")
+    cam_energy = Cpt(EpicsSignal, "cam1:Energy")
     gain = Cpt(EpicsSignal, "cam1:GainMenu")
     apply = Cpt(EpicsSignal, "cam1:ThresholdApply")
 
@@ -269,6 +269,8 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
             waits.append(pil900KW.cam.acquire_time.set(exp_t))
             waits.append(pil900KW.cam.acquire_period.set(exp_t + period_delay))
             waits.append(pil900KW.cam.num_images.set(int(meas_t / exp_t)))
+            waits.append(amptek.mca.preset_real_time.put(exp_t))
+
             for w in waits:
                 w.wait()
     except:
@@ -436,7 +438,7 @@ class WAXS(Device):
                 )
             )
         else:
-            calc_value = -44
+            calc_value = -100
 
         st_x = self.bs_x.set(calc_value)
         return st_arc & st_x
@@ -457,26 +459,41 @@ class WAXS(Device):
         # bsx_pos = -36.1 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
         # bsx_pos = -27.7 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
         # bsx_pos = -96.74 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 05, changing script rather than dial as previously...
-        bsx_pos = -117.487 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 11, changing script rather than dial as previously...
+        # bsx_pos = -117.487 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 11, changing script rather than dial as previously...
+        bsx_pos = -37.36 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 28, changing script rather than dial as previously...
 
         return bsx_pos
 
 waxs = WAXS("XF:12IDC-ES:2{", name="waxs")
 
 def set_energy_cam(cam,en_ev):
-     en = en_ev / 1000 # change to kev
-     thresh = max(en/2,1.6)
-     if en<4:
-             gain = 3
-     elif en < 7:
-             gain = 2
-     elif en < 20:
-             gain = 1
-     else:
-             gain = 0
-     cam.threshold_energy.put(thresh)
-     cam.energy.put(en)
-     cam.gain_menu.put(gain)
-     cam.threshold_apply.put(1)
-     cam.energyset.set(en) # store so it remembers on failure and resets
+     
+    en = en_ev / 1000 # change to kev
+
+    if en<2 : # invalid energy
+        en = 16.1
+        gain = 1
+    elif en<4:
+        gain = 3
+    elif en < 7:
+        gain = 2
+    elif en < 20:
+        gain = 1
+    else:
+        gain = 0    
+
+    if en < 3.2:
+        thresh = 1.6
+    elif 13 < en < 22 and 'waxs' in cam.name: ## avoid the fluoresence from the waxs beamstop
+        thresh = 11.5
+    else:
+        thresh = en/2
+
+    cam.cam_energy.put(en)
+    cam.threshold_energy.put(thresh)
+    cam.gain_menu.put(gain)
+    cam.threshold_apply.put(1)
+
+    cam.energyset.set(en) # store so it remembers on failure and resets
+
 

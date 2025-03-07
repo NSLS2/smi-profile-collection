@@ -146,3 +146,14 @@ for camera in [OAV_writing, OAV2_writing, FS_writing, WBS_writing, VFM_writing]:
     camera.cam.ensure_nonblocking()
     # When reading switch to mono colour mode
     #camera.cam.stage_sigs['color_mode'] = 'Mono'
+
+FS.read_attrs = ["stats1", "stats2", "stats3", "stats4", "stats5"]
+FS.stats1.read_attrs = ["total"]
+FS.stats2.read_attrs = ["total"]
+FS.stats3.read_attrs = ["total"]
+FS.stats4.read_attrs = ["total"]
+FS.stats5.read_attrs = ["total"]
+
+FS.stats2.total.kind = "hinted"
+FS.stats3.total.kind = "hinted"
+FS.stats5.total.kind = "hinted"

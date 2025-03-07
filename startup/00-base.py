@@ -40,6 +40,7 @@ nslsii.configure_base(get_ipython().user_ns,
                "smi",
                bec_derivative=True, 
                publish_documents_with_kafka=True)
+nslsii.configure_kafka_publisher(RE, "smi")
 
 # This is a workaround to enable us subscribe to Kafka publisher, which requires a beamline acronym when calling
 # configuration_base above (ideally, we would just pass tiled_inserter there).

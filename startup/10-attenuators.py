@@ -27,12 +27,12 @@ class Attenuator(Device):
         st = self._set_st = DeviceStatus(self)
         if(val in['Open','Insert', 'open','insert','in',1]):
             while self.status.get() != 'Open':
-                self.open_cmd.set(1)
-                time.sleep(1)
+                self.open_cmd.set(1).wait()
+                # time.sleep(1)
         if(val in ['Close','Retract','close','retract','out',0]):
             while self.status.get() != 'Not Open':
-                self.close_cmd.set(1)
-                time.sleep(1)
+                self.close_cmd.set(1).wait()
+                #time.sleep(1)
         st.set_finished()
         return st
 

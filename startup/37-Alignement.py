@@ -125,7 +125,7 @@ def alignement_gisaxs_doblestack(angle=0.15):
 
     # alignement of incident angle at ai = 0.1 deg so the alignement use the reflected roi not sitting on the db position
     yield from smi.setReflectedBeamROI(total_angle=0.1, technique="gisaxs")
-    yield from align_gisaxs_th(0.35, 60)  # was 1.5 27
+    yield from align_gisaxs_th(0.9, 60)  # was 1.5 27
 
     # move to theta 0 + value
     yield from bps.mv(piezo.th, ps.peak + angle)
@@ -246,6 +246,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
 
     """
 
+
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
@@ -262,7 +263,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     yield from align_gisaxs_height_hex(rough_y, 21, der=True)
 
     yield from smi.setReflectedBeamROI(total_angle=0.06, technique="gisaxs")
-    yield from align_gisaxs_th_hex(0.5, 21)
+    yield from align_gisaxs_th_hex(0.5, 31)
 
     # move to theta 0 + value
     yield from bps.mv(stage.th, ps.peak + angle)
@@ -272,7 +273,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
 
     # Scan theta and height
     yield from align_gisaxs_th_hex(0.3, 31)
-    yield from align_gisaxs_height_hex(0.1, 21)
+    yield from align_gisaxs_height_hex(0.15, 26)
     yield from align_gisaxs_th_hex(0.05, 21)
 
     # Close all the matplotlib windows

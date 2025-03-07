@@ -43,11 +43,14 @@ def energy_to_gap(target_energy, undulator_harmonic=1, man_offset=0):
     gap = gap_mm * 1000 - auto_offset - man_offset
 
     # Work this out for tender
-    if target_energy < 6000:
+    if target_energy <3000:
         #K edge -10
         #Cl edge -20
         gap = (gap_mm * 1000 -20)
         #gap = (gap_mm * 1000 -48)
+    # elif target_energy <5000:
+    #     gap = (gap_mm * 1000 -50)
+
 
     # if target_energy > 17500:
     #     #K edge -10
@@ -127,7 +130,11 @@ class Energy(PseudoPositioner):
         read_attrs=["user_readback"],
         configuration_attrs=[],
         labels=["mono"],
+        add_prefix=(),
     )
+    
+
+    # ivugap = Cpt(SoftPositioner, init_pos=7000)
 
     enableivu = Cpt(Signal, value=True)
     enabledcmgap = Cpt(Signal, value=True)
@@ -245,7 +252,7 @@ dcm_config = DCMInternals("", name="dcm_config")
 
 bragg.read_attrs = ["user_readback"]
 
-#new_ivu_gap = EpicsMotor("SR:C12-ID:G1{IVU:1-Ax:Gap}-Mtr", name="new_ivu_gap")
+# new_ivu_gap = EpicsMotor("SR:C12-ID:G1{IVU:1-Ax:Gap}-Mtr", name="new_ivu_gap")
 
 
 # def move_E(E, gap_off=0):
