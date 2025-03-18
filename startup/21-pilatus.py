@@ -12,8 +12,8 @@ from ophyd import (
     TransformPlugin,
     PilatusDetector,
     OverlayPlugin,
+    TIFFPlugin,
 )
-
 
 from ophyd.areadetector.cam import PilatusDetectorCam
 from ophyd.areadetector.detectors import PilatusDetector

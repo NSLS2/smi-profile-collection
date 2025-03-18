@@ -49,9 +49,10 @@ def turn_on_suspenders():
     RE.install_suspender(susp_smi_shutter)
     RE.install_suspender(susp_beam)
     RE.install_suspender(susp_xbpm2_sum)
-    print('Suspenders turnd on')
+    print('Suspenders turned on')
     
 
 def turn_off_suspenders():
     RE.clear_suspenders()
+    print('Suspenders turned off')
     
