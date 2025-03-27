@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 from datetime import datetime
-from ophyd.signal import EpicsSignalBase, EpicsSignal, DEFAULT_CONNECTION_TIMEOUT
+from ophyd.signal import EpicsSignalBase, EpicsSignal
 import redis
 from redis_json_dict import RedisJSONDict
 
@@ -13,7 +13,9 @@ from redis_json_dict import RedisJSONDict
 from tiled.client import from_profile
 from databroker import Broker
 
-EpicsSignalBase.set_defaults(timeout=30, connection_timeout=30)
+timeout = 60
+print(f"Setting connection timeout to {timeout}s")
+EpicsSignalBase.set_defaults(timeout=timeout, connection_timeout=timeout)
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
