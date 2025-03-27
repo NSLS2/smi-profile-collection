@@ -13,6 +13,8 @@ from redis_json_dict import RedisJSONDict
 from tiled.client import from_profile
 from databroker import Broker
 
+EpicsSignalBase.set_defaults(timeout=10, connection_timeout=10)
+
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
 
@@ -38,7 +40,7 @@ tiled_inserter = TiledInserter()
 # The function below initializes RE and subscribes tiled_inserter to it
 nslsii.configure_base(get_ipython().user_ns,
                "smi",
-               bec_derivative=True, 
+               bec_derivative=True,
                publish_documents_with_kafka=True)
 nslsii.configure_kafka_publisher(RE, "smi")
 
