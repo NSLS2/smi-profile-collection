@@ -201,6 +201,7 @@ class Energy(PseudoPositioner):
 
     @real_position_argument
     def inverse(self, r_pos):
+        print(f"{r_pos = }\n{type(r_pos) = }")
         bragg = r_pos.bragg
         try:
             e = ANG_OVER_EV / (2 * D_Si111 * math.sin(math.radians(bragg)))
