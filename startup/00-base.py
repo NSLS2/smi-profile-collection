@@ -13,7 +13,7 @@ from redis_json_dict import RedisJSONDict
 from tiled.client import from_profile
 from databroker import Broker
 
-EpicsSignalBase.set_defaults(timeout=10, connection_timeout=10)
+EpicsSignalBase.set_defaults(timeout=30, connection_timeout=30)
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
