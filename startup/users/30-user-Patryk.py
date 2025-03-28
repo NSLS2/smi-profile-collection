@@ -2256,3 +2256,346 @@ def andrew_mapping_2025_1(t=3):
             
             sample_id(user_name='test', sample_name='test')
     det_exposure_time(0.5, 0.5)
+
+
+def run_Paren_tender_overnight_2025_1(t=2):
+    """
+    """
+
+    names_1   = [ 'MNa20', 'MLi20', 'SNa20', 'SLi20', 'MNa10r', 'MLi10r', 'SLi5', 'vacuum', ]
+    piezo_x_1 = [  -13700,   -9600,   -3600,    1600,     6800,    12000,  21800,    35800, ]
+    piezo_y_1 = [   -5700,   -5800,   -5600,   -6600,    -7150,    -6500,  -6900,    -6650, ]
+
+    names_2   = [  'SiN', 'SNa10-0.5k', 'SNa10-2.0k', 'MNa10', 'MLi10', 'SNa10', 'SLi10', 'MNa5', 'MLi5', 'SNa5', 'MNa0', 'MLi0', 'SNa0', ] 
+    piezo_x_2 = [ -34200,       -26500,       -19000,  -14800,   -8700,   -4100,    1300,   6900,  11900,  16900,  27100,  31800,  36800, ]
+    piezo_y_2 = [   5950,         6150,         6100,    5850,    5800,    6000,    5750,   5750,   5800,   5650,   5900,   6100,   6100, ]
+    
+
+    names   =   names_1 +   names_2
+    piezo_x = piezo_x_1 + piezo_x_2
+    piezo_y = piezo_y_1 + piezo_y_2
+    piezo_z = [ 3600 for n in names ]
+    
+    waxs_arc = [ 0, 20, 40 ]
+    energies = np.concatenate((
+        np.arange(2460, 2470, 5),
+        np.arange(2470, 2490, 0.5),
+        np.arange(2490, 2511, 1),
+    ))
+
+    step_y = 15
+    user = "BP"
+    det_exposure_time(t, t)
+
+    msg = "Wrong number of coordinates"
+    assert len(piezo_x) == len(names), msg
+    assert len(piezo_x) == len(piezo_y), msg
+    assert len(piezo_x) == len(piezo_z), msg
+
+    for wa in waxs_arc:
+        yield from bps.mv(waxs, wa)
+        dets = [pil900KW] if waxs.arc.position < 15 else [pil900KW, pil1M]
+
+        for name, x, y, z, in zip(names, piezo_x, piezo_y, piezo_z):
+
+            yield from bps.mv(
+                piezo.y, y,
+                piezo.x, x,
+                piezo.z, z,
+            )
+
+            for i, nrg in enumerate(energies):
+                yield from bps.mv(energy, nrg)
+                yield from bps.mv(piezo.y, y + i * step_y)
+                yield from bps.sleep(2)
+                if xbpm2.sumX.get() < 50:
+                    yield from bps.sleep(2)
+                    yield from bps.mv(energy, nrg)
+                    yield from bps.sleep(2)
+
+                loc = '00'
+
+                sample_name = f'{name}{get_more_md()}_loc{loc}'
+                sample_id(user_name=user, sample_name=sample_name)
+                print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                yield from bp.count(dets)
+
+                #if (wa == waxs_arc[0]) and (i == 0):
+                #    yield from bp.count([OAV_writing])
+
+    sample_id(user_name="test", sample_name="test")
+    det_exposure_time(0.3, 0.3)
+
+def run_Paren_flatfield_2025_1(t=10):
+    """
+    """
+
+    name =   'flatfield-MNa20-30s'
+    x =      -14900
+    y =      -5600
+    z =       3600
+
+    wa = 50
+
+    dets = [pil900KW]
+
+    energies = np.concatenate((
+        np.arange(2460, 2470, 5),
+        np.arange(2470, 2490, 0.5),
+        np.arange(2490, 2511, 1),
+    ))
+
+    user = "BP"
+    det_exposure_time(t, t)
+
+    y_step = 15 #(5800 - 4200) / len(energies)
+
+    yield from bps.mv(
+        piezo.y, y,
+        piezo.x, x,
+        piezo.z, z,
+        waxs, wa,
+    )
+
+    for i, nrg in enumerate(energies):
+        yield from bps.mv(
+            energy, nrg,
+            piezo.y, y + i  * y_step,
+            )
+        yield from bps.sleep(2)
+        if xbpm2.sumX.get() < 50:
+            yield from bps.sleep(2)
+            yield from bps.mv(energy, nrg)
+            yield from bps.sleep(2)
+
+        loc = '00'
+        sample_name = f'{name}{get_more_md()}_loc{loc}'
+        sample_id(user_name=user, sample_name=sample_name)
+        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+        yield from bp.count(dets)
+
+    sample_id(user_name="test", sample_name="test")
+    det_exposure_time(0.3, 0.3)
+    yield from bps.mv(waxs, 0)
+
+def run_scans_Paren_2025_1():
+    yield from run_Paren_tender_overnight_2025_1(t=2)
+    yield from run_Paren_flatfield_2025_1(t=30)
+
+def run_Paren_hard_2025_1(t=5):
+    """
+    """
+
+    names_1   = [ 'MNa20-b', 'MLi20-b', 'SNa20-b', 'SLi20-b', 'MNa10r-b', 'MLi10r-b', 'SLi5-b', 'vacuum', ]
+    piezo_x_1 = [   -14600,      -9200,     -3200,      2000,       7300,      12400,    22200,    35800, ]
+    piezo_y_1 = [    -5550,      -5800,     -5800,     -5800,      -6400,      -6400,    -6400,    -6650, ]
+
+    names_2   = [ 'MNa20-c', 'MLi20-c', 'SNa20-c', 'SLi20-c', 'MNa10r-c', 'MLi10r-c', 'SLi5-c', 'vacuum', ]
+    piezo_x_2 = [  -14600,       -9200,     -3200,      2000,       7300,      12400,    22200,    35800, ]
+    piezo_y_2 = [   -5500,       -5750,     -5750,     -5750,      -6350,      -6350,    -6350,    -6650, ]
+
+    names_3   = [  'SiN-b', 'SNa10-0.5k-b', 'SNa10-2.0k-b', 'MNa10-b', 'MLi10-b', 'SNa10-b', 'SLi10-b', 'MNa5-b', 'MLi5-b', 'SNa5-b', 'MNa0-b', 'MLi0-b', 'SNa0-b', 'SLi0-b', ] 
+    piezo_x_3 = [   -33800,         -26100,         -19500,    -14000,     -9700,     -3600,    1900,       7500,    12400,    17400,  27800,      33000,    38000,    43400, ]
+    piezo_y_3 = [     6100,           6100,           6100,      6100,      6100,      6100,    6100,       6100,     6100,     6100,   6100,       7100,     7100,     5900, ]
+    
+    names_4   = [  'SiN-c', 'SNa10-0.5k-c', 'SNa10-2.0k-c', 'MNa10-c', 'MLi10-c', 'SNa10-c', 'SLi10-c', 'MNa5-c', 'MLi5-c', 'SNa5-c', 'MNa0-c', 'MLi0-c', 'SNa0-c', 'SLi0-c', ] 
+    piezo_x_4 = [   -34200,         -26100,         -19500,    -14000,     -9700,     -3600,    1900,       7500,    12400,    17400,  27800,      33300,    38000,    42700, ]
+    piezo_y_4 = [     6150,           6150,           6150,      6150,      6150,      6150,    6150,       6150,     6150,     6150,   7500,       7150,     7150,     5850, ]
+    
+
+    names   =   names_1 +   names_2 +   names_3 +   names_4
+    piezo_x = piezo_x_1 + piezo_x_2 + piezo_x_3 + piezo_x_4
+    piezo_y = piezo_y_1 + piezo_y_2 + piezo_y_3 + piezo_y_4
+    piezo_z = [ 3600 for n in names ]
+    
+    waxs_arc = [ 0, 20, 40 ]
+
+    user = "BP"
+    det_exposure_time(t, t)
+
+    msg = "Wrong number of coordinates"
+    assert len(piezo_x) == len(names), msg
+    assert len(piezo_x) == len(piezo_y), msg
+    assert len(piezo_x) == len(piezo_z), msg
+
+    for wa in waxs_arc:
+        yield from bps.mv(waxs, wa)
+        dets = [pil900KW] if waxs.arc.position < 14.9 else [pil900KW, pil1M]
+
+        for name, x, y, z, in zip(names, piezo_x, piezo_y, piezo_z):
+
+            yield from bps.mv(
+                piezo.y, y,
+                piezo.x, x,
+                piezo.z, z,
+            )
+            loc = f'00'
+
+            sample_name = f'{name}{get_scan_md()}_loc{loc}'
+            sample_id(user_name=user, sample_name=sample_name)
+            print(f"\n\n\n\t=== Sample: {sample_name} ===")
+            yield from bp.count(dets)
+
+
+    sample_id(user_name="test", sample_name="test")
+    det_exposure_time(0.3, 0.3)
+
+def run_Paren_flatfield_hard_2025_1(t=30):
+    """
+    """
+
+    name =   'flatfield-SNa0-30s'
+    x =      37400
+    y =       6700
+    z =       3600
+
+    wa = 50
+
+    dets = [pil900KW, pil1M]
+
+    user = "BP"
+    det_exposure_time(t, t)
+
+
+    yield from bps.mv(
+        piezo.y, y,
+        piezo.x, x,
+        piezo.z, z,
+        waxs, wa,
+    )
+
+    loc = '00'
+    sample_name = f'{name}{get_scan_md()}_loc{loc}'
+    sample_id(user_name=user, sample_name=sample_name)
+    print(f"\n\n\n\t=== Sample: {sample_name} ===")
+    yield from bp.count(dets)
+
+    sample_id(user_name="test", sample_name="test")
+    det_exposure_time(0.3, 0.3)
+    yield from bps.mv(waxs, 0)
+
+def run_scans_hard_Paren_2025_1():
+    yield from run_Paren_hard_2025_1(t=5)
+    yield from run_Paren_flatfield_hard_2025_1()
+
+
+def overnight_mapping_Das_2025_1(t=2):
+    """
+    SAXS is the priority, 300x300, 61(y) x 13(x)
+
+    """
+
+    names =   [   'S1',   'S2',   'S3',   'S4',  'S5',  'S6',  'S7',  'bkg', ]
+    piezo_x = [ -39000, -28000,  14000,   2000, 15000, 28000, 41000,  45000, ]
+    piezo_y = [    500,    500,    500,    500,   500,   600,   900,    900, ]
+    piezo_z = [   3700,   3700,   3700,   3700,  3700,  3700,  3700,   3700, ]
+
+    msg = "Wrong number of coordinates"
+    assert len(piezo_x) == len(names), msg
+    assert len(piezo_x) == len(piezo_y), msg
+    assert len(piezo_x) == len(piezo_z), msg
+
+    waxs_arc = [ 20 , 0]
+    det_exposure_time(t, t)
+
+    for wa in waxs_arc:
+        yield from bps.mv(waxs, wa)
+        dets = [pil900KW] if waxs.arc.position < 14.9 else [pil900KW, pil1M]
+        
+        # Get xbpm3
+        dets.append(xbpm3.sumX)
+
+        for name, x, y, z in zip(names, piezo_x, piezo_y, piezo_z):
+
+            yield from bps.mv(
+                piezo.x, x,
+                piezo.y, y,
+                piezo.z, z,
+            )
+
+            sample_name = f'{name}_{get_scan_md()}'
+            sample_id(user_name='SD', sample_name=sample_name)
+            print(f"\n\n\n\t=== Sample: {sample_name} ===")
+            
+            if 'bkg' not in name:
+                yield from bp.rel_grid_scan(dets, piezo.y, -150, 150, 61,  piezo.x, -150, 150, 13, 0)
+            else:
+                yield from bp.rel_grid_scan(dets, piezo.y, -100, 100, 11,  piezo.x, -100, 100, 11, 0)
+
+    sample_id(user_name='test', sample_name='test')
+    det_exposure_time(0.5, 0.5)
+
+
+def insitu_mapping_Das_2025_1(t=1, waxs_only=False):
+    """
+    WAXS or SAXS/WAXS at once, 300x300, 61(y) x 13(x)
+
+    """
+    # Sample name and coordinates
+    
+    name = 'BKG-Air'
+    x =    -6300
+    y =     2200
+    z =     -800
+
+    x_offset = 300
+    extra_exposure = 5
+
+    if waxs_only:
+        waxs_arc = [ 0 ]
+    else:
+        waxs_arc = [ 15 ]
+    
+    det_exposure_time(t, t)
+
+    for wa in waxs_arc:
+        yield from bps.mv(waxs, wa)
+        dets = [pil900KW] if waxs.arc.position < 14.9 else [pil900KW, pil1M]
+        
+        # Get xbpm3
+        dets.append(xbpm3.sumX)
+
+        yield from bps.mv(
+            piezo.x, x,
+            piezo.y, y,
+            piezo.z, z,
+            )
+
+        sample_name = f'{name}_{get_scan_md()}'
+        sample_id(user_name='SD', sample_name=sample_name)
+        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+            
+        if 'fgk' not in name:
+            yield from bp.rel_grid_scan(dets, piezo.y, -2, 2, 3,  piezo.x, -2, 2, 3, 0)
+        else:
+            yield from bp.rel_grid_scan(dets, piezo.y, -100, 100, 11,  piezo.x, -100, 100, 11, 0)
+
+        
+        # # Do a single WAXS + SAXS scan at the end
+        waxs_arc_single = [20, 0]
+        for wa in waxs_arc_single:
+            det_exposure_time(extra_exposure, extra_exposure)
+
+            yield from bps.mv(waxs, wa)
+            yield from bps.mv(piezo.x, x + x_offset)
+
+            dets = [pil900KW] if waxs.arc.position < 14.9 else [pil900KW, pil1M]
+            dets.append(xbpm3.sumX)
+
+            sample_name = f'{name}-single{get_scan_md()}'
+            sample_id(user_name='SD', sample_name=sample_name)
+            print(f"\n\n\n\t=== Sample: {sample_name} ===")
+            yield from bp.count(dets)
+        
+        # move back to sample
+        yield from bps.mv(
+            piezo.x, x,
+            piezo.y, y,
+            piezo.z, z,
+            waxs, waxs_arc[0],
+        )
+
+
+    sample_id(user_name='test', sample_name='test')
+    det_exposure_time(0.5, 0.5)
+
