@@ -5,34 +5,24 @@ from ophyd import (
     ADComponent,
     Signal,
     Device,
-    PseudoPositioner,
     EpicsSignal,
     EpicsSignalRO,
     EpicsMotor,
     ROIPlugin,
-    ImagePlugin,
-    TIFFPlugin,
     TransformPlugin,
-    SingleTrigger,
     PilatusDetector,
     OverlayPlugin,
-    FilePlugin,
+    TIFFPlugin,
 )
 
-from ophyd.areadetector.filestore_mixins import FileStoreTIFFIterativeWrite
 from ophyd.areadetector.cam import PilatusDetectorCam
 from ophyd.areadetector.detectors import PilatusDetector
 from ophyd.areadetector.base import EpicsSignalWithRBV as SignalWithRBV
+from ophyd.areadetector.filestore_mixins import FileStoreTIFFIterativeWrite
 
-from ophyd.utils import set_and_wait
-from databroker.assets.handlers_base import HandlerBase
-import os
 import bluesky.plans as bp
 import time
-from nslsii.ad33 import StatsPluginV33
-from nslsii.ad33 import SingleTriggerV33
-import pandas as pds
-
+from nslsii.ad33 import StatsPluginV33, SingleTriggerV33
 
 
 class StatsWCentroid(StatsPluginV33):
@@ -43,10 +33,22 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
     """This is used to update the Pilatus to AD33."""
 
     wait_for_plugins = Cpt(EpicsSignal, "WaitForPlugins", string=True, kind="config")
+    file_path = Cpt(SignalWithRBV, "FilePath", string=True)
+    file_name = Cpt(SignalWithRBV, "FileName", string=True)
+    file_template = Cpt(SignalWithRBV, "FileTemplate", string=True)
+    file_number = Cpt(SignalWithRBV, "FileNumber")
+    auto_increment = Cpt(SignalWithRBV, "AutoIncrement")
+    cam_energy = Cpt(SignalWithRBV, "Energy")
+    energyset = Cpt(Signal, name="Beamline Energy", value=energy.energy.readback.get()) # remember the energy of the beamline
+
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.stage_sigs["wait_for_plugins"] = "Yes"
+        self.stage_sigs["file_template"] = "%s%s_%6.6d_SAXS.tif"
+        self.stage_sigs["auto_increment"] = 1
+        self.stage_sigs["file_number"] = 0
+
 
     def ensure_nonblocking(self):
         self.stage_sigs["wait_for_plugins"] = "Yes"
@@ -56,13 +58,14 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
                 continue
             if hasattr(cpt, "ensure_nonblocking"):
                 cpt.ensure_nonblocking()
+    # file_path = Cpt(SignalWithRBV, "FilePath", string=True)
+    # file_name = Cpt(SignalWithRBV, "FileName", string=True)
+    # file_template = Cpt(SignalWithRBV, "FileName", string=True)
+    # file_number = Cpt(SignalWithRBV, "FileNumber")
 
-    energyset = Cpt(Signal, name="Beamline Energy") # remember the energy of the beamline
-    file_path = Cpt(SignalWithRBV, "FilePath", string=True)
-    file_name = Cpt(SignalWithRBV, "FileName", string=True)
-    file_template = Cpt(SignalWithRBV, "FileName", string=True)
-    file_number = Cpt(SignalWithRBV, "FileNumber")
-    energy = Cpt(SignalWithRBV, "Energy")
+    def stage(self):
+        self.file_name.set(str(uuid.uuid4()))
+        super().stage()
 
 from ophyd.utils.epics_pvs import AlarmStatus
 
@@ -71,9 +74,11 @@ class PilatusDetector(PilatusDetector):
 
 
 class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, md=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self._md = md
         self.__stage_cache = {}
+        self._asset_path = ''
 
     def describe(self):
         ret = super().describe()
@@ -96,27 +101,26 @@ class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
         if cam_dtype in type_map:
             ret[key].setdefault('dtype_str', type_map[cam_dtype])
 
-
         return ret
-    
+
     def get_frames_per_point(self):
         ret = super().get_frames_per_point()
         print('get_frames_per_point returns', ret)
         return ret
 
+    def _update_paths(self):
+        self.write_path_template = self.root_path_str + "%Y/%m/%d/"
+        self.read_path_template = self.root_path_str + "%Y/%m/%d/"
+        self.reg_root = self.root_path_str
+
+    @property
+    def root_path_str(self):
+        return f"/nsls2/data/smi/proposals/{self._md['cycle']}/{self._md['data_session']}/assets/{self._asset_path}/"
+
     def stage(self):
-        self.__stage_cache['file_path'] = self.file_path.get()
-        self.__stage_cache['file_name'] = self.file_name.get()
-        self.__stage_cache['next_file_num'] = self.file_number.get()
+
+        self._update_paths()
         return super().stage()
-
-    def unstage(self):
-
-        ret = super().unstage()
-        self.file_path.set(self.__stage_cache['file_path']).wait()
-        self.file_name.set(self.__stage_cache['file_name']).wait()
-        self.file_number.set(self.__stage_cache['next_file_num']).wait()
-        return ret
 
 
 
@@ -124,16 +128,21 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
     tiff = Cpt(
         TIFFPluginWithFileStore,
         suffix="TIFF1:",
-        # write_path_template="/GPFS/xf12id1/data/PLACEHOLDER",  # override this on instances using instance.tiff.write_file_path
+        md=RE.md,
         write_path_template="/ramdisk/PLACEHOLDER",
         root="/",
     )
+
+    def __init__(self, *args, asset_path, **kwargs):
+        self.asset_path = asset_path
+        super().__init__(*args, **kwargs)
+        self.tiff._asset_path = self.asset_path
 
     roi1 = Cpt(ROIPlugin, "ROI1:")
     roi2 = Cpt(ROIPlugin, "ROI2:")
     roi3 = Cpt(ROIPlugin, "ROI3:")
     roi4 = Cpt(ROIPlugin, "ROI4:")
- 
+
     stats1 = Cpt(StatsWCentroid, "Stats1:", read_attrs=["total"])
     stats2 = Cpt(StatsWCentroid, "Stats2:", read_attrs=["total"])
     stats3 = Cpt(StatsWCentroid, "Stats3:", read_attrs=["total"])
@@ -144,11 +153,10 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
     trans1 = Cpt(TransformPlugin, "Trans1:")
 
     threshold = Cpt(EpicsSignal, "cam1:ThresholdEnergy")
-    energy = Cpt(EpicsSignal, "cam1:Energy")
+    cam_energy = Cpt(EpicsSignal, "cam1:Energy")
     gain = Cpt(EpicsSignal, "cam1:GainMenu")
     apply = Cpt(EpicsSignal, "cam1:ThresholdApply")
 
-    
     threshold_read = Cpt(EpicsSignal, "cam1:ThresholdEnergy_RBV")
     energy_read = Cpt(EpicsSignal, "cam1:Energy_RBV")
     gain_read = Cpt(EpicsSignal, "cam1:GainMenu_RBV")
@@ -159,7 +167,9 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
         self.read_attrs = [st, "tiff"]
         getattr(self, st).kind = "hinted"
 
-    def apply_threshold(self, energy=16.1, threshold=8.0, gain="autog"):
+    # This is breaking some of the scans trying to reset trshold and gain
+
+    def apply_threshold(self, energy=16.1, threshold=11.5, gain="autog"):
         if 1.5 < energy < 24:
             yield from bps.mv(self.energy, energy)
         else:
@@ -191,7 +201,7 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
 
     def read_threshold(self):
         return self.energy_read, self.threshold_read, self.gain_read
-    
+
     def trigger(self):
         "Trigger one acquisition."
         if self._staged != Staged.yes:
@@ -203,9 +213,8 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
         def _acq_done(*, data, pvname):
             nonlocal fail_count
             data.get()
-            #print(data)
-            #print(data.alarm_status)
             if data.alarm_status is not AlarmStatus.NO_ALARM:
+
  
                 if fail_count < 4:
                     # chosen after testing and it failing 2x per cam server restart so
@@ -230,6 +239,7 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
                     #reset the threshold 
                     set_energy_cam(self.cam,self.cam.energyset.get())
                     time.sleep(5)
+
                 else:
                     self._status.set_exception(
                         RuntimeError(f"FAILED {pvname}: {data.alarm_status}: {data.alarm_severity}")
@@ -262,11 +272,10 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
             waits.append(pil900KW.cam.acquire_time.set(exp_t))
             waits.append(pil900KW.cam.acquire_period.set(exp_t + period_delay))
             waits.append(pil900KW.cam.num_images.set(int(meas_t / exp_t)))
+            waits.append(amptek.mca.preset_real_time.put(exp_t))
+
             for w in waits:
                 w.wait()
-            # rayonix.cam.acquire_time.put(exp_t)
-            # rayonix.cam.acquire_period.put(exp_t+0.01)
-            # rayonix.cam.num_images.put(int(meas_t/exp_t))
     except:
         print('Problem with new exposure set, using old method')
         pil1M.cam.acquire_time.put(exp_t)
@@ -326,15 +335,8 @@ fd = FakeDetector(name="fd")
 #####################################################
 # Pilatus 1M definition
 
-pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M")  # , detector_id="SAXS")
+pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M", asset_path="pilatus1m-1")  # , detector_id="SAXS")
 pil1M.set_primary_roi(1)
-
-pil1M.tiff.write_path_template = (
-    pil1M.tiff.read_path_template
-) = "/nsls2/data/smi/legacy/results/raw/1M/%Y/%m/%d/"
-# pil1M.tiff.write_path_template = pil1M.tiff.read_path_template = '/nsls2/data/smi/assets/default/%Y/%m/%d/'
-
-# pil1M.tiff.write_path_template = pil1M.tiff.read_path_template = '/nsls2/data/smi/legacy/results/raw/1M/%Y/%m/%d/'
 
 pil1mroi1 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats1:Total_RBV", name="pil1mroi1")
 pil1mroi2 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats2:Total_RBV", name="pil1mroi2")
@@ -362,16 +364,11 @@ for detpos in [pil1m_pos]:
 
 
 #####################################################
+# ------ NOT TESTED AFTER DATA SECURITY CHANGES -----
 # Pilatus 300kw definition
 
-# pil300KW = Pilatus("XF:12IDC-ES:2{Det:300KW}", name="pil300KW")  # , detector_id="WAXS")
+# pil300KW = Pilatus("XF:12IDC-ES:2{Det:300KW}", name="pil300KW", asset_path="pilatus300kw-1")  # , detector_id="WAXS")
 # pil300KW.set_primary_roi(1)
-
-
-# pil300KW.tiff.write_path_template = (
-#     pil300KW.tiff.read_path_template
-# ) = "/nsls2/xf12id2/data/300KW/images/%Y/%m/%d/"
-# # pil300KW.tiff.write_path_template = pil300KW.tiff.read_path_template = '/nsls2/data/smi/legacy/results/raw/300KW/%Y/%m/%d/'
 
 # pil300kwroi1 = EpicsSignal(
 #     "XF:12IDC-ES:2{Det:300KW}Stats1:Total_RBV", name="pil300kwroi1"
@@ -392,18 +389,12 @@ for detpos in [pil1m_pos]:
 # pil300KW.cam.ensure_nonblocking()
 pil300KW = None
 
+
 #####################################################
 # Pilatus 900KW definition
 
-pil900KW = Pilatus("XF:12IDC-ES:2{Det:900KW}", name="pil900KW")
+pil900KW = Pilatus("XF:12IDC-ES:2{Det:900KW}", name="pil900KW", asset_path="pilatus900kw-1")
 pil900KW.set_primary_roi(1)
-
-pil900KW.tiff.write_path_template = (
-    pil900KW.tiff.read_path_template
-# ) = "/nsls2/xf12id2/data/900KW/images/%Y/%m/%d/"
-) = "/nsls2/data/smi/legacy/results/raw/900KW/%Y/%m/%d/"
-
-# pil900KW.tiff.write_path_template = pil900KW.tiff.read_path_template = '/nsls2/data/smi/legacy/results/raw/900KW/%Y/%m/%d/'
 
 pil900kwroi1 = EpicsSignal(
     "XF:12IDC-ES:2{Det:900KW}Stats1:Total_RBV", name="pil900kwroi1"
@@ -450,7 +441,8 @@ class WAXS(Device):
                 )
             )
         else:
-            calc_value = -44
+            calc_value = -100
+
         st_x = self.bs_x.set(calc_value)
         return st_arc & st_x
 
@@ -466,28 +458,46 @@ class WAXS(Device):
         # bsx_pos = -48.2 -249.69871 * np.tan(np.deg2rad(arc_value))  # 2023 Sep 21, bumped diagonaly by last users
         # bsx_pos = -50.2 -249.69871 * np.tan(np.deg2rad(arc_value))  # 2023 Oct 20, bumped again please be careful people!!
         # bsx_pos = -54.65 -249.69871 * np.tan(np.deg2rad(arc_value))  # 2023 Nov 02, bumped again with 3d printer.
-        bsx_pos = -36.1 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
-        bsx_pos = -27.7 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
-        bsx_pos = -96.74 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 05, changing script rather than dial as previously...
-        bsx_pos = -117.487 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 11, changing script rather than dial as previously...
+
+        # bsx_pos = -36.1 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
+        # bsx_pos = -27.7 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
+        # bsx_pos = -96.74 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 05, changing script rather than dial as previously...
+        # bsx_pos = -117.487 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 11, changing script rather than dial as previously...
+        #bsx_pos = -37.36 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 28, changing script rather than dial as previously...
+        bsx_pos = -37.56 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 March 26
 
         return bsx_pos
 
 waxs = WAXS("XF:12IDC-ES:2{", name="waxs")
 
 def set_energy_cam(cam,en_ev):
-     en = en_ev / 1000 # change to kev
-     thresh = max(en/2,1.6)
-     if en<4:
-             gain = 3
-     elif en < 7:
-             gain = 2
-     elif en < 20:
-             gain = 1
-     else:
-             gain = 0
-     cam.threshold_energy.put(thresh)
-     cam.energy.put(en)
-     cam.gain_menu.put(gain)
-     cam.threshold_apply.put(1)
-     cam.energyset.set(en) # store so it remembers on failure and resets
+     
+    en = en_ev / 1000 # change to kev
+
+    if en<2 : # invalid energy
+        en = 16.1
+        gain = 1
+    elif en<4:
+        gain = 3
+    elif en < 7:
+        gain = 2
+    elif en < 20:
+        gain = 1
+    else:
+        gain = 0    
+
+    if en < 3.2:
+        thresh = 1.6
+    elif 13 < en < 22 and 'waxs' in cam.name: ## avoid the fluoresence from the waxs beamstop
+        thresh = 11.5
+    else:
+        thresh = en/2
+
+    cam.cam_energy.put(en)
+    cam.threshold_energy.put(thresh)
+    cam.gain_menu.put(gain)
+    cam.threshold_apply.put(1)
+
+    cam.energyset.set(en) # store so it remembers on failure and resets
+
+

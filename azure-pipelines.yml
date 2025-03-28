@@ -7,18 +7,12 @@ resources:
       endpoint: github
 
 jobs:
-  - template: collection-2021-1.2.yml@templates
+  - template: 2024-2.3-py310.yml@templates
     parameters:
       beamline_acronym: SMI
-  - template: nsls2-collection-2021-2.2.yml@templates
+  - template: 2024-2.3-py311.yml@templates
     parameters:
       beamline_acronym: SMI
-  - template: nsls2-collection-2021-2.2-py39.yml@templates
-    parameters:
-      beamline_acronym: SMI
-  - template: nsls2-collection-2021-3.0-py37.yml@templates
-    parameters:
-      beamline_acronym: SMI
-  - template: nsls2-collection-2021-3.0-py39.yml@templates
+  - template: 2024-2.3-py312-tiled.yml@templates
     parameters:
       beamline_acronym: SMI

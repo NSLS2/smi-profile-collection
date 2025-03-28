@@ -2518,6 +2518,7 @@ def milan_temp_2024_1_fix(tim=0.2):
 
 
 def milan_single_measurement_2024_2(name='FT_I_01_90C_1', t_frame=0.2, t_tot=0.2):
+
     """
     As the name says, set coordinates via CSS, then take data
     WAXS only
@@ -2898,6 +2899,7 @@ def milan_temp_grid_2024_1_1(tim=0.2):
 
         ######################################################################
 def milan_single_measurement_2024_3(name='', t_frame=0.1, t_tot=10):
+
     """
     As the name says, set coordinates via CSS, then take data
     WAXS only
@@ -2920,6 +2922,7 @@ def milan_single_measurement_2024_3(name='', t_frame=0.1, t_tot=10):
     #det_exposure_time(0.2, 0.2)
 
 def milan_single_measurement_2024_3(name='FT_I_01-90C', t_frame=0.2, t_tot=0.2):
+
     """
     As the name says, set coordinates via CSS, then take data
     WAXS only

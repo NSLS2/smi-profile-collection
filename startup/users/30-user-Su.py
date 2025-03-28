@@ -2042,9 +2042,9 @@ def take_data():
 
     
 def syringe_pump_testing():
-    yield from bps.mv(syringe_pu.x3, 1) 
+    yield from bps.mv(syringe_pu.go, 1) 
     yield from bps.sleep(2.5)
-    yield from bps.mv(syringe_pu.x4, 1)
+    yield from bps.mv(syringe_pu.stop_flow, 1)
 
 
 def thorlabs_testing():
@@ -3572,7 +3572,6 @@ def swaxs_hardxray_jose_2025_1(t=1):
                 yield from bp.count(dets, num=1)
 
 
-swaxs_Sedge_pierre_2025_1
 
 def swaxs_Sedge_jose_2025_1(t=1):
     """
@@ -3913,3 +3912,509 @@ def nexafs_cl():
     yield from bps.sleep(3)
     yield from bps.mv(energy, 2810)
     yield from bps.sleep(3)
+
+
+
+
+
+
+def alignment_blade_coating_2025_1(coating_start_pos, measurement_pos,th):
+
+    yield from bps.mv(thorlabs_su, measurement_pos)
+    yield from alignement_gisaxs_hex(angle=th)
+
+    yield from bps.mvr(stage.th, th)
+    yield from bps.mvr(stage.y, 0.05)
+
+    yield from bps.mv(thorlabs_su, coating_start_pos)
+
+
+
+
+def blade_coating_2025_1(sample_name='bladecoating', coating_start_pos=10, measurement_pos=87, th=0.12, dets = [pil1M, pil900KW]):
+    #yield from shopen()
+    #yield from bps.sleep(1)
+    #yield from shopen()
+    #yield from bps.sleep(1)
+    #yield from shopen()
+    #yield from bps.sleep(2)
+    
+    # yield from bps.mv(thorlabs_su, thorlabs_su.position)
+    yield from alignment_blade_coating_2025_1(coating_start_pos, measurement_pos,th)
+
+    det_exposure_time(1, 200)
+    # det_exposure_time(0.5,300)
+    #det_exposure_time(2, 600)
+    sample_id(user_name='ML', sample_name=sample_name)
+    yield from bps.mv(syringe_pu.go, 1) # start pump 
+    yield from bps.sleep(2.5)
+    yield from bps.mv(syringe_pu.stop_flow, 1) # stop pump
+    
+    yield from bps.mv(thorlabs_su, measurement_pos)
+    yield from bp.count(dets)
+
+    # yield from shclose()
+
+
+
+
+
+def blade_coating_2025_1_slowexp_withoutmotion(sample_name='bladecoating', coating_start_pos=10, measurement_pos=87, th=0.12, dets = [pil1M, pil900KW]):   
+    
+    yield from alignment_blade_coating_2025_1(coating_start_pos, measurement_pos,th)
+
+    det_exposure_time(0.5, 0.5)
+    # det_exposure_time(0.5,300)
+    #det_exposure_time(2, 600)
+    sample_id(user_name='ML', sample_name=sample_name)
+    yield from bps.mv(syringe_pu.go, 1) # start pump 
+    yield from bps.sleep(2.5)
+    yield from bps.mv(syringe_pu.stop_flow, 1) # stop pump
+    
+    yield from bps.mv(thorlabs_su, measurement_pos)
+
+
+    yield from bp.count(dets, num=240, delay=2.5)
+
+
+def blade_coating_2025_1_slowexp_withmotion(sample_name='bladecoating', coating_start_pos=10, measurement_pos=87, th=0.12, dets = [pil1M, pil900KW]):
+    
+    yield from alignment_blade_coating_2025_1(coating_start_pos, measurement_pos,th)
+
+    det_exposure_time(0.5, 0.5)
+    # det_exposure_time(0.5,300)
+    #det_exposure_time(2, 600)
+    sample_id(user_name='ML', sample_name=sample_name)
+    yield from bps.mv(syringe_pu.go, 1) # start pump 
+    yield from bps.sleep(2.5)
+    yield from bps.mv(syringe_pu.stop_flow, 1) # stop pump
+    
+    yield from bps.mv(thorlabs_su, measurement_pos)
+    yield from bp.scan([pil1M, pil900KW], thorlabs_su, measurement_pos, measurement_pos-15, num=360, per_step=one_1d_step_withwait)
+
+
+
+
+def exsitu_2025_01(sample_name='bladecoating', th=0.12, dets = [pil1M, pil900KW]):
+    
+    #yield from alignement_gisaxs_hex(0.1)
+
+    det_exposure_time(0.5,0.5)
+    sample_id(user_name='ML', sample_name=sample_name)
+    
+    yield from bps.mvr(stage.th, th)
+    yield from bp.count([pil1M, pil900KW])
+    yield from bps.mvr(stage.th, -th)
+
+
+
+def one_1d_step_withwait(detectors, motor, step, take_reading=None):
+    """
+    Inner loop of a 1D step scan
+
+    This is the default function for ``per_step`` param in 1D plans.
+
+    Parameters
+    ----------
+    detectors : iterable
+        devices to read
+    motor : Settable
+        The motor to move
+    step : Any
+        Where to move the motor to
+    take_reading : plan, optional
+        function to do the actual acquisition ::
+
+           def take_reading(dets, name='primary'):
+                yield from ...
+
+        Callable[List[OphydObj], Optional[str]] -> Generator[Msg], optional
+
+        Defaults to `trigger_and_read`
+    """
+    take_reading = bps.trigger_and_read if take_reading is None else take_reading
+
+    def move():
+        grp = bps._short_uid("set")
+        yield bps.Msg("checkpoint")
+        yield bps.Msg("set", motor, step, group=grp)
+        yield bps.Msg("wait", None, group=grp)
+
+    yield from move()
+    yield from bps.sleep(1)
+    return (yield from take_reading(list(detectors) + [motor]))
+
+
+
+import bluesky.preprocessors as bpp
+import bluesky.plans as bp
+import bluesky.plan_stubs as bps
+from ophyd import Signal
+
+
+def single_scan_giwaxs(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    GISWAXS data collected in vacuum
+
+
+    '''
+    
+#     names = ['54I_1', '80_AgTF2N_pebax','70_AgTF2N_pebax','60_AgFSI_pegda','60_AgFSI_pegda_2',       'pegda','10_AgTF2n_pegda','20_AgTF2n_pegda','33_AgTF2n_pegda','50_AgTF2n_pegda','55_AgTF2n_pegda','60_AgTF2n_pegda',
+#    '65_AgTF2n_pegda', '70_AgTF2n_pegda',    '3_T4_AgTF2N',   '6_T4_AgTF2N',     '9_T4_AgTF2N','12_T4_AgTF2N',         'C8_new',           'C8_W',          'C10_W',          'C12_W',          'C14_W',           'C8_S',
+#              'C10_S',          'C12_S',          'C14_S']
+#     x_piezo = [50000,             50000,            50000,           50000,              47000,        41000,            34000,            29000,             24000,            20000,            14000,            10000,
+#                 5000,              2000,            -4000,          -11000,             -18000,       -24000,           -31000,           -35000,            -40000,           -44000,           -48000,           -52000, 
+#               -54000,            -54000,           -54000]
+#     x_hexa = [    17,                12,                7,               2,                  0,            0,                0,                0,                 0,                0,                0,                0,
+#                    0,                 0,                0,               0,                  0,            0,                0,                0,                 0,                0,                0,                0,
+#                   -3,                -7,              -12]
+#     y_piezo = [-1000,             -2000,            -2000,           -2000,              -2000,        -2000,            -2000,            -2000,             -2000,            -2000,            -2000,            -2000,
+#                -2000,             -2000,            -2000,           -2000,              -2000,        -2000,            -2000,            -2000,             -2000,            -2000,            -2000,            -2000,
+#                -2000,             -2000,            -2000]
+
+    # names = ['C8_S',
+    #           'C10_S',           'C12_S',          'C14_S']
+    # x_piezo = [-52000, 
+    #            -54000,            -54000,           -54000]
+    # x_hexa = [      0,
+    #                -3,                -7,              -12]
+    # y_piezo = [ -1000,
+    #             -1000,             -1000,            -1000]
+
+
+    # names = [  'C14',  'C12',  'C10',  'C08','SG_NCs_1','SG_NCs_2', 'HOPI_70water_1', 'HOPI_70water_2']
+    # x_piezo = [ 2000,  -5000, -14000, -22000,    -33000,    -44000,           -55000,           -55000]
+    # x_hexa = [      0,     0,      0,      0,         0,         0,               -1,              -11]
+    # y_piezo = [ -4000,  -4000, -4000,  -4000,     -4000,     -4000,            -4000,            -4000]
+
+
+    # names = [  'SG_NCs_1','SG_NCs_2', 'HOPI_70water_1', 'HOPI_70water_2']
+    # x_piezo = [-33000,    -44000,           -55000,           -55000]
+    # x_hexa = [      0,         0,               -1,              -11]
+    # y_piezo = [ -4000,     -4000,            -4000,            -4000]
+
+    names = [  'HOPI_70water_1', 'HOPI_70water_2']
+    x_piezo = [          -55000,           -55000]
+    x_hexa = [               -1,              -11]
+    y_piezo = [           -4000,            -4000]
+
+    names = [   'C12',  'C10',  'C08','HOPI_70water_1', 'HOPI_70water_2']
+    x_piezo = [ -5000, -14000, -22000,          -55000,           -55000]
+    x_hexa = [      0,      0,      0,              -1,              -11]
+    y_piezo = [ -4000, -4000,  -4000,           -4000,            -4000]
+
+    names = [  'C14']
+    x_piezo = [ 2000]
+    x_hexa = [      0]
+    y_piezo = [ -4000]
+
+    assert len(x_piezo) == len(names), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(names)})"
+    assert len(x_piezo) == len(y_piezo), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(y_piezo)})"
+    assert len(x_piezo) == len(x_hexa), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(x_hexa)})"
+
+    waxs_arc = [20, 0]
+
+    ai0_all = -1
+    ai_list = [0.12]
+    xstep = 0
+
+    dets = [pil1M, pil900KW]
+
+
+    for name, xs, ys, xs_hexa in zip(names, x_piezo, y_piezo, x_hexa):
+        yield from bps.mv(stage.x, xs_hexa,
+                          piezo.x, xs,
+                          piezo.y, ys)
+
+        yield from bps.mv(piezo.th, ai0_all)
+        yield from alignement_gisaxs_doblestack(0.15)
+
+        ai0 = piezo.th.position
+        det_exposure_time(t, t)
+
+        s = Signal(name='target_file_name', value='')
+
+        @bpp.stage_decorator(dets)
+        @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+        def inner():
+            for i, wa in enumerate(waxs_arc):
+                yield from bps.mv(waxs, wa)
+
+                counter = 0
+                for k, ais in enumerate(ai_list):
+                    yield from bps.mv(piezo.th, ai0 + ais)
+
+                    name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}"
+                    
+                    # yield from bps.mv(piezo.x, xs - counter * xstep)
+                    counter += 1
+                    e=energy.energy.position
+                    sdd=pil1m_pos.z.position
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, sdd="%1f"%sdd)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    s.put(sample_name)
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, piezo.th, piezo.x] + [s])
+            yield from bps.mv(piezo.th, ai0)
+
+        (yield from inner())
+
+
+
+
+
+
+def single_scan_waxs(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    GISWAXS data collected in vacuum
+
+
+    '''
+    
+    # names = ['80_AgTF2N_pebax','70_AgTF2N_pebax','60_AgFSI_pegda','60_AgFSI_pegda_2',       'pegda','10_AgTF2n_pegda','20_AgTF2n_pegda','33_AgTF2n_pegda','50_AgTF2n_pegda','55_AgTF2n_pegda','60_AgTF2n_pegda',
+    #          '65_AgTF2n_pegda', '70_AgTF2n_pegda']
+    # x_piezo = [         -43000,            -40000,           -35000,          -29000,        -22000,           -18000,           -12000,           -41000,           -35000,           -31000,           -27000,
+    #                     -21000,             -16000]
+    # x_hexa = [               0,                 0,                0,               0,              0,               0,                0,                0,                0,                0,                0,
+    #                          0,                 0]
+    # y_hexa = [              -4,                -4,               -4,              -4,             -4,              -4,               -4,                7,                7,                7,                7,
+    #                          7,                 7]
+    # y_piezo = [          -5000,             -4180,            -3180,           -3180,          -3180,           -3180,            -3180,             1000,             1000,             1000,             1000,
+    #                       1000,              1000]
+
+    # names = [           'AgBeh',            'C14',           'C12',             'C10',         'C08']
+    # x_piezo = [          45900,             39300,           32900,             26500,         20200]
+    # x_hexa = [               0,                 0,               0,                 0,             0]
+    # y_hexa = [               7,                 7,               7,                 7,             7]
+    # y_piezo = [           1000,              1000,            1000,              1000,          1000]
+
+
+    names = [           'EtOH',     '0p02piperon',    '0p2piperon',      '1p0piperon']
+    x_piezo = [          13700,              7400,            1300,             -4900]
+    x_hexa = [               0,                 0,               0,                 0]
+    y_hexa = [               7,                 7,               7,                 7]
+    y_piezo = [           1000,              1000,            1000,              1000]
+
+
+
+    assert len(x_piezo) == len(names), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(names)})"
+    assert len(x_piezo) == len(y_piezo), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(y_piezo)})"
+    assert len(x_piezo) == len(x_hexa), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(x_hexa)})"
+    assert len(x_piezo) == len(y_hexa), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(x_hexa)})"
+
+
+    waxs_arc = [0, 20]
+    xstep = 0
+
+    dets = [pil1M, pil900KW]
+
+
+    for name, xs, ys, xs_hexa, ys_hexa in zip(names, x_piezo, y_piezo, x_hexa, y_hexa):
+        yield from bps.mv(stage.x, xs_hexa,
+                          stage.y, ys_hexa,
+                          piezo.x, xs,
+                          piezo.y, ys)
+
+
+        if waxs.arc.position<10:
+            waxs_arc = [0, 20]
+        else:
+            waxs_arc = [20, 0]
+
+
+        det_exposure_time(t, t)
+        s = Signal(name='target_file_name', value='')
+
+        @bpp.stage_decorator(dets)
+        @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+        def inner():
+            for i, wa in enumerate(waxs_arc):
+                yield from bps.mv(waxs, wa)
+
+                name_fmt = "{sample}_{energy}eV_wa{wax}"
+                
+                # yield from bps.mv(piezo.x, xs - counter * xstep)
+                e=energy.energy.position
+                sample_name = name_fmt.format(sample=name, energy="%6.2f"%e, wax=wa)
+                print(f"\n\t=== Sample: {sample_name} ===\n")
+                s.put(sample_name)
+                yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, piezo.x] + [s])
+
+        (yield from inner())
+
+
+
+
+
+
+
+def scan_nexafs_Ti():
+    dets = [pil900KW]
+    # energies1 =   np.asarray([2810.0, 2820.0, 2830.0, 2832.0, 2834.0, 2834.5, 2835.0, 2835.5, 2836.0, 2836.5, 2837.0, 2837.5, 2838.0, 2838.5, 2839.0,
+    # 2839.5, 2840.0, 2840.5, 2841.0, 2841.5, 2845.0, 2850.0, 2855.0, 2860.0, 2865.0, 2870.0, 2875.0, 2880.0, 2890.0])
+    
+    name='testnexafsTi'
+    energies = np.linspace(4990, 5040, 51)    
+    y = piezo.y.position
+    waxs_arc = [20]
+
+    s = Signal(name='target_file_name', value='')
+
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+    def inner():
+        for wa in waxs_arc:
+            yield from bps.mv(waxs, wa)
+
+            for i, e in enumerate(energies):
+                yield from bps.mv(energy, e)
+                yield from bps.sleep(2)
+
+                if xbpm2.sumX.get() < 50:
+                    yield from bps.mv(energy, e)
+                
+                
+                yield from bps.mv(piezo.y, y - i * 20)
+
+                # Metadata
+                #e = energy.position.energy / 1000
+                wa = str(np.round(float(wa), 1)).zfill(4)
+                sdd = pil1m_pos.z.position / 1000
+
+                # Sample name
+                name_fmt = ("{sample}_{energy}eV_wa{wax}_sdd{sdd}m_up")
+                sample_name = name_fmt.format(sample = name,energy = "%.2f" % e , wax = wa, sdd = "%.1f" % sdd)
+                sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                s.put(sample_name)
+                
+                yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3] + [s])
+
+            yield from bps.mv(energy, 5000)
+            yield from bps.sleep(2)
+    (yield from inner())
+
+
+
+
+def energy_Tiedge_scan(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    SWAXS at the Ti edge
+    '''
+
+    names =   ['kl_nf_ahp_0p5', 'kl_nf_ahp_1',  'kl_nf_ahp_2',  'kl_nf_nil_nil']       
+    piezo_x = [         -39300,        -33500,         -27700,           -22000]   
+    piezo_y = [          -2000,         -2000,         -2200,             -1700]
+
+    names =   [         'sa05',         'sa06',      'sa07',        'sa08',  'sa09']       
+    piezo_x = [         43300,        38200,         32000,           26700, 20300]   
+    piezo_y = [          -920,         -1020,         -1020,             -1020, -1220]
+
+
+    assert len(names)   == len(piezo_x), f"Wrong list lenghts"
+    assert len(piezo_x) == len(piezo_y), f"Wrong list lenghts"
+
+    waxs_arc = [0, 20]
+    
+    # 41 energies
+    energies = np.asarray(np.arange(4960, 4980, 5).tolist() + np.arange(4980, 4990, 2).tolist() 
+                          + np.arange(4990, 5000, 0.5).tolist() + np.arange(5000, 5020, 2).tolist()
+                          + np.arange(5020, 5035, 5).tolist())
+
+
+    dets = [pil900KW, pil1M]
+    det_exposure_time(t, t)
+
+    for name, x, y in zip(names, piezo_x, piezo_y):
+        yield from bps.mv(piezo.x, x, piezo.y, y)
+
+        s = Signal(name='target_file_name', value='')
+
+        @bpp.stage_decorator(dets)
+        @bpp.run_decorator(md={'sample_name' :'{target_file_name}'})
+        def inner():
+            for wa in waxs_arc:
+                yield from bps.mv(waxs, wa)
+
+                for i, e in enumerate(energies):
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(2)
+
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.mv(energy, e)
+
+                    yield from bps.mv(piezo.y, y - i * 20)
+                
+                    # Metadata
+                    wa = str(np.round(float(wa), 1)).zfill(4)
+                    sdd = pil1m_pos.z.position / 1000
+                    bpm3 = xbpm3.sumX.get()
+
+                    # Sample name
+                    name_fmt = ("{sample}_{energy}eV_wa{wax}_sdd{sdd}m_bpm{bpm}")
+                    sample_name = name_fmt.format(sample = name,energy = "%.2f" % e , wax = wa, sdd = "%.1f" % sdd, bpm = "%.2f" % bpm3)
+                    sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+                    print(f"\n\n\n\t=== Sample: {sample_name} ===")
+                    s.put(sample_name)
+                    
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, ] + [s])
+
+                yield from bps.mv(energy, 5000)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 4960)
+                yield from bps.sleep(2)
+
+        (yield from inner())
+
+
+
+
+
+def temp_series(name='temp',temps = np.linspace(25,40,16),exp_time=1, hold_delay=120, dets=[pil1M]):   # function loop to bring linkam to temp, hold and measure
+# Function will begin at start_temp and take a SAXS measurement at every temperature given 
+    
+    temps = [240, 230, 220, 210, 200, 175, 150, 125, 100, 75, 50, 30]
+
+    dets = [pil1M]
+    LThermal.setTemperature(temps[0])
+    # LThermal.setTemperatureRate(ramp)
+    LThermal.on() # turn on 
+    det_exposure_time(exp_time,exp_time)
+
+    s = Signal(name='target_file_name', value='')
+    RE.md["sample_name"] = '{target_file_name}'
+    for i, temp in enumerate(temps):
+        LThermal.setTemperature(temp)
+
+        while abs(LThermal.temperature()-temp)>1:
+            yield from bps.sleep(10)
+            print('waiting for 10s')
+
+        print('Reached tem', temp)
+        print('Waiting during equilibration')
+        yield from bps.sleep(hold_delay)
+        
+
+        # Metadata
+        sdd = pil1m_pos.z.position / 1000
+
+        # Sample name
+        name_fmt = ("{sample}_{energy}eV_sdd{sdd}m_temp{temp}")
+        sample_name = name_fmt.format(sample = name,energy = "%.2f" % energy.energy.position , sdd = "%.1f" % sdd, temp = "%.1f" %temp)
+        sample_name = sample_name.translate({ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =, "})
+
+        print(f"\n\n\n\t=== Sample: {sample_name} ===")
+        s.put(sample_name)
+        
+        yield from bp.count(dets + [s])
+
+    LThermal.off()
+
+
+
+
+
+def xpcs_2025_1(sample_name='bladecoating', coating_start_pos=10, measurement_pos=87, th=0.12, dets = [pil1M, pil900KW]):
+
+    det_exposure_time(0.5, 500)
+    sample_id(user_name='ML', sample_name=sample_name)
+    yield from bp.count(dets)

@@ -14,98 +14,98 @@ import peakutils
 
 
 
-def ps_new(der=False, plot=True):
-    yield from bps.sleep(0.5)
-    uid = list(bec._peak_stats)[0]
-    stats = list(bec._peak_stats[uid])[0]
-    pss = bec._peak_stats[uid][stats]
+# def ps_new(der=False, plot=True):
+#     yield from bps.sleep(0.5)
+#     uid = list(bec._peak_stats)[0]
+#     stats = list(bec._peak_stats[uid])[0]
+#     pss = bec._peak_stats[uid][stats]
 
-    if der:
-        ps.cen = pss.derivative_stats.cen
-        ps.fwhm = pss.derivative_stats.fwhm
-        ps.peak = pss.derivative_stats.max[0]
-        ps.com = pss.derivative_stats.com
-    else:
-        ps.cen = pss.stats.cen
-        ps.fwhm = pss.stats.fwhm
-        ps.peak = pss.stats.max[0]
-        ps.com = pss.stats.com
+#     if der:
+#         ps.cen = pss.derivative_stats.cen
+#         ps.fwhm = pss.derivative_stats.fwhm
+#         ps.peak = pss.derivative_stats.max[0]
+#         ps.com = pss.derivative_stats.com
+#     else:
+#         ps.cen = pss.stats.cen
+#         ps.fwhm = pss.stats.fwhm
+#         ps.peak = pss.stats.max[0]
+#         ps.com = pss.stats.com
 
-    if plot:
-        if der:
-            x = pss.derivative_stats.x
-            y = pss.derivative_stats.y
-        else:
-            x = pss.x_data
-            y = pss.x_data
-        plt.figure()
-        plt.plot([ps.peak, ps.peak], [np.min(y), np.max(y)], "k--", label="PEAK")
-        plt.plot([ps.cen, ps.cen], [np.min(y), np.max(y)], "r-.", label="CEN")
-        plt.plot([ps.com, ps.com], [np.min(y), np.max(y)], "g.-.", label="COM")
-        plt.plot(x, y, "bo-")
-        plt.legend()
-        plt.title(
-            "uid: "
-            + str(uid)
-            + "\n PEAK: "
-            + str(ps.peak)[:8]
-            + str(ps.peak)[:8]
-            + " COM "
-            + str(ps.com)[:8]
-            + "\n FWHM: "
-            + str(ps.fwhm)[:8]
-            + " CEN: "
-            + str(ps.cen)[:8],
-            size=9,
-        )
-        plt.show()
+#     if plot:
+#         if der:
+#             x = pss.derivative_stats.x
+#             y = pss.derivative_stats.y
+#         else:
+#             x = pss.x_data
+#             y = pss.x_data
+#         plt.figure()
+#         plt.plot([ps.peak, ps.peak], [np.min(y), np.max(y)], "k--", label="PEAK")
+#         plt.plot([ps.cen, ps.cen], [np.min(y), np.max(y)], "r-.", label="CEN")
+#         plt.plot([ps.com, ps.com], [np.min(y), np.max(y)], "g.-.", label="COM")
+#         plt.plot(x, y, "bo-")
+#         plt.legend()
+#         plt.title(
+#             "uid: "
+#             + str(uid)
+#             + "\n PEAK: "
+#             + str(ps.peak)[:8]
+#             + str(ps.peak)[:8]
+#             + " COM "
+#             + str(ps.com)[:8]
+#             + "\n FWHM: "
+#             + str(ps.fwhm)[:8]
+#             + " CEN: "
+#             + str(ps.cen)[:8],
+#             size=9,
+#         )
+#         plt.show()
 
 
-def ps_new_post(uid=-1, der=False, plot=True):
-    for name, doc in db[uid].documents():
-        bec(name, doc)
+# def ps_new_post(uid=-1, der=False, plot=True):
+#     for name, doc in db[uid].documents():
+#         bec(name, doc)
 
-    uid = list(bec._peak_stats)[0]
-    stats = list(bec._peak_stats[uid])[0]
-    pss = bec._peak_stats[uid][stats]
+#     uid = list(bec._peak_stats)[0]
+#     stats = list(bec._peak_stats[uid])[0]
+#     pss = bec._peak_stats[uid][stats]
 
-    if der:
-        x = pss.derivative_stats.x
-        y = pss.derivative_stats.y
-        ps.cen = pss.derivative_stats.cen
-        ps.fwhm = pss.derivative_stats.fwhm
-        ps.peak = pss.derivative_stats.max[0]
-        ps.com = pss.derivative_stats.com
-    else:
-        x = pss.x_data
-        y = pss.x_data
-        ps.cen = pss.stats.cen
-        ps.fwhm = pss.stats.fwhm
-        ps.peak = pss.stats.max[0]
-        ps.com = pss.stats.com
+#     if der:
+#         x = pss.derivative_stats.x
+#         y = pss.derivative_stats.y
+#         ps.cen = pss.derivative_stats.cen
+#         ps.fwhm = pss.derivative_stats.fwhm
+#         ps.peak = pss.derivative_stats.max[0]
+#         ps.com = pss.derivative_stats.com
+#     else:
+#         x = pss.x_data
+#         y = pss.x_data
+#         ps.cen = pss.stats.cen
+#         ps.fwhm = pss.stats.fwhm
+#         ps.peak = pss.stats.max[0]
+#         ps.com = pss.stats.com
 
-    if plot:
-        plt.figure()
-        plt.plot([ps.peak, ps.peak], [np.min(y), np.max(y)], "k--", label="PEAK")
-        plt.plot([ps.cen, ps.cen], [np.min(y), np.max(y)], "r-.", label="CEN")
-        plt.plot([ps.com, ps.com], [np.min(y), np.max(y)], "g.-.", label="COM")
-        plt.plot(x, y, "bo-")
-        plt.legend()
-        plt.title(
-            "uid: "
-            + str(uid)
-            + "\n PEAK: "
-            + str(ps.peak)[:8]
-            + str(ps.peak)[:8]
-            + " COM "
-            + str(ps.com)[:8]
-            + "\n FWHM: "
-            + str(ps.fwhm)[:8]
-            + " CEN: "
-            + str(ps.cen)[:8],
-            size=9,
-        )
-        plt.show()
+#     if plot:
+#         plt.figure()
+#         plt.plot([ps.peak, ps.peak], [np.min(y), np.max(y)], "k--", label="PEAK")
+#         plt.plot([ps.cen, ps.cen], [np.min(y), np.max(y)], "r-.", label="CEN")
+#         plt.plot([ps.com, ps.com], [np.min(y), np.max(y)], "g.-.", label="COM")
+#         plt.plot(x, y, "bo-")
+#         plt.legend()
+#         plt.title(
+#             "uid: "
+#             + str(uid)
+#             + "\n PEAK: "
+#             + str(ps.peak)[:8]
+#             + str(ps.peak)[:8]
+#             + " COM "
+#             + str(ps.com)[:8]
+#             + "\n FWHM: "
+#             + str(ps.fwhm)[:8]
+#             + " CEN: "
+#             + str(ps.cen)[:8],
+#             size=9,
+#         )
+#         plt.show()
 
 
 def ps(
@@ -322,214 +322,6 @@ def plot_1d(scans, x="dsa_x", y="pil1M_stats1_total", grid=True, **kwargs):
     # ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.2e'))
 
 
-def find_peaks_peakutils(
-    uid="8537b7", x="stage_x", y="pil300KW_stats1_total", plot=True
-):
-    xx = np.array(db[uid].table()[x])
-    yy = np.array(db[uid].table()[y])
-    peak_idx = peakutils.interpolate(xx, yy, width=0)
-
-    if plot:
-        plt.plot(xx, yy)
-        plt.grid()
-        plt.scatter(xx[peak_idx], yy[peak_idx], c="r")
-
-    print(
-        f"Peaks indices: {peak_idx}\nX coords: {xx[peak_idx]}\nY coords: {yy[peak_idx]}"
-    )
-
-    return peak_idx, xx[peak_idx], yy[peak_idx]
-
-
-def one_nd_step_pseudo_shutter(detectors, step, pos_cache):
-    """
-    Inner loop of an N-dimensional step scan
-
-    This is the default function for ``per_step`` param`` in ND plans.
-
-    Parameters
-    ----------
-    detectors : iterable
-        devices to read
-    step : dict
-        mapping motors to positions in this step
-    pos_cache : dict
-        mapping motors to their last-set positions
-    """
-    from bluesky.plans import Msg
-    from bluesky.preprocessors import trigger_and_read
-    from bluesky.plan_stubs import mv, _short_uid
-
-    def move():
-        yield Msg("checkpoint")
-        grp = _short_uid("set")
-        for motor, pos in step.items():
-            if pos == pos_cache[motor]:
-                # This step does not move this motor.
-                continue
-            yield Msg("set", motor, pos, group=grp)
-            pos_cache[motor] = pos
-        yield Msg("wait", None, group=grp)
-        # this means "take the attenuator out of the beam"
-        yield from mv(attn_shutter, "Retract")
-
-    motors = step.keys()
-    yield from move()
-    ret = yield from trigger_and_read(list(detectors) + list(motors))
-    # this means "put the attenuator in the beam"
-    yield from mv(attn_shutter, "Insert")
-    return ret
-
-
-def one_1d_step_pseudo_shutter(detectors, motor, step):
-    """
-    Inner loop of a 1D step scan
-
-    This is the default function for ``per_step`` param in 1D plans.
-    """
-    from bluesky.plans import Msg
-    from bluesky.preprocessors import trigger_and_read
-    from bluesky.plan_stubs import mv, _short_uid
-
-    def move():
-        grp = _short_uid("set")
-        yield Msg("checkpoint")
-        yield Msg("set", motor, step, group=grp)
-        yield Msg("wait", None, group=grp)
-        yield from mv(attn_shutter, "Retract")
-
-    yield from move()
-    ret = yield from trigger_and_read(list(detectors) + [motor])
-    yield from mv(attn_shutter, "Insert")
-    return ret
-
-
-def ring_check():
-    if (
-        ring_ops.value == "Operations"
-        and mstr_shutter_enable.value == 1
-        and smi_shutter_enable.value == 1
-        and ivu_permit.value == 1
-    ):
-        ring_ok = 1
-        print("SR ring status: Operations, shutters and IVU enabled. All is OK")
-    else:
-        ring_ok = 0
-        print("SR ring status alert: check if shutters and/or IVU enabled! ")
-    return ring_ok
-
-
-def one_nd_step_check_beam(detectors, step, pos_cache):
-    from bluesky.plans import Msg
-    from bluesky.preprocessors import trigger_and_read
-    from bluesky.plan_stubs import mv, _short_uid
-
-    def move():
-        yield Msg("checkpoint")
-        grp = _short_uid("set")
-        for motor, pos in step.items():
-            if pos == pos_cache[motor]:
-                # This step does not move this motor.
-                continue
-            yield Msg("set", motor, pos, group=grp)
-            pos_cache[motor] = pos
-        yield Msg("wait", None, group=grp)
-
-    motors = step.keys()
-    yield from move()
-    ret = yield from trigger_and_read(list(detectors) + list(motors))
-    # this means "put the attenuator in the beam"
-    yield from mv(attn_shutter, "Insert")
-    return ret
-
-
-def one_1d_step_check_beam(detectors, motor, step):
-    from bluesky.plans import Msg
-    from bluesky.preprocessors import trigger_and_read
-    from bluesky.plan_stubs import mv, _short_uid
-
-    def move():
-        grp = _short_uid("set")
-        yield Msg("checkpoint")
-        yield Msg("set", motor, step, group=grp)
-        yield Msg("wait", None, group=grp)
-        # yield from mv( attn_shutter, 'Retract')
-        yield from wait_for_ring()
-        print("Check beam here.")
-
-    yield from move()
-    ret = yield from trigger_and_read(list(detectors) + [motor])
-    # yield from mv(attn_shutter, 'Insert')
-    return ret
-
-
-def cscan(*args, **kwargs):
-    return (yield from bp.scan(*args, per_step=one_1d_step_check_beam, **kwargs))
-
-
-def c_inner_scan(*args, **kwargs):
-    return (
-        yield from bp.inner_product_scan(
-            *args, per_step=one_nd_step_check_beam, **kwargs
-        )
-    )
-
-
-def escan(*args, **kwargs):
-    return (yield from bp.scan(*args, per_step=one_1d_step_pseudo_shutter, **kwargs))
-
-
-def rel_escan(*args, **kwargs):
-    return (
-        yield from bp.rel_scan(*args, per_step=one_1d_step_pseudo_shutter, **kwargs)
-    )
-
-
-def e_inner_scan(*args, **kwargs):
-    return (
-        yield from bp.inner_product_scan(
-            *args, per_step=one_nd_step_pseudo_shutter, **kwargs
-        )
-    )
-
-
-def e_grid_scan(*args, **kwargs):
-    return (
-        yield from bp.grid_scan(*args, per_step=one_nd_step_pseudo_shutter, **kwargs)
-    )
-
-
-def cam_scan(detectors, camera, motor, start, stop, num, md=None, idle_time=1):
-    def per_step(dets, motor, step):
-        yield from one_1d_step(dets, motor, step)
-        yield from bp.abs_set(camera, 1, wait=True)
-        yield from bp.abs_set(camera, 0, wait=True)
-        yield from bp.sleep(idle_time)
-
-    if md is None:
-        md = {}
-    md = ChainMap(
-        md,
-        {
-            "plan_args": {
-                "detectors": list(map(repr, detectors)),
-                "num": num,
-                "motor": repr(motor),
-                "start": start,
-                "stop": stop,
-                "per_step": repr(per_step),
-                "idle_time": float(idle_time),
-            },
-            "plan_name": "cam_scan",
-        },
-    )
-
-    return (
-        yield from bp.subs_wrapper(
-            bp.scan(detectors, motor, start, stop, num, per_step=per_step, md=md),
-            LiveTable(detectors + [motor]),
-        )
-    )
 
 def purge_cryo():
     """
@@ -628,40 +420,3 @@ def get_more_md(tender=True, bpm=True):
 
     return more_md
 
-def atten_move_in(x4=True, x2=True):
-    """
-    Move 4x + 2x Sn 60 um attenuators in
-    """
-    print('Moving attenuators in')
-
-    if x4:
-        while att1_7.status.get() != 'Open':
-            yield from bps.mv(att1_7.open_cmd, 1)
-            yield from bps.sleep(1)
-    if x2:
-        while att1_6.status.get() != 'Open':
-            yield from bps.mv(att1_6.open_cmd, 1)
-            yield from bps.sleep(1)
-
-def atten_move_out():
-    """
-    Move 4x + 2x Sn 60 um attenuators out
-    """
-    print('Moving attenuators out')
-    while att1_7.status.get() != 'Not Open':
-        yield from bps.mv(att1_7.close_cmd, 1)
-        yield from bps.sleep(1)
-    while att1_6.status.get() != 'Not Open':
-        yield from bps.mv(att1_6.close_cmd, 1)
-        yield from bps.sleep(1)
-
-def engage_detectors():
-    """
-    Making sure camserver responds and data is taken
-    """
-
-    yield from atten_move_in()
-    sample_id(user_name='test', sample_name='test')
-    print(f"\n\n\n\t=== Making sure detectores are engaged and ready ===")
-    yield from bp.count([pil900KW, pil1M])
-    yield from atten_move_out()

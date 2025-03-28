@@ -43,11 +43,14 @@ def energy_to_gap(target_energy, undulator_harmonic=1, man_offset=0):
     gap = gap_mm * 1000 - auto_offset - man_offset
 
     # Work this out for tender
-    if target_energy < 6000:
+    if target_energy <3000:
         #K edge -10
         #Cl edge -20
         gap = (gap_mm * 1000 -20)
         #gap = (gap_mm * 1000 -48)
+    # elif target_energy <5000:
+    #     gap = (gap_mm * 1000 -50)
+
 
     # if target_energy > 17500:
     #     #K edge -10
@@ -109,7 +112,7 @@ class DCMInternals(Device):
     roll = Cpt(EpicsMotor, "XF:12ID:m68")
     theta = Cpt(EpicsMotor, "XF:12ID:m65")
 
-
+from ophyd.sim import SoftPositioner
 class Energy(PseudoPositioner):
     # synthetic axis
     energy = Cpt(PseudoSingle, kind="hinted", labels=["mono"])
@@ -117,14 +120,21 @@ class Energy(PseudoPositioner):
     dcmgap = Cpt(EpicsMotor, "XF:12ID:m66", read_attrs=["user_readback"])
     bragg = Cpt(EpicsMotor, "XF:12ID:m65", read_attrs=["user_readback"], labels=["mono"])
     #    dcmpitch = Cpt(EpicsMotor, 'XF:12ID:m67', read_attrs=['readback'])
+    pitch_feedback_disabled = Cpt(EpicsSignal, "XF:12IDB-BI:2{EM:BPM3}fast_pidY_incalc.CLCN", name="manual_PID_disable_pitch")
+    roll_feedback_disabled = Cpt(EpicsSignal, "XF:12IDB-BI:2{EM:BPM3}fast_pidX_incalc.CLCN", name="manual_PID_disable_roll")
 
+    
     ivugap = Cpt(
         InsertionDevice,
         "SR:C12-ID:G1{IVU:1-Ax:Gap}-Mtr",
         read_attrs=["user_readback"],
         configuration_attrs=[],
         labels=["mono"],
+        add_prefix=(),
     )
+    
+
+    # ivugap = Cpt(SoftPositioner, init_pos=7000)
 
     enableivu = Cpt(Signal, value=True)
     enabledcmgap = Cpt(Signal, value=True)
@@ -201,12 +211,25 @@ class Energy(PseudoPositioner):
     @pseudo_position_argument
     def set(self, position):
         (energy,) = position
+        if np.abs(energy - self.position[0]) < 0.01:
+            return MoveStatus(self, energy, success=True, done=True)
         # print(position, self.position)
 
         # TODO change self.settle_time here based on energy we are moving to
-        if np.abs(energy - self.position[0]) < 0.01:
-            return MoveStatus(self, energy, success=True, done=True)
-        return super().set([float(_) for _ in position])
+        if False:
+            self.settle_time = per_energy(energy)
+        def turn_on_feedback(*arg, **kwargs):
+            try:
+                self.pitch_feedback_disabled.set("0").wait()
+                self.roll_feedback_disabled.set("0").wait()
+            except Exception as e:
+                print(e, type(e))
+        
+        self.pitch_feedback_disabled.set("1").wait()
+        self.roll_feedback_disabled.set("1").wait()
+        sts = super().set([float(_) for _ in position])
+        self.subscribe(turn_on_feedback, event_type=self._SUB_REQ_DONE, run=False)
+        return sts
 
 
 energy = Energy(
@@ -215,7 +238,7 @@ energy = Energy(
     read_attrs=["energy", "ivugap", "bragg", "harmonic"],
     configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic"],
 )
-
+energy.settle_time = 1
 dcm = energy
 ivugap = energy.ivugap
 # DCM motor shortcuts. Early scans used the names at right (p2h, etc).
@@ -229,13 +252,13 @@ dcm_config = DCMInternals("", name="dcm_config")
 
 bragg.read_attrs = ["user_readback"]
 
-new_ivu_gap = EpicsMotor("SR:C12-ID:G1{IVU:1-Ax:Gap}-Mtr", name="new_ivu_gap")
+# new_ivu_gap = EpicsMotor("SR:C12-ID:G1{IVU:1-Ax:Gap}-Mtr", name="new_ivu_gap")
 
 
-def move_E(E, gap_off=0):
-    energy.move(E)
-    if gap_off != 0:
-        cur_gap = ivugap.user_readback.value
-        ivugap.move(cur_gap + gap_off)
+# def move_E(E, gap_off=0):
+#     energy.move(E)
+#     if gap_off != 0:
+#         cur_gap = ivugap.user_readback.value
+#         ivugap.move(cur_gap + gap_off)
 
 dcm_theta = EpicsMotor("XF:12ID:m65", name="dcm_theta")

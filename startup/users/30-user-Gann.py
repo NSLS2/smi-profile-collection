@@ -636,7 +636,7 @@ def nikhil_Bi_edge_spectroscopy(t=1,ai=0.2):
                 np.arange(13500, 13600, 10).tolist())
 
     det_exposure_time(t, t)
-    name_fmt = "{sample}_{energy}eV_xbpm{xbpm}"
+    name_fmt = "{sample}_{energy.name}eV_xbpm{xbpm}"
 
     for name, xs, ys in zip(names, x, y):
         yield from bps.mv(piezo.x, xs,
@@ -817,7 +817,8 @@ def reflectivity_multisample_2024():
         for en in energies:
             sample_id(user_name="EG", sample_name=f'{sample}_{en}eV')
 
-            yield from bp.list_scan([pil900KW,pil900KW.stats1.centroid_total,pil900KW.stats1.total],
+
+            yield from bp.list_scan([pil900KW,pil900KW.stats4.centroid_total,pil900KW.stats4.total],
                                     piezo.th,angles0,
                                     att2_11,attenuator11o,
                                     att2_10,attenuator10o,
@@ -880,28 +881,34 @@ def reflectivity_multisample_2024():
 #         return 0
 def att11(angle):
     if angle < 0.5:
+
         return 1
     else:
         return 0
 def att10(angle):
+
     if angle < 0.5:
         return 0
     elif angle < 1.5:
+
         return 1 
     else:
         return 0
     
 def att9(angle):
+
     if angle < 0.5:
         return 0
     elif angle < 1 :
         return 1
     elif angle < 1.5:
+
         return 0
     elif angle < 4:
         return 1
     else:
         return 0
+
 
 def xrr_sedge_2025_1():
     #List of incident angles clustured in subsection for attenuators
@@ -1053,3 +1060,318 @@ def nexafs_sedge_2025_1():
     yield from bps.sleep(3)
     yield from bps.mv(energy, 2450)
     yield from bps.sleep(3)
+
+import bluesky.preprocessors as bpp
+import bluesky.plans as bp
+import bluesky.plan_stubs as bps
+from ophyd import Signal
+
+def single_scan(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    # dets = [pil900KW]
+    if ai_list is None:
+        ai_list = []
+
+    # bottom left first
+    # name = 'A1_01_test'    
+
+    # 63 energies
+    energies = (np.arange(2445, 2470, 5).tolist()+ np.arange(2470, 2480, 0.25).tolist()+ np.arange(2480, 2490, 1).tolist()
+                + np.arange(2490, 2500, 5).tolist()+ np.arange(2500, 2560, 10).tolist())
+    
+    # ai_list = [0.2, 0.4, 0.6, 0.8, 4, 8]
+
+    ai0 = piezo.th.position
+    xs = piezo.x.position
+    dets = [pil900KW, pil1M]
+
+    s = Signal(name='target_file_name', value='')
+
+    @bpp.stage_decorator(dets)
+    @bpp.run_decorator(md={})
+    def inner():
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            counter = 0
+            for k, ais in enumerate(ai_list):
+                if ais==0.6:
+                    det_exposure_time(0.5, 0.5)
+                else:
+                    det_exposure_time(1, 1)
+
+                yield from bps.mv(piezo.th, ai0 + ais)
+
+                name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}_bpm{xbpm}"
+                
+                for e in energies:
+                    yield from bps.mv(energy, e)
+                    yield from bps.sleep(2)
+                    if xbpm2.sumX.get() < 50:
+                        yield from bps.sleep(2)
+                        yield from bps.mv(energy, e)
+                        yield from bps.sleep(2)
+                    
+                    yield from bps.mv(piezo.x, xs + counter * xstep)
+                    counter += 1
+                    bpm = yield from bps.rd(xbpm2.sumX)
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa, xbpm="%4.3f"%bpm)
+                    # sample_id(user_name="CM", sample_name=sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    s.put(sample_name)
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, piezo.th, piezo.x] + [s])
+                
+                yield from bps.mv(energy, 2500)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2480)
+                yield from bps.sleep(2)
+                yield from bps.mv(energy, 2445)
+
+            yield from bps.mv(piezo.th, ai0)
+    return (yield from inner())
+
+
+
+# multirun code prototype from Tom
+
+import numpy as np
+
+from bluesky import RunEngine
+
+import bluesky.plan_stubs as bps
+import bluesky.preprocessors as bpp
+
+from bluesky.callbacks.best_effort import BestEffortCallback
+
+from ophyd.sim import motor1, motor2, det1
+
+from event_model import RunRouter
+
+def multi_scan(start, stop, steps, mds):
+    n = len(mds)
+    for j, md in enumerate(mds):
+        # open each run
+        yield from bpp.set_run_key_wrapper(
+            bps.open_run({"run_num": j, "total": n, **md}), f"run {j}"
+        )
+        # declare we will have a primary stream
+        yield from bpp.set_run_key_wrapper(
+            bps.declare_stream(motor1, motor2, det1, name="primary"), f"run {j}"
+        )
+
+    for k in np.linspace(start, stop, steps):
+        # do the outer "slow" motor
+        yield from bps.mv(motor1, k)
+        for j in range(n):
+            # do the inner "fast" motor
+            yield from bps.mv(motor2, j)
+            yield from bpp.set_run_key_wrapper(
+                bps.trigger_and_read([motor1, motor2, det1]), f"run {j}"
+            )
+            
+    # TODO wrap this up with finalize_wrapper
+    for j in range(n):
+        # close each of the runs
+        yield from bpp.set_run_key_wrapper(bps.close_run(), f"run {j}")
+
+def factory(name, doc):
+    # BestEffortCallback assumes only one run open at a time so make a a new
+    # one for each run
+    bec = BestEffortCallback()
+    # turn off tables as interleaved tables are useless!
+    bec.disable_table()
+    return [bec], []
+
+rr = RunRouter([factory])
+
+RE = RunEngine()
+RE.subscribe(rr)
+
+
+
+
+
+
+
+# multirun code prototype from Tom
+
+import numpy as np
+
+from bluesky import RunEngine
+
+import bluesky.plan_stubs as bps
+import bluesky.preprocessors as bpp
+
+from bluesky.callbacks.best_effort import BestEffortCallback
+
+from ophyd.sim import motor1, motor2, det1
+
+from event_model import RunRouter
+
+def multi_scan_2025_1_su(start, stop, steps, mds):
+    n = len(mds)
+    for j, md in enumerate(mds):
+        # open each run
+        yield from bpp.set_run_key_wrapper(
+            bps.open_run({"run_num": j, "total": n, **md}), f"run {j}"
+        )
+        # declare we will have a primary stream
+        yield from bpp.set_run_key_wrapper(
+            bps.declare_stream(motor1, motor2, det1, name="primary"), f"run {j}"
+        )
+
+    for i, wa in enumerate(waxs_arc):
+        yield from bps.mv(waxs, wa)
+        # do the outer "slow" motor
+        for j in range(n):
+            # do the inner "fast" motor
+            yield from bps.mv(motor2, j)
+            yield from bpp.set_run_key_wrapper(
+                bps.trigger_and_read([motor1, motor2, det1]), f"run {j}"
+            )
+            
+    # TODO wrap this up with finalize_wrapper
+    for j in range(n):
+        # close each of the runs
+        yield from bpp.set_run_key_wrapper(bps.close_run(), f"run {j}")
+
+
+
+def giwaxs_hardxray_Kelvin_2024_3(t=1):
+
+    # In Freychet_11
+    # names = [  'GI_P25_4', 'GI_P25_2', 'GI_P25_1', 'GI_P25_0p5', 'GI_P25_0p25', 'GI_AHPP25_4', 'GI_AHPP25_2', 'GI_AHPP25_1', 'GI_AHPP25_0p5', 'GI_AHPP25_0p25',
+    #            'GI_P5A_4', 'GI_P5A_2', 'GI_P5A_1', 'GI_P5A_0p5', 'GI_P5A_0p25', 'GI_AHPP5A_4', 'GI_AHPP5A_2', 'GI_AHPP5A_1', 'GI_AHPP5A_0p5', 'GI_AHPP5A_0p25']             
+    # x_piezo = [     54000,      54000,      40000,        25000,         15000,         -2000,        -15000,        -29000,          -42000,           -48000, 
+    #                 55000,      52000,      40000,        25000,         15000,          4000,         -8000,        -24000,          -37000,           -48000]  
+    # x_hexa = [         15,          0,          0,            0,             0,             0,             0,             0,               0,               -8, 
+    #                    15,          0,          0,            0,             0,             0,             0,             0,               0,               -8] 
+    # y_piezo = [      6800,       6800,       6800,         6800,          6800,          6800,          6800,          6800,            6800,             6800,
+    #                 -1500,      -1500,      -1500,        -1500,         -1500,         -1500,         -1500,         -1500,           -1500,            -1500] 
+    
+    names = ['sj-ppionzrox-m-post', 'sj-ppionzrox-m-ox', 'sj-ppionzrox-m-pre', 'sj-ppion-m-ox', 
+                 'sj-bkg-m-coated',     'sj-bkg-m-bare']
+    x_piezo = [              53800,               53900,                48700,           37900,
+                             26900,               16400]
+    x_hexa = [                  14,                 4.3,                    0,               0,
+                                0,                    0]
+    y_piezo = [               7300,                7300,                 7300,            7300,
+                              7300,                7200]
+
+    assert len(x_piezo) == len(names), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(names)})"
+    assert len(x_piezo) == len(y_piezo), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(y_piezo)})"
+    assert len(x_piezo) == len(x_hexa), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(x_hexa)})"
+
+    waxs_arc = [7, 20]
+    ai0_all = -1
+    ai_list = [0.10, 0.12, 0.15, 0.20]
+    xstep = 0
+
+
+    for name, xs, ys, xs_hexa in zip(names, x_piezo, y_piezo, x_hexa):
+        yield from bps.mv(stage.x, xs_hexa,
+                          piezo.x, xs,
+                          piezo.y, ys)
+
+        yield from bps.mv(piezo.th, ai0_all)
+        yield from alignement_gisaxs_doblestack(0.15)
+
+        ai0 = piezo.th.position
+        det_exposure_time(t, t)
+        
+        for i, wa in enumerate(waxs_arc):
+            yield from bps.mv(waxs, wa)
+
+            if wa ==0:
+                dets = [pil900KW]
+            else:
+                dets = [pil900KW, pil1M]
+
+            # Do not take SAXS when WAXS detector in the way
+
+            counter = 0
+            for k, ais in enumerate(ai_list):
+                yield from bps.mv(piezo.th, ai0 + ais)
+
+                name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}"
+                
+                yield from bps.mv(piezo.x, xs - counter * xstep)
+                counter += 1
+                e=energy.energy.position
+                sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa)
+                sample_id(user_name="GS", sample_name=sample_name)
+                print(f"\n\t=== Sample: {sample_name} ===\n")
+                yield from bp.count(dets, num=1)
+
+            yield from bps.mv(piezo.th, ai0)
+
+
+
+
+import bluesky.preprocessors as bpp
+import bluesky.plans as bp
+import bluesky.plan_stubs as bps
+from ophyd import Signal
+
+def single_scan_giwaxs(t=1, name="Test", ai_list: list[int]|None = None, xstep=10, waxs_arc = (0, 20)):
+    '''
+    Study the beam damage on 1 film to define the opti;am experimental conitions.
+
+    '''
+    names = ['sj-ppionzrox-m-post', 'sj-ppionzrox-m-ox', 'sj-ppionzrox-m-pre', 'sj-ppion-m-ox', 
+                 'sj-bkg-m-coated',     'sj-bkg-m-bare']
+    x_piezo = [              53800,               53900,                48700,           37900,
+                             26900,               16400]
+    x_hexa = [                  14,                 4.3,                    0,               0,
+                                0,                    0]
+    y_piezo = [               7300,                7300,                 7300,            7300,
+                              7300,                7200]
+
+    assert len(x_piezo) == len(names), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(names)})"
+    assert len(x_piezo) == len(y_piezo), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(y_piezo)})"
+    assert len(x_piezo) == len(x_hexa), f"Number of X coordinates ({len(x_piezo)}) is different from number of samples ({len(x_hexa)})"
+
+    waxs_arc = [7, 20]
+    ai0_all = -1
+    ai_list = [0.10, 0.12, 0.15, 0.20]
+    xstep = 0
+
+
+    for name, xs, ys, xs_hexa in zip(names, x_piezo, y_piezo, x_hexa):
+        yield from bps.mv(stage.x, xs_hexa,
+                          piezo.x, xs,
+                          piezo.y, ys)
+
+        yield from bps.mv(piezo.th, ai0_all)
+        yield from alignement_gisaxs_doblestack(0.15)
+
+        ai0 = piezo.th.position
+        det_exposure_time(t, t)
+
+        s = Signal(name='target_file_name', value='')
+
+        @bpp.stage_decorator(dets)
+        @bpp.run_decorator(md={})
+        def inner():
+            for i, wa in enumerate(waxs_arc):
+                yield from bps.mv(waxs, wa)
+
+                counter = 0
+                for k, ais in enumerate(ai_list):
+                    yield from bps.mv(piezo.th, ai0 + ais)
+
+                    name_fmt = "{sample}_{energy}eV_ai{ai}_wa{wax}"
+                    
+                    yield from bps.mv(piezo.x, xs - counter * xstep)
+                    counter += 1
+                    e=energy.energy.position
+                    sample_name = name_fmt.format(sample=name,energy="%6.2f"%e, ai="%3.2f"%ais, wax=wa)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+                    s.put(sample_name)
+                    yield from bps.trigger_and_read(dets + [energy, waxs, xbpm2, xbpm3, piezo.th, piezo.x] + [s])
+            yield from bps.mv(piezo.th, ai0)
+
+        return (yield from inner())
