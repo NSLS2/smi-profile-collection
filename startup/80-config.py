@@ -6,7 +6,15 @@ import os
 from nslsii.sync_experiment import sync_experiment
 
 # things to read at begining and end of every scan
-sd.baseline = [energy, pil1m_pos, stage, prs, piezo, ring.current]
+sd.baseline.extend([energy, pil1m_pos, stage,  prs, piezo,  ring.current, xbpm2, xbpm3])
+
+sd.baseline.extend([ls, xbpm1_pos, xbpm2_pos, xbpm3_pos, dcm_config, ivugap, bragg, vfm_voltage, hfm_voltage])
+sd.baseline.extend([wbs, ssa, eslit, cslit, dsa, SAXS, SBS, MDrive, thorlabs_su])
+sd.baseline.extend([hfm, vdm, vfm, crl, pil1m_bs_pd, pil1m_bs_rod, GV7, chamber_pressure])
+
+sd.baseline.extend([att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12])
+sd.baseline.extend([att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12])
+
 
 from pathlib import Path
 

@@ -33,6 +33,12 @@ process
             if hasattr(cpt, 'ensure_nonblocking'):
                 cpt.ensure_nonblocking()
 
+class TIFFPluginEnsuredOff(TIFFPlugin):
+    """Add this as a component to detectors that do not write TIFFs."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.stage_sigs.update([('auto_save', 'No')])
+
 
 class StandardProsilicaV33(SingleTriggerV33, ProsilicaDetector):
     cam = Cpt(ProsilicaDetectorCamV33, 'cam1:')

@@ -12,12 +12,13 @@ from ophyd import (
     TransformPlugin,
     PilatusDetector,
     OverlayPlugin,
+    TIFFPlugin,
 )
-
 
 from ophyd.areadetector.cam import PilatusDetectorCam
 from ophyd.areadetector.detectors import PilatusDetector
 from ophyd.areadetector.base import EpicsSignalWithRBV as SignalWithRBV
+from ophyd.areadetector.filestore_mixins import FileStoreTIFFIterativeWrite
 
 import bluesky.plans as bp
 import time
