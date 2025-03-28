@@ -57,9 +57,6 @@ db = Broker(tiled_reading_client)
 # set plot properties for 4k monitors
 plt.rcParams['figure.dpi']=200
 
-# Set the metadata dictionary
-RE.md = RedisJSONDict(redis.Redis("info.smi.nsls2.bnl.gov"), prefix="swaxs-")
-
 # Setup the path to the secure assets folder for the current proposal
 assets_path = f"/nsls2/data/smi/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets/"
 
