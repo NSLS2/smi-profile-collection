@@ -75,7 +75,7 @@ class StandardProsilicaWithTIFFV33(StandardProsilicaV33):
                suffix='TIFF1:',
                md = RE.md,
                write_path_template='',
-               root='')
+               root='/nsls2/data/smi/proposals')
 
     def __init__(self, *args, asset_path, **kwargs):
         self.asset_path = asset_path

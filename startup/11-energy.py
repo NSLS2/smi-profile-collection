@@ -141,7 +141,7 @@ class Energy(PseudoPositioner):
 
     # this is also the maximum harmonic that will be tried
     target_harmonic = Cpt(Signal, value=21)
-    harmonic = Cpt(Signal, kind="hinted")
+    harmonic = Cpt(Signal, kind="hinted",value=21)
 
     # TODO make this a derived component
 
@@ -156,7 +156,7 @@ class Energy(PseudoPositioner):
     @pseudo_position_argument
     def forward(self, p_pos):
         energy = p_pos.energy
-        self.harmonic.put(self.target_harmonic.get())
+        self.harmonic.put(int(self.target_harmonic.get()))
 
         if not self.harmonic.get() % 2:
             raise RuntimeError("harmonic must be odd")
@@ -177,7 +177,7 @@ class Energy(PseudoPositioner):
 
         target_ivu_gap = energy_to_gap(energy, self.harmonic.get())
         while not (6200 <= target_ivu_gap < 15100):
-            self.harmonic.put(self.harmonic.get() - 2)
+            self.harmonic.put(int(self.harmonic.get()) - 2)
             if self.harmonic.get() < 1:
                 raise RuntimeError("can not find a valid gap")
             target_ivu_gap = energy_to_gap(energy, self.harmonic.get())

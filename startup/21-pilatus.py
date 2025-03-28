@@ -74,6 +74,7 @@ class PilatusDetector(PilatusDetector):
 
 
 class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
+    # def __init__(self, *args, md=None, root_path="/nsls2/data/smi/proposals", **kwargs):
     def __init__(self, *args, md=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._md = md
@@ -115,7 +116,7 @@ class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
 
     @property
     def root_path_str(self):
-        return f"/nsls2/data/smi/proposals/{self._md['cycle']}/{self._md['data_session']}/assets/{self._asset_path}/"
+        return f"{self.root}/{self._md['cycle']}/{self._md['data_session']}/assets/{self._asset_path}/"
 
     def stage(self):
 
@@ -130,7 +131,7 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
         suffix="TIFF1:",
         md=RE.md,
         write_path_template="/ramdisk/PLACEHOLDER",
-        root="/",
+        root="/nsls2/data/smi/proposals",
     )
 
     def __init__(self, *args, asset_path, **kwargs):
