@@ -13,6 +13,24 @@ from redis_json_dict import RedisJSONDict
 from tiled.client import from_profile
 from databroker import Broker
 
+from IPython import get_ipython
+from IPython.terminal.prompts import Prompts, Token
+
+
+class ProposalIDPrompt(Prompts):
+    def in_prompt_tokens(self, cli=None):
+        return [
+            (
+                Token.Prompt,
+                f"{RE.md.get('data_session', 'N/A')} [",
+            ),
+            (Token.PromptNum, str(self.shell.execution_count)),
+            (Token.Prompt, "]: "),
+        ]
+
+ip = get_ipython()
+ip.prompts = ProposalIDPrompt(ip)
+
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
 
