@@ -25,6 +25,119 @@
 # Note: 
 # beamstop_save()
 
+def run_giswaxs_2025C1(t=2, flag_align=1, flag_reflect = 1, waxs_angles = [15, 0], piezo_y_init=6700):
+    
+    ###### Bar 1
+    if 0:
+        x_offset = -49000-3000
+        temp = [9000, 15000, 20000, 25000, 
+                31000, 37000, 43000, 48000, 55000, 
+                60000, 66000, 72000, 77000, 84000, 
+                90000, 95000, 101000]
+        # temp = [3000]
+        x_array = x_offset + np.array(temp)
+        x_list = list(x_array)
+
+        sample_list = [
+            'sam2_a85_S2VPL52_SR1.5_85C', 'sam3_a90_S2VPL52_SR1.5_90C', 'sam4_a100_S2VPL52_SR1.5_100C', 'sam5_a110_S2VPL52_SR1.5_110C', 
+            'sam6_a120_S2VPL52_SR1.5_120C', 'sam7_a130_S2VPL52_SR1.5_130C', 'sam8_b_S2VPL52(80)_PS6k(20)_SR1.5', 'sam9_b85_S2VPL52(80)_PS6k(20)_SR1.5_85C', 'sam10_b90_S2VPL52(80)_PS6k(20)_SR1.5_90C', 
+            'sam11_b100_S2VPL52(80)_PS6k(20)_SR1.5_100C', 'sam12_b110_S2VPL52(80)_PS6k(20)_SR1.5_110C', 'sam13_b120_S2VPL52(80)_PS6k(20)_SR1.5_120C', 'sam14_b130_S2VPL52(80)_PS6k(20)_SR1.5_130C', 'sam15_c_S2VPL52(80)_PS3k(20)_SR1.5', 
+            'sam16_c85_S2VPL52(80)_PS3k(20)_SR1.5_85C', 'sam17_c90_S2VPL52(80)_PS3k(20)_SR1.5_90C', 'sam18_c100_S2VPL52(80)_PS3k(20)_SR1.5_100C']
+
+        # sample_list = [
+        #     'sam1_a_S2VPL52_SR1.5']
+
+    ###### Bar 2
+    x_offset = -49000-3000
+    temp = [3000, 9000, 15000, 22000, 28000, 34000, 40000, 45000, 52000, 58000, 63000, 70000, 75000]
+    x_array = x_offset + np.array(temp)
+    x_list = list(x_array)
+    sample_list = ['b2sam1_c110_S2VPL52(80)_PS3k(20)_SR1.5_110C', 'b2sam2_c120_S2VPL52(80)_PS3k(20)_SR1.5_120C', 
+                   'b2sam3_c130_S2VPL52(80)_PS3k(20)_SR1.5_130C', 'b2sam4_d_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5', 
+                   'b2sam5_d85_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_85C', 'b2sam6_d90_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_90C', 
+                   'b2sam7_d100_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_100C', 'b2sam8_d110_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_110C',
+                'b2sam9_d120_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_120C', 'b2sam10_d130_S2VPL52(80)_PS6k(10)_P2VP6k(10)_SR1.5_130C', ''
+                'b2sam11_e_S2VPL52(80)_P2VP6k(20)_SR1.5', 'b2sam12_e100_S2VPL52(80)_P2VP6k(20)_SR1.5_100C', 'b2sam13_e120_S2VPL52(80)_P2VP6k(20)_SR1.5_120C']
+
+
+
+    t0 = time.time()
+    assert len(x_list) == len(sample_list), f"Sample name/position list is incorrect"
+
+    # data_dir = '/nsls2/data/smi/legacy/results/data/2024_1/312437_Jones/'
+    data_dir = '/nsls2/data/smi/legacy/results/data/2025_1/317473_ETsai/'
+
+    x_shift_array = np.asarray([0]) 
+    for x, sample in zip(x_list, sample_list):  # loop over samples on bar
+
+        yield from bps.mv(piezo.x, x)  # move to next sample
+        if flag_align:
+            yield from bps.mv(piezo.th, 0) 
+            yield from bps.mv(piezo.y, piezo_y_init) 
+            yield from alignement_gisaxs(0.1, flag_reflect=flag_reflect)  # run alignment routine
+        else:
+            yield from SMI_Beamline().modeMeasurement()
+
+        print('##### {}, x = {}, aligned at y = {}, theta = {}'.format(sample, piezo.x.position, piezo.y.position, piezo.th.position))
+        if flag_align:
+            #aligned_positions.append([sample, piezo.x.position, piezo.y.position, piezo.th.position])
+            with open(data_dir+'Align/aligned_positions.txt', 'a') as f:
+                note = '{}: x{}, y{}, th{},'.format(sample, piezo.x.position, piezo.y.position, piezo.th.position)
+                f.write(note)
+                f.write('\n')
+
+        det_exposure_time(t, t)
+        x_pos_array = x  + x_shift_array
+
+        # for waxs_angle in waxs_angles:  # loop through waxs angles
+        #     yield from bps.mv(waxs, waxs_angle)
+        if 1:
+
+            # if waxs_angle >= 15:
+            #     dets = [pil900KW, pil1M] 
+            #     angle_arc = np.array([0.08, 0.12, 0.16, 0.2])  # incident angles
+            # else:
+            #     dets = [pil900KW] 
+            #     angle_arc = np.array([0.08, 0.12, 0.16, 0.2])  # incident angles
+
+            dets = [pil1M] 
+            # angle_arc = np.array([0.12])  # incident angles
+            angle_arc = np.array([0.05, 0.08, 0.1, 0.12])  # incident angles
+            th_meas = (
+                angle_arc + piezo.th.position
+            ) 
+
+            for x_pos in x_pos_array:
+                yield from bps.mv(piezo.x, x_pos)  
+
+                for i, th in enumerate(th_meas):  # loop over incident angles
+                    yield from bps.mv(piezo.th, th)
+
+                    sample_name = "{sample}_{th:5.4f}deg_x{x}_{t}s".format( #_waxs{waxs_angle:05.2f}
+                        sample=sample,
+                        th=angle_arc[i],
+                        #waxs_angle=waxs_angle,
+                        x=x_pos,
+                        t=t,
+                        #scan_id=RE.md["scan_id"],
+                    )
+                    # name_fmt = '{sample}_16.1keV_8.3m_waxs{waxs_angle:05.2f}_x{x:04.2f}_{t:05.2f}s_{scan_id}'
+                    # sample_name = name_fmt.format(sample=sample, waxs_angle=waxs_angle, x=x, t=t, scan_id=RE.md['scan_id'])
+                    sample_id(user_name="KM", sample_name=sample_name)
+                    print(f"\n\t=== Sample: {sample_name} ===\n")
+
+                    # yield from bp.scan(dets, energy, e, e, 1)
+                    # yield from bp.scan(dets, waxs, *waxs_arc)
+                    yield from bp.count(dets, num=1)
+
+    sample_id(user_name="test", sample_name="test")
+    det_exposure_time(0.5, 0.5)
+    print('Total time = {}min.'.format((time.time()-t0)/60))
+
+
+
+
+
 #sample_id(user_name='test', sample_name=f'test{get_scan_md()}')
 def measure_saxs(t=1, user_name="NEA", sample='D2O_s1', xr_list = [0, 100], yr_list = [0, 500]):
     x0 = piezo.x.position
@@ -162,7 +275,7 @@ def alignement_gisaxs(angle=0.15, flag_reflect = 1):
         # Scan theta and height
         yield from align_gisaxs_th(0.2, 21)
         yield from align_gisaxs_height_rb(150, 16)
-        yield from align_gisaxs_th(0.1, 31)  # was .025, 21 changed to .1 31
+        yield from align_gisaxs_th(0.025, 21)  # was .025, 21 changed to .1 31
     else:
         print('## Align with direct beam.....')
         # Scan theta and height
@@ -263,7 +376,7 @@ def run_giswaxs(t=2, flag_align=1, flag_reflect = 0, waxs_angles = [15, 0], piez
                     yield from bp.count(dets, num=1)
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5)
+    det_exposure_time(0.5, 0.5)
     print('Total time = {}min.'.format((time.time()-t0)/60))
 
 # =============== Humidity Chamber ===============
@@ -451,7 +564,7 @@ def run_gi_humid(t=5, flag_align = 0, n0=0, t0 = 0, Nmax=9999, time_hr = [4, 8] 
 
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5)
+    det_exposure_time(0.5, 0.5)
 
 ####
 # Put in new bar
@@ -567,7 +680,7 @@ def run_gi_humid_new(t=0.5, t0=0, user_name='Insitu', time_hr = [2], time_sleep_
             yield from bps.sleep(time_sleep_sec[2])
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5)
+    det_exposure_time(0.5, 0.5)
 
 
 # RE(run_gi_humid_testexp(t_list = [0.5, 1, 2, 3, 5], xr_list=[-0.4], n0=41, Nmax=1, incident_angles = [0.08, 0.5]))
@@ -631,7 +744,7 @@ def run_gi_humid_testexp(t_list = [0.5, 1, 2, 3, 5], xr_list=[-0.4], n0=41, Nmax
 
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5)
+    det_exposure_time(0.5, 0.5)
 
 
 
