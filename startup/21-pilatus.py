@@ -166,7 +166,9 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
         self.read_attrs = [st, "tiff"]
         getattr(self, st).kind = "hinted"
 
-    def apply_threshold(self, energy=16.1, threshold=8.0, gain="autog"):
+    # This is breaking some of the scans trying to reset trshold and gain
+
+    def apply_threshold(self, energy=16.1, threshold=11.5, gain="autog"):
         if 1.5 < energy < 24:
             yield from bps.mv(self.energy, energy)
         else:
@@ -460,7 +462,8 @@ class WAXS(Device):
         # bsx_pos = -27.7 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2024 May 20, changing script rather than dial as previously...
         # bsx_pos = -96.74 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 05, changing script rather than dial as previously...
         # bsx_pos = -117.487 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 11, changing script rather than dial as previously...
-        bsx_pos = -37.36 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 28, changing script rather than dial as previously...
+        #bsx_pos = -37.36 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 Feb 28, changing script rather than dial as previously...
+        bsx_pos = -37.56 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 March 26
 
         return bsx_pos
 

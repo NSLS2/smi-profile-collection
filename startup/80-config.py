@@ -38,12 +38,11 @@ def manual_mode(
     pil1M.tiff.file_number.set(0).wait()
 
 
-def sample_id(*, user_name, sample_name, tray_number=None):
+def sample_id(user_name="SMI",sample_name='test'):
 
-    sample_name = sample_name.translate(
+    sample_name = f'{user_name}_{sample_name}'.translate(
                 {ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =,"})
 
-    RE.md["user_name"] = user_name
     RE.md["sample_name"] = sample_name
 
 
