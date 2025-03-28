@@ -37,16 +37,16 @@ tiled_inserter = TiledInserter()
 
 # The function below initializes RE and subscribes tiled_inserter to it
 nslsii.configure_base(get_ipython().user_ns,
-               "smi",
+               tiled_inserter,
                bec_derivative=True, 
                publish_documents_with_kafka=True)
 nslsii.configure_kafka_publisher(RE, "smi")
 
-# This is a workaround to enable us subscribe to Kafka publisher, which requires a beamline acronym when calling
-# configuration_base above (ideally, we would just pass tiled_inserter there).
-# Here we unsubsribe the default databroker (with token=0) and then subscribe the tiled_inserter instead.
-RE.unsubscribe(0)
-RE.subscribe(tiled_inserter.insert)
+# # This is a workaround to enable us subscribe to Kafka publisher, which requires a beamline acronym when calling
+# # configuration_base above (ideally, we would just pass tiled_inserter there).
+# # Here we unsubsribe the default databroker (with token=0) and then subscribe the tiled_inserter instead.
+# RE.unsubscribe(0)
+# RE.subscribe(tiled_inserter.insert)
 
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
 tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
