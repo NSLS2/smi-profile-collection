@@ -40,6 +40,25 @@ def move_pos(pos=1):
     sample_id(user_name=user_name, sample_name=sam)
 
 
+def fly_scan(det, motor, cycle=1, cycle_t=10, phi=-0.6):
+    start = phi + 40
+    stop = phi - 40
+    acq_time = cycle * cycle_t
+    yield from bps.mv(motor, start)
+    # yield from bps.mv(attn_shutter, 'Retract')
+    det.stage()
+    det.cam.acquire_time.put(acq_time)
+    print(f"Acquire time before staging: {det.cam.acquire_time.get()}")
+    st = det.trigger()
+    for i in range(cycle):
+        yield from list_scan([], motor, [start, stop])
+    while not st.done:
+        pass
+    det.unstage()
+    print(f"We are done after {acq_time}s of waiting")
+    # yield from bps.mv(attn_shutter, 'Insert')
+
+
 def grating_rana(det, motor, name="Water_upRepeat", cycle=1, cycle_t=11, n_cycles=20):
     # Slowest cycle:
     temperatures = [302, 305, 310]
