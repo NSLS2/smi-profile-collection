@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.manipulators import BDMStage, STG, SMPL, HEXAPOD, SMARACT
+from smiclasses.manipulators import BDMStage, STG, SMPL, HEXAPOD, SMARACT
 from ophyd import EpicsMotor
 
 
@@ -27,6 +27,7 @@ for pr in [prs]:
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([stage,  prs, piezo,])

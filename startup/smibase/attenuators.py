@@ -1,8 +1,9 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.attenuators import Attenuator
+from smiclasses.attenuators import Attenuator
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 
 att1_1 = Attenuator("XF:12IDC-OP:2{Fltr:1-1}", name="att1_1")

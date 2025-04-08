@@ -13,7 +13,8 @@ from .energy import energy
 from .pilatus import pil1m_pos, waxs
 from .electrometers import xbpm2
 
-from .base import db
+from IPython import get_ipython
+db = get_ipython().user_ns['db']
 
 
 # def ps_new(der=False, plot=True):

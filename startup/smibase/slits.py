@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.slits import SLIT, SLTH, SLTV, APER
+from smiclasses.slits import SLIT, SLTH, SLTV, APER
 
 # white beam slits
 wbs = SLIT("XF:12IDA-OP:2{Slt:WB-Ax:", name="wbs")
@@ -24,6 +24,7 @@ dsa = APER("XF:12IDC-OP:2{Lens:CRL-Ax:", name="dsa")
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([wbs, ssa, eslit, cslit, dsa])

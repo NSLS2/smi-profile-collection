@@ -1,7 +1,7 @@
 
 print(f"Loading {__file__}")
 
-from ..smiclasses.motors import MDriveMotor, SAXSBeamStop, DetMotor, ThorlabsMotor
+from smiclasses.motors import MDriveMotor, SAXSBeamStop, DetMotor, ThorlabsMotor
 
 ## for MDrive, YZhang
 MDrive =  MDriveMotor("XF:12ID2-ES{Mdrive-Ax:", name = "MDrive")
@@ -16,6 +16,7 @@ thorlabs_su = ThorlabsMotor('XF:12ID2-ES{DDSM100-Ax:X1}Mtr',name='thorlabs_su')
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([SAXS, SBS, MDrive, thorlabs_su])

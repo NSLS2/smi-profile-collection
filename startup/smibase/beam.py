@@ -10,9 +10,9 @@ import bluesky.plan_stubs as bps
 from .pilatus import pil1m_pos
 from .beamstop import saxs_bs
 
-from ..smiclasses.beam  import SMIBeam, SMI_Beamline, SMI_SAXS_detector, SMI_WAXS_detector
-from ..smibase.base import RE
-from ..smibase.attenuators import (
+from smiclasses.beam  import SMI_SAXS_detector, SMI_WAXS_detector
+from smibase.base import RE
+from smibase.attenuators import (
             att1_1,
             att1_2,
             att1_3,
@@ -38,11 +38,11 @@ from ..smibase.attenuators import (
             att2_11,
             att2_12,
 )
-from ..smibase.energy import energy
-from ..smibase.pilatus import waxs, pil1M
-from ..smibase.beamstop import saxs_bs
-from ..smibase.crls import crl
-from ..smibase.waxschamber import get_chamber_pressure, chamber_pressure
+from smibase.energy import energy
+from smibase.pilatus import waxs, pil1M
+from smibase.beamstop import saxs_bs
+from smibase.crls import crl
+from smibase.waxschamber import get_chamber_pressure, chamber_pressure
 
 
 
@@ -553,9 +553,9 @@ class SMI_SAXS_Det(object):
         self.distance, self.direct_beam = interpolate_db_sdds()
         self.distance *= 1000
 
-        self.x0_pix.put(self.direct_beam[0])
-        self.y0_pix.put(self.direct_beam[1])
-        self.sdd.put(self.distance)
+        smi_saxs_detector.x0_pix.put(self.direct_beam[0])
+        smi_saxs_detector.y0_pix.put(self.direct_beam[1])
+        smi_saxs_detector.sdd.put(self.distance)
 
     def get_beamstop(self):
         """
@@ -564,27 +564,27 @@ class SMI_SAXS_Det(object):
 
         # ToDo: Calculate what pixels to mask for different beamstop positions
         if saxs_bs.x_pin.position < 10 and saxs_bs.x_rod.position < 10:
-            self.bs_kind.put("rod_beamstop")
+            smi_saxs_detector.bs_kind.put("rod_beamstop")
 
             # To be implemented with the good values for y and test x position
             x_bs = 440.79 - (saxs_bs.x_rod.position / 0.172) + (pil1m_pos.x.position / 0.172)
-            self.xbs_mask.put(x_bs)
+            smi_saxs_detector.xbs_mask.put(x_bs)
             y_bs = 496.07 - (saxs_bs.y_rod.position / 0.172) + (pil1m_pos.y.position / 0.172)
-            self.ybs_mask.put(10)
+            smi_saxs_detector.ybs_mask.put(10)
 
         elif abs(saxs_bs.x_pin.position) > 50 and abs(saxs_bs.x_rod.position) < 50:
-            self.bs_kind.put("pindiode")
+            smi_saxs_detector.bs_kind.put("pindiode")
 
             # To be implemented with the good values, not hard-coded
-            self.xbs_mask.put(10)
-            self.ybs_mask.put(10)
+            smi_saxs_detector.xbs_mask.put(10)
+            smi_saxs_detector.ybs_mask.put(10)
 
         else:
-            yield from bps.mv(self.bs_kind, "None")
+            yield from bps.mv(smi_saxs_detector.bs_kind, "None")
 
             # To be implemented with the good values, not hard-coded
-            self.xbs_mask.put(10)
-            self.ybs_mask.put(10)
+            smi_saxs_detector.xbs_mask.put(10)
+            smi_saxs_detector.ybs_mask.put(10)
 
     def set_beamstop(self):
         """
@@ -599,15 +599,13 @@ class SMI_SAXS_Det(object):
         pass
 
 
-
-
-
-smi_waxs_detector = SMI_WAXS_detector(name="Pilatus300kw")
+smi_waxs_detector = SMI_WAXS_detector(name="Pilatus900kw")
 smi_saxs_detector = SMI_SAXS_detector(name="Pilatus1M")
 
 SMI = SMI_Beamline()
 pilatus1M = SMI_SAXS_Det()
 
 
-from .base import sd
-sd.extend([smi_waxs_detector, smi_saxs_detector])
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
+sd.baseline.extend([smi_waxs_detector, smi_saxs_detector])

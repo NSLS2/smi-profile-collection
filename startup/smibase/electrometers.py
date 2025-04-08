@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.electrometers import XBPM, new_LakeShore, QuadEMV33, Keithly2450
+from smiclasses.electrometers import XBPM, new_LakeShore, Keithly2450
 from ophyd import EpicsSignal
 from nslsii.ad33 import QuadEMV33
 
@@ -47,6 +47,7 @@ pin_diode.current2.mean_value.kind = "hinted"
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([xbpm2, xbpm3,ls])

@@ -2,7 +2,8 @@ print(f"Loading {__file__}")
 
 from nslsii.sync_experiment import sync_experiment
 from warnings import warn
-from .base import RE
+from IPython import get_ipython
+RE = get_ipython().user_ns['RE']
 
 # things to read at begining and end of every scan
 

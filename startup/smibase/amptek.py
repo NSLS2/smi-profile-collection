@@ -1,7 +1,8 @@
 print(f"Loading {__file__}")
 
-from .base import sd
-from ..smiclasses.amptek import SMIAmptek, AmptekPositions
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
+from smiclasses.amptek import SMIAmptek, AmptekPositions
 
 # amptek_energy = Signal(name='amptek_energy', value=energy_channels)
 

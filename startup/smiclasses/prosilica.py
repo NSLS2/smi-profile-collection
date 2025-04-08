@@ -12,7 +12,7 @@ from ophyd import (
 from .pilatus import TIFFPluginWithFileStore
 from ophyd import Component as Cpt
 from nslsii.ad33 import SingleTriggerV33, StatsPluginV33
-from ..smibase.base import RE
+from smibase.base import RE
 
 class ProsilicaDetectorCamV33(ProsilicaDetectorCam):
     """This is used to update the Standard Prosilica to AD33. It adds the

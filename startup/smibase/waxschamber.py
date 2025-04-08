@@ -1,7 +1,7 @@
 print(f"Loading {__file__}")
 
 
-from ..smiclasses.waxschamber import sample_chamber_pressure
+from smiclasses.waxschamber import sample_chamber_pressure
 
 def get_chamber_pressure(signal):
     value = signal.get()
@@ -21,6 +21,7 @@ chamber_pressure.maxs.kind = "hinted"
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([ chamber_pressure])

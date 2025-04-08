@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.pilatus import PIL1MPositions, FakeDetector, Pilatus, WAXS
+from smiclasses.pilatus import PIL1MPositions, FakeDetector, Pilatus, WAXS
 from .amptek import amptek
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
@@ -131,6 +131,7 @@ def multi_count(detectors, *args, **kwargs):
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([pil1m_pos])

@@ -1,7 +1,7 @@
 
 print(f"Loading {__file__}")
 
-from ..smiclasses.beamstop import SAXSBeamStops
+from smiclasses.beamstop import SAXSBeamStops
 from time import ctime
 
 
@@ -42,22 +42,8 @@ def beamstop_save():
     print(current_config)
 
 
-def beamstop_load():
-    """
-    load the configuration file
-    """
-    #TODO - load the latest positions from the redis record
-    # bs_pos_x = smi_config.bs_pos_x.values[-1]
-    # bs_pos_y = smi_config.bs_pos_y.values[-1]
-    # pdbs_pos_x = smi_config.pdbs_pos_x.values[-1]
-    # pdbs_pos_y = smi_config.pdbs_pos_y.values[-1]
-    # positions
-    return bs_rod_x, bs_rod_y, bs_pin_x, bs_pin_y
 
-
-bs_rod_x, bs_rod_y, bs_pin_x, bs_pin_y= beamstop_load()
-
-
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([saxs_bs])

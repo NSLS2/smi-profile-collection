@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.energy import Energy, DCMInternals
+from smiclasses.energy import Energy, DCMInternals
 from ophyd import EpicsMotor
 
 energy = Energy(
@@ -25,6 +25,7 @@ dcm_theta = EpicsMotor("XF:12ID:m65", name="dcm_theta")
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([energy, dcm_config, ivugap, bragg])

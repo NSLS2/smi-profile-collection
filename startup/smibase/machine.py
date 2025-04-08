@@ -1,5 +1,5 @@
 print(f"Loading {__file__}")
-from ..smiclasses.machine import Ring
+from smiclasses.machine import Ring
 from ophyd import EpicsSignalRO
 
 ring = Ring(name="ring")
@@ -15,6 +15,7 @@ smi_shutter_enable = EpicsSignalRO(
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([ring.current])

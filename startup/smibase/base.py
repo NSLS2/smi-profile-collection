@@ -17,19 +17,6 @@ import matplotlib.pyplot as plt
 
 
 
-class ProposalIDPrompt(Prompts):
-    def in_prompt_tokens(self, cli=None):
-        return [
-            (
-                Token.Prompt,
-                f"{RE.md.get('data_session', 'N/A')} [",
-            ),
-            (Token.PromptNum, str(self.shell.execution_count)),
-            (Token.Prompt, "]: "),
-        ]
-
-ip = get_ipython()
-ip.prompts = ProposalIDPrompt(ip)
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
@@ -64,6 +51,9 @@ nslsii.configure_base(get_ipython().user_ns,
 # # This is a workaround to enable us subscribe to Kafka publisher, which requires a beamline acronym when calling
 # # configuration_base above (ideally, we would just pass tiled_inserter there).
 # # Here we unsubsribe the default databroker (with token=0) and then subscribe the tiled_inserter instead.
+from IPython import get_ipython
+RE = get_ipython().user_ns['RE']
+bec = get_ipython().user_ns['bec']
 RE.unsubscribe(0)
 RE.subscribe(tiled_inserter.insert)
 
@@ -87,3 +77,18 @@ nslsii.configure_olog(get_ipython().user_ns, subscribe=True)
 
 logger = logging.getLogger("bluesky")
 logger.setLevel("INFO")
+
+
+class ProposalIDPrompt(Prompts):
+    def in_prompt_tokens(self, cli=None):
+        return [
+            (
+                Token.Prompt,
+                f"{RE.md.get('data_session', 'N/A')} [",
+            ),
+            (Token.PromptNum, str(self.shell.execution_count)),
+            (Token.Prompt, "]: "),
+        ]
+
+ip = get_ipython()
+ip.prompts = ProposalIDPrompt(ip)

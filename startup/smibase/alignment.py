@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 
 import bluesky.plan_stubs as bps
 import bluesky.plans as bp
-from startup.smibase.manipulators import prs, piezo, stage
+from smibase.manipulators import prs, piezo, stage
 from .pilatus import pil1M
 from .config import sample_id
 from .pilatus import det_exposure_time
 from .utils import ps
-from .base import bec
+from IPython import get_ipython
+bec = get_ipython().user_ns['bec']
 from .beam import SMI as smi
 
 def align_gisaxs_height(rang=0.3, point=31, der=False):

@@ -32,8 +32,8 @@ import numpy as np
 import time as ttime
 
 
-from ..smibase.energy import energy
-from ..smibase.base import RE
+from smibase.energy import energy
+from smibase.base import RE
 
 
 def set_energy_cam(cam,en_ev):

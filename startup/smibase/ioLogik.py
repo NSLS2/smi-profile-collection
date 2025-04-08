@@ -1,7 +1,7 @@
 
 print(f"Loading {__file__}")
 
-from ..smiclasses.ioLogik import ioLogik1240, ioLogik1241
+from smiclasses.ioLogik import ioLogik1240, ioLogik1241
 
 
 moxa_in = ioLogik1241("XF:12IDC-ES:2{IO}AO:", name="moxa_in")

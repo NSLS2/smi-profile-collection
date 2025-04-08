@@ -1,7 +1,7 @@
 print(f"Loading {__file__}")
 
-from ..smiclasses.mirrors import MIR
-from ..smiclasses.bimorph import VFM_voltage, HFM_voltage
+from smiclasses.mirrors import MIR
+from smiclasses.bimorph import VFM_voltage, HFM_voltage
 
 
 hfm = MIR("XF:12IDA-OP:2{Mir:HF-Ax:", name="hfm")
@@ -15,6 +15,7 @@ hfm_voltage = HFM_voltage("HFM:", name="hfm_voltage")
 
 
 
-from .base import sd
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([ vfm_voltage, hfm_voltage, hfm, vdm, vfm,])
