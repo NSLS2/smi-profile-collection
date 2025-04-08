@@ -159,16 +159,3 @@ class AmptekPositions(Device):
 
 
 amptek_pos = AmptekPositions("XF:12IDC-ES:2{Det:Amptek-Ax:", name="amptek_pos")
-
-
-# ToDO: make sure the file_path and file_name properly shipped
-def activate_amptek():
-
-    newDir = os.path.join("/nsls2/data/smi/legacy/results/data/", RE.md["cycle"], 
-                          RE.md["proposal_number"] + "_" + RE.md["main_proposer"], "Amptek")
-    
-    if not os.path.exists(newDir):
-        os.makedirs(newDir)
-        os.chmod(newDir, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
-
-
