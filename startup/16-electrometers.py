@@ -38,10 +38,10 @@ class new_LakeShore(Device):
     input_C = Cpt(EpicsSignal, "{Env:01-Chan:C}T-I")
     input_D = Cpt(EpicsSignal, "{Env:01-Chan:D}T-I")
 
-    output1 = output_lakeshore("XF:12ID-ES{Env:01-Out:1}", name="ls_outpu1")
-    output2 = output_lakeshore("XF:12ID-ES{Env:01-Out:2}", name="ls_outpu2")
-    output3 = output_lakeshore("XF:12ID-ES{Env:01-Out:3}", name="ls_outpu3")
-    output4 = output_lakeshore("XF:12ID-ES{Env:01-Out:4}", name="ls_outpu4")
+    output1 = Cpt(output_lakeshore, "{Env:01-Out:1}", name="ls_outpu1")
+    output2 = Cpt(output_lakeshore, "{Env:01-Out:2}", name="ls_outpu2")
+    output3 = Cpt(output_lakeshore, "{Env:01-Out:3}", name="ls_outpu3")
+    output4 = Cpt(output_lakeshore, "{Env:01-Out:4}", name="ls_outpu4")
     # xrange =
 
 
