@@ -14,19 +14,19 @@ from ophyd import (
 )
 from ophyd.device import BlueskyInterface, Staged
 
-
+# Define energy channels
 channels = np.linspace(0, 8191, 8192)
-energy_channels = (-120.34 + 2.925 * channels)
+energy_channels = -120.34 + 2.925 * channels
+
 
 class AmptekMCA(EpicsMCA):
-    # TODO: fix upstream
+    """
+    Custom MCA class for Amptek detectors.
+    """
     preset_real_time = Cpt(EpicsSignal, ".PRTM")
     preset_live_time = Cpt(EpicsSignal, ".PLTM")
     elapsed_real_time = Cpt(EpicsSignalRO, ".ERTM")
     elapsed_live_time = Cpt(EpicsSignalRO, ".ELTM")
-
-    # acquiring_status = Cpt(EpicsSignalRO, '.ACQG')
-
     check_acquiring = Cpt(EpicsSignal, "CheckACQG")
     client_wait = Cpt(EpicsSignal, "ClientWait")
     collect_data = Cpt(EpicsSignal, "CollectData")
@@ -49,19 +49,22 @@ class AmptekMCA(EpicsMCA):
 
 
 class Amptek(Device):
+    """
+    Amptek detector device.
+    """
     mca = Cpt(AmptekMCA, "mca1")
     dwell = Cpt(EpicsSignal, "Dwell")
     energy_channels = Cpt(Signal, value=energy_channels)
 
 
 class AmptekSoftTrigger(BlueskyInterface):
+    """
+    Soft trigger interface for Amptek detectors.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._status = None
         self._acquisition_signal = self.mca.erase_start
-
-        # self.stage_sigs[self.mca.stop_signal] = 1
-
         self._count_signal = self.mca.preset_real_time
         self._count_time = None
 
@@ -72,11 +75,10 @@ class AmptekSoftTrigger(BlueskyInterface):
         self._starting = None
 
     def stage(self, *args, **kwargs):
-        # Set the labels for the count field to appear in the LiveTable, etc.
-        # It's done here as it's the best place to read actual values from the label field
-        # in case it's changed after the initialization of the object.
-        for num in (0, 1, 2, 3, 4):
-            roi_n = getattr(self.mca.rois, f"roi{num}")
+        """
+        Prepare the detector for acquisition.
+        """
+        for num in range(5):
             roi_n = getattr(self.mca.rois, f"roi{num}")
             roi_n.kind = "hinted"
             roi_n.count.kind = "hinted"
@@ -95,30 +97,31 @@ class AmptekSoftTrigger(BlueskyInterface):
             self.stage_sigs[self._count_signal] = self._count_time
 
     def trigger(self, *args, **kwargs):
-        "Trigger one acquisition."
+        """
+        Trigger one acquisition.
+        """
         if self._staged != Staged.yes:
             raise RuntimeError(
-                "This detector is not ready to trigger."
+                "This detector is not ready to trigger. "
                 "Call the stage() method before triggering."
             )
 
         def callback(value, old_value, **kwargs):
-            # print(f"  {self.name} old value {old_value} --> new_value {value}")
             if int(round(old_value)) == 1 and int(round(value)) == 0:
                 return True
-                
+
         max_time = 1 + 2 * self.mca.preset_real_time.get()
-        status = SubscriptionStatus(self.mca.when_acq_stops, callback, run=False, timeout=max_time)
-        # print(f"  !!! attempting to put to {self._acquisition_signal.pvname} value 1")
-        # ttime.sleep(0.1)
-
+        status = SubscriptionStatus(
+            self.mca.when_acq_stops, callback, run=False, timeout=max_time
+        )
         self._acquisition_signal.put(1)
-
         return status
 
     @property
     def count_time(self):
-        """Exposure time, as set by bluesky"""
+        """
+        Exposure time, as set by bluesky.
+        """
         return self._count_time
 
     @count_time.setter
@@ -127,6 +130,9 @@ class AmptekSoftTrigger(BlueskyInterface):
 
 
 class SMIAmptek(AmptekSoftTrigger, Amptek):
+    """
+    SMI-specific Amptek detector class.
+    """
     def __init__(self, prefix, *, read_attrs=None, configuration_attrs=None, **kwargs):
         if read_attrs is None:
             read_attrs = ["mca.spectrum"]
@@ -146,6 +152,9 @@ class SMIAmptek(AmptekSoftTrigger, Amptek):
 
 
 class AmptekPositions(Device):
+    """
+    Amptek motor positions.
+    """
     x = Cpt(EpicsMotor, "X}Mtr")
     y = Cpt(EpicsMotor, "Y}Mtr")
     z = Cpt(EpicsMotor, "Z}Mtr")

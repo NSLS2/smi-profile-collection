@@ -1,7 +1,6 @@
 print(f"Loading {__file__}")
 
 import matplotlib.pyplot as plt
-
 import bluesky.plan_stubs as bps
 import bluesky.plans as bp
 from smibase.manipulators import prs, piezo, stage
@@ -10,65 +9,130 @@ from .config import sample_id
 from .pilatus import det_exposure_time
 from .utils import ps
 from IPython import get_ipython
-bec = get_ipython().user_ns['bec']
 from .beam import SMI as smi
 
+# Get the bluesky callback
+bec = get_ipython().user_ns['bec']
+
+
 def align_gisaxs_height(rang=0.3, point=31, der=False):
+    """
+    Align GISAXS height using a relative scan.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+        der (bool): Whether to calculate the derivative.
+    """
     yield from bp.rel_scan([pil1M], piezo.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.y, ps.cen)
 
 
 def align_gisaxs_height_rb(rang=0.3, point=31, der=False):
+    """
+    Align GISAXS height on the reflected beam.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+        der (bool): Whether to calculate the derivative.
+    """
     yield from bp.rel_scan([pil1M], piezo.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.y, ps.peak)
 
 
 def align_gisaxs_th(rang=0.3, point=31):
+    """
+    Align GISAXS theta using a relative scan.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+    """
     yield from bp.rel_scan([pil1M], piezo.th, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(piezo.th, ps.peak)
 
 
 def align_xrr_prs(rang=0.3, point=31):
+    """
+    Align XRR using the prs stage.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+    """
     yield from bp.rel_scan([pil1M], prs, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(prs, ps.peak)
 
 
 def align_xrr_height(rang=0.3, point=31, der=False):
+    """
+    Align XRR height using a relative scan.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+        der (bool): Whether to calculate the derivative.
+    """
     yield from bp.rel_scan([pil1M], piezo.z, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.z, ps.peak)
 
 
 def align_xrr_height_motx(rang=0.3, point=31, der=False):
+    """
+    Align XRR height using the piezo.x motor.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+        der (bool): Whether to calculate the derivative.
+    """
     yield from bp.rel_scan([pil1M], piezo.x, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.x, ps.peak)
 
 
 def align_gisaxs_height_hex(rang=0.3, point=31, der=False):
+    """
+    Align GISAXS height using the hexapod stage.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+        der (bool): Whether to calculate the derivative.
+    """
     yield from bp.rel_scan([pil1M], stage.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(stage.y, ps.cen)
 
 
 def align_gisaxs_th_hex(rang=0.3, point=31):
+    """
+    Align GISAXS theta using the hexapod stage.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+    """
     yield from bp.rel_scan([pil1M], stage.th, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(stage.th, ps.peak)
 
 
-def alignement_gisaxs(angle=0.15):
+def alignment_gisaxs(angle=0.15):
     """
-    Regular alignement routine for gisaxs and giwaxs. First, scan of the sample height and incident angle on the direct beam.
-    Then scan of teh incident angle, height and incident angle again on the reflected beam.
+    Regular alignment routine for GISAXS and GIWAXS. First, scan the sample height and incident angle on the direct beam.
+    Then scan the incident angle, height, and incident angle again on the reflected beam.
 
-    param angle: np.float. Angle at which the alignement on the reflected beam will be done
-
+    Parameters:
+        angle (float): Angle at which the alignment on the reflected beam will be done.
     """
+    
 
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
