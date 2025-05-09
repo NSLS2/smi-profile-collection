@@ -76,7 +76,8 @@ db = Broker(tiled_reading_client)
 plt.rcParams['figure.dpi']=200
 
 # Setup the path to the secure assets folder for the current proposal
-assets_path = f"/nsls2/data/smi/proposals/{RE.md.get("cycle", "2025-2")}/{RE.md['data_session']}/assets/"
+cycle = RE.md.get("cycle", "2025-2")
+assets_path = f"/nsls2/data/smi/proposals/{cycle}/{RE.md['data_session']}/assets/"
 
 # Disable printing scan info
 bec.disable_baseline()
