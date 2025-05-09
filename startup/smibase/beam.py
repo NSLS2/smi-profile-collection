@@ -38,7 +38,7 @@ from smibase.attenuators import (
             att2_12,
 )
 from smibase.energy import energy
-from smibase.pilatus import waxs, pil1M
+from smibase.pilatus import waxs, pil2M
 from smibase.beamstop import saxs_bs
 from smibase.crls import crl
 from smibase.waxschamber import get_chamber_pressure, chamber_pressure
@@ -317,7 +317,7 @@ class SMI_Beamline(Beamline):
 
     def setDirectBeamROI(self, size=[48, 12], technique="gisaxs"):
         """
-        Update the ROI (pil1m.roi1) for the direct beam on the SAXS detector.
+        Update the ROI (pil2m.roi1) for the direct beam on the SAXS detector.
         size: tuple argument: size in pixels) of the ROI [width, height]).
         """
 
@@ -326,22 +326,22 @@ class SMI_Beamline(Beamline):
         y0 = self.SAXS.direct_beam[1]
 
         if technique == "gisaxs":
-            # Define the direct beam ROI on the pilatus 1M detector
-            yield from bps.mv(pil1M.roi1.min_xyz.min_x, int(x0 - size[0] / 2))
-            yield from bps.mv(pil1M.roi1.size.x, int(size[0]))
-            yield from bps.mv(pil1M.roi1.min_xyz.min_y, int(y0 - size[1] / 2))
-            yield from bps.mv(pil1M.roi1.size.y, int(size[1]))
+            # Define the direct beam ROI on the pilatus 2M detector
+            yield from bps.mv(pil2M.roi1.min_xyz.min_x, int(x0 - size[0] / 2))
+            yield from bps.mv(pil2M.roi1.size.x, int(size[0]))
+            yield from bps.mv(pil2M.roi1.min_xyz.min_y, int(y0 - size[1] / 2))
+            yield from bps.mv(pil2M.roi1.size.y, int(size[1]))
 
         elif technique == "xrr":
-            # Define the direct beam ROI on the pilatus 1M detector
-            yield from bps.mv(pil1M.roi1.min_xyz.min_x, int(x0 - size[1] / 2))
-            yield from bps.mv(pil1M.roi1.size.x, int(size[1]))
-            yield from bps.mv(pil1M.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
-            yield from bps.mv(pil1M.roi1.size.y, int(size[0]))
+            # Define the direct beam ROI on the pilatus 2M detector
+            yield from bps.mv(pil2M.roi1.min_xyz.min_x, int(x0 - size[1] / 2))
+            yield from bps.mv(pil2M.roi1.size.x, int(size[1]))
+            yield from bps.mv(pil2M.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
+            yield from bps.mv(pil2M.roi1.size.y, int(size[0]))
 
     def setReflectedBeamROI(self, total_angle=0.16, technique="gisaxs", size=[48, 8]):
         """
-        Update the ROI (pil1m.roi3) for the reflected beam on the SAXS detector.
+        Update the ROI (pil2m.roi3) for the reflected beam on the SAXS detector.
         total_ange: float: incident angle of the alignement in degrees
         size: tuple: size in pixels) of the ROI [width, height]
         """
@@ -358,11 +358,11 @@ class SMI_Beamline(Beamline):
             y_offset_pix = y_offset_mm / pixel_size
             y_pos = int(y0 - size[1] / 2 - y_offset_pix)
 
-            # Define the reflected beam ROI on the pilatus 1M detector
-            yield from bps.mv(pil1M.roi1.min_xyz.min_x, int(x0 - size[0] / 2))
-            yield from bps.mv(pil1M.roi1.size.x, int(size[0]))
-            yield from bps.mv(pil1M.roi1.min_xyz.min_y, int(y_pos))
-            yield from bps.mv(pil1M.roi1.size.y, int(size[1]))
+            # Define the reflected beam ROI on the pilatus 2M detector
+            yield from bps.mv(pil2M.roi1.min_xyz.min_x, int(x0 - size[0] / 2))
+            yield from bps.mv(pil2M.roi1.size.x, int(size[0]))
+            yield from bps.mv(pil2M.roi1.min_xyz.min_y, int(y_pos))
+            yield from bps.mv(pil2M.roi1.size.y, int(size[1]))
 
         elif technique == "xrr":
             # Calculate the x position of the reflected beam
@@ -370,11 +370,11 @@ class SMI_Beamline(Beamline):
             x_offset_pix = x_offset_mm / pixel_size
             x_pos = int(x0 - size[1] / 2 - x_offset_pix)
 
-            # Define the reflected beam ROI on the pilatus 1M detector
-            yield from bps.mv(pil1M.roi1.min_xyz.min_x, int(x_pos))
-            yield from bps.mv(pil1M.roi1.size.x, int(size[1]))
-            yield from bps.mv(pil1M.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
-            yield from bps.mv(pil1M.roi1.size.y, int(size[0]))
+            # Define the reflected beam ROI on the pilatus 2M detector
+            yield from bps.mv(pil2M.roi1.min_xyz.min_x, int(x_pos))
+            yield from bps.mv(pil2M.roi1.size.x, int(size[1]))
+            yield from bps.mv(pil2M.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
+            yield from bps.mv(pil2M.roi1.size.y, int(size[0]))
         else:
             raise ValueError("Unknown geometry fo alignement mode")
 
@@ -620,10 +620,10 @@ class SMI_SAXS_Det(object):
 
 
 smi_waxs_detector = SMI_WAXS_detector(name="Pilatus900kw")
-smi_saxs_detector = SMI_SAXS_detector(name="Pilatus1M")
+smi_saxs_detector = SMI_SAXS_detector(name="Pilatus2M")
 
 SMI = SMI_Beamline()
-pilatus1M = SMI_SAXS_Det()
+pilatus2M = SMI_SAXS_Det()
 
 
 from IPython import get_ipython

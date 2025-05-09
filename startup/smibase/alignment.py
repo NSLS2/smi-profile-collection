@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import bluesky.plan_stubs as bps
 import bluesky.plans as bp
 from smibase.manipulators import prs, piezo, stage
-from .pilatus import pil1M
+from .pilatus import pil2M
 from .config import sample_id
 from .pilatus import det_exposure_time
 from .utils import ps
@@ -24,7 +24,7 @@ def align_gisaxs_height(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil1M], piezo.y, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], piezo.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.y, ps.cen)
 
@@ -38,7 +38,7 @@ def align_gisaxs_height_rb(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil1M], piezo.y, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], piezo.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.y, ps.peak)
 
@@ -51,7 +51,7 @@ def align_gisaxs_th(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil1M], piezo.th, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], piezo.th, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(piezo.th, ps.peak)
 
@@ -64,7 +64,7 @@ def align_xrr_prs(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil1M], prs, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], prs, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(prs, ps.peak)
 
@@ -78,7 +78,7 @@ def align_xrr_height(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil1M], piezo.z, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], piezo.z, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.z, ps.peak)
 
@@ -92,7 +92,7 @@ def align_xrr_height_motx(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil1M], piezo.x, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], piezo.x, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(piezo.x, ps.peak)
 
@@ -106,7 +106,7 @@ def align_gisaxs_height_hex(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil1M], stage.y, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], stage.y, -rang, rang, point)
     ps(der=der, plot=False)
     yield from bps.mv(stage.y, ps.cen)
 
@@ -119,7 +119,7 @@ def align_gisaxs_th_hex(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil1M], stage.th, -rang, rang, point)
+    yield from bp.rel_scan([pil2M], stage.th, -rang, rang, point)
     ps(plot=False)
     yield from bps.mv(stage.th, ps.peak)
 

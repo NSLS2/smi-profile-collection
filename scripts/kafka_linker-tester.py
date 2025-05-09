@@ -70,7 +70,7 @@ def get_symlink_pairs(target_path, *, det_map, root_map=None):
         The base directory to put the symlinks in.  They will be further nested.
 
     det_map : dict[str, str]
-        A dictionaly mapping the detector name (1M, 900KW) to the type of measurement (SAXS, WAXS)
+        A dictionaly mapping the detector name (2M, 900KW) to the type of measurement (SAXS, WAXS)
     root_map : dict[str, str], optional
         A mapping of root in the resource document -> a new path as in databroker
 

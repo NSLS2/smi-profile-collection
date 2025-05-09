@@ -303,7 +303,7 @@ def get_incident_angle(db_y, rb_y, Ldet=1599, pixel_size=172):
     return np.degrees(np.arctan2((-rb_y + db_y) * pixel_size * 10 ** (-3), Ldet)) / 2
 
 
-def plot_1d(scans, x="dsa_x", y="pil1M_stats1_total", grid=True, **kwargs):
+def plot_1d(scans, x="dsa_x", y="pil2M_stats1_total", grid=True, **kwargs):
 
     # plt.clf()
     # plt.cla()

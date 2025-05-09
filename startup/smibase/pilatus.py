@@ -16,9 +16,9 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     try:
         for j in range(2):
             waits = []
-            waits.append(pil1M.cam.acquire_time.set(exp_t))
-            waits.append(pil1M.cam.acquire_period.set(exp_t + period_delay))
-            waits.append(pil1M.cam.num_images.set(int(meas_t / exp_t)))
+            waits.append(pil2M.cam.acquire_time.set(exp_t))
+            waits.append(pil2M.cam.acquire_period.set(exp_t + period_delay))
+            waits.append(pil2M.cam.num_images.set(int(meas_t / exp_t)))
             if pil300KW is not None:
                 waits.append(pil300KW.cam.acquire_time.set(exp_t))
                 waits.append(pil300KW.cam.acquire_period.set(exp_t + period_delay))
@@ -32,9 +32,9 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
                 w.wait()
     except:
         print('Problem with new exposure set, using old method')
-        pil1M.cam.acquire_time.put(exp_t)
-        pil1M.cam.acquire_period.put(exp_t + 0.001)
-        pil1M.cam.num_images.put(int(meas_t / exp_t))
+        pil2M.cam.acquire_time.put(exp_t)
+        pil2M.cam.acquire_period.put(exp_t + 0.001)
+        pil2M.cam.num_images.put(int(meas_t / exp_t))
         pil900KW.cam.acquire_time.put(exp_t)
         pil900KW.cam.acquire_period.put(exp_t + 0.001)
         pil900KW.cam.num_images.put(int(meas_t / exp_t))
@@ -45,9 +45,9 @@ def det_exposure_time_old(exp_t, meas_t=1):
     The above broke, using old version as weekend workaround
     """
     for j in range(2):
-        pil1M.cam.acquire_time.put(exp_t)
-        pil1M.cam.acquire_period.put(exp_t + 0.001)
-        pil1M.cam.num_images.put(int(meas_t / exp_t))
+        pil2M.cam.acquire_time.put(exp_t)
+        pil2M.cam.acquire_period.put(exp_t + 0.001)
+        pil2M.cam.num_images.put(int(meas_t / exp_t))
         pil900KW.cam.acquire_time.put(exp_t)
         pil900KW.cam.acquire_period.put(exp_t + 0.001)
         pil900KW.cam.num_images.put(int(meas_t / exp_t))
@@ -55,7 +55,7 @@ def det_exposure_time_old(exp_t, meas_t=1):
 
 
 def det_next_file(n):
-    pil1M.cam.file_number.put(n)
+    pil2M.cam.file_number.put(n)
     pil900KW.cam.file_number.put(n)
     if pil300KW is not None:
         pil300KW.cam.file_number.put(n)
@@ -66,9 +66,9 @@ def det_next_file(n):
 fd = FakeDetector(name="fd")
 
 
-pil1m_pos = PIL1MPositions("XF:12IDC-ES:2{Det:1M-Ax:", name="detector_saxs_pos")
+pil2m_pos = PIL1MPositions("XF:12IDC-ES:2{Det:1M-Ax:", name="detector_saxs_pos")
 
-for detpos in [pil1m_pos]:
+for detpos in [pil2m_pos]:
     detpos.configuration_attrs = detpos.read_attrs
 
 pil300KW = None
@@ -103,22 +103,22 @@ pil900KW.cam.ensure_nonblocking()
 
 
 #####################################################
-# Pilatus 1M definition
+# Pilatus 1M definition  
+#pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M", asset_path="pilatus1m-1")  # , detector_id="SAXS")
+pil2M = Pilatus("XF:12IDC-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
+pil2M.set_primary_roi(1)
 
-pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M", asset_path="pilatus1m-1")  # , detector_id="SAXS")
-pil1M.set_primary_roi(1)
+pil2mroi1 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats1:Total_RBV", name="pil2mroi1")
+pil2mroi2 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats2:Total_RBV", name="pil2mroi2")
+pil2mroi3 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats3:Total_RBV", name="pil2mroi3")
+pil2mroi4 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil2mroi4")
 
-pil1mroi1 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats1:Total_RBV", name="pil1mroi1")
-pil1mroi2 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats2:Total_RBV", name="pil1mroi2")
-pil1mroi3 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats3:Total_RBV", name="pil1mroi3")
-pil1mroi4 = EpicsSignal("XF:12IDC-ES:2{Det:1M}Stats4:Total_RBV", name="pil1mroi4")
-
-pil1M.stats1.kind = "hinted"
-pil1M.stats1.total.kind = "hinted"
-pil1M.cam.num_images.kind = "config"
-pil1M.cam.kind = 'normal'
-pil1M.cam.file_number.kind = 'normal'
-pil1M.cam.ensure_nonblocking()
+pil2M.stats1.kind = "hinted"
+pil2M.stats1.total.kind = "hinted"
+pil2M.cam.num_images.kind = "config"
+pil2M.cam.kind = 'normal'
+pil2M.cam.file_number.kind = 'normal'
+pil2M.cam.ensure_nonblocking()
 
 
 waxs = WAXS("XF:12IDC-ES:2{", name="waxs")
@@ -134,4 +134,4 @@ def multi_count(detectors, *args, **kwargs):
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([pil1m_pos])
+sd.baseline.extend([pil2m_pos])

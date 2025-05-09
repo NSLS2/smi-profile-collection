@@ -31,7 +31,7 @@ class SAXSBeamStops(Device):
         if self.x_pin.position < -180:
             print("pindiode already in")
         else:
-            # make sure that the pil1M bs is out of the way to avoid collision
+            # make sure that the pil2M bs is out of the way to avoid collision
             yield from self.rod_out()
 
             # move the pindiode in
