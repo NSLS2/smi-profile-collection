@@ -21,6 +21,7 @@ jobs:
             repo: "smi-profile-collection"
             branch: ""
             beamline-acronym: "smi"
+            beamline-redis-prefx: "swaxs-"
         zenodo:
           - url: "https://zenodo.org/records/15171538/files/2025-2.0-py310-tiled.tar.gz"
             md5: "bf2ecadce50394b4f44767fd53f76eb6"
