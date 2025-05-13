@@ -1,6 +1,11 @@
 print(f"Loading {__file__}")
 from datetime import datetime
 from ophyd.signal import EpicsSignalBase, EpicsSignal, DEFAULT_CONNECTION_TIMEOUT
+EpicsSignalBase.set_defaults(timeout=10, connection_timeout=10)
+EpicsSignal.set_defaults(timeout=10, connection_timeout=10)
+from ophyd import Device
+Device.set_defaults(connection_timeout=30)
+
 import redis
 from redis_json_dict import RedisJSONDict
 
@@ -15,7 +20,6 @@ from databroker import Broker
 
 from IPython import get_ipython
 from IPython.terminal.prompts import Prompts, Token
-
 
 class ProposalIDPrompt(Prompts):
     def in_prompt_tokens(self, cli=None):
