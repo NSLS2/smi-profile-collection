@@ -1,8 +1,8 @@
 print(f"Loading {__file__}")
 from datetime import datetime
 from ophyd.signal import EpicsSignalBase, EpicsSignal, DEFAULT_CONNECTION_TIMEOUT
-EpicsSignalBase.set_defaults(timeout=30, connection_timeout=30)
-EpicsSignal.set_defaults(timeout=30, connection_timeout=30)
+EpicsSignalBase.set_defaults(timeout=10, connection_timeout=10)
+EpicsSignal.set_defaults(timeout=10, connection_timeout=10)
 from ophyd import Device
 Device.set_defaults(connection_timeout=30)
 
