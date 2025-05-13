@@ -19,7 +19,7 @@ jobs:
         repos:
           - org: "NSLS2"
             repo: "smi-profile-collection"
-            branch: "gh-ci"
+            branch: ""
             beamline-acronym: "smi"
             beamline-redis-prefix: "swaxs-"
         zenodo:
@@ -47,3 +47,4 @@ jobs:
           repo: "${{ matrix.repos.repo }}"
           branch: "${{ matrix.repos.branch }}"
           beamline-acronym: "${{ matrix.repos.beamline-acronym }}"
+          beamline-redis-prefix: "${{ matrix.repos.beamline-redis-prefix }}"
