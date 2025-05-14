@@ -19,6 +19,24 @@ sd.baseline.extend([att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2
 from pathlib import Path
 
 
+def manual_mode(
+     file_name, *, base_path=Path("/nsls2/data/smi/legacy/results/data")
+):
+    path = (
+        base_path
+        / RE.md["cycle"]
+        / f'{RE.md["proposal_number"]}_{RE.md["main_proposer"]}'
+    )
+    (path / "900KW").mkdir(exist_ok=True, parents=True)
+    pil900KW.tiff.file_name.set(file_name).wait()
+    pil900KW.tiff.file_path.set(str(path / "900KW")).wait()
+    pil900KW.tiff.file_number.set(0).wait()
+
+    (path / "1M").mkdir(exist_ok=True, parents=True)
+    pil1M.tiff.file_name.set(file_name).wait()
+    pil1M.tiff.file_path.set(str(path / "1M")).wait()
+    pil1M.tiff.file_number.set(0).wait()
+
 
 def sample_id(user_name="SMI",sample_name='test'):
 
