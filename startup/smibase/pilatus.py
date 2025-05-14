@@ -105,13 +105,13 @@ pil900KW.cam.ensure_nonblocking()
 #####################################################
 # Pilatus 1M definition  
 #pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M", asset_path="pilatus1m-1")  # , detector_id="SAXS")
-pil2M = Pilatus("XF:12IDC-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
+pil2M = Pilatus("XF:12ID2-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
 pil2M.set_primary_roi(1)
 
-pil2mroi1 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats1:Total_RBV", name="pil2mroi1")
-pil2mroi2 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats2:Total_RBV", name="pil2mroi2")
-pil2mroi3 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats3:Total_RBV", name="pil2mroi3")
-pil2mroi4 = EpicsSignal("XF:12IDC-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil2mroi4")
+pil2mroi1 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats1:Total_RBV", name="pil2mroi1")
+pil2mroi2 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats2:Total_RBV", name="pil2mroi2")
+pil2mroi3 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats3:Total_RBV", name="pil2mroi3")
+pil2mroi4 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil2mroi4")
 
 pil2M.stats1.kind = "hinted"
 pil2M.stats1.total.kind = "hinted"

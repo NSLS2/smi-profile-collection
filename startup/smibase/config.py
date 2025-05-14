@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from nslsii.sync_experiment import sync_experiment
+from nslsii.sync_experiment import switch_redis_proposal
 from warnings import warn
 from IPython import get_ipython
 RE = get_ipython().user_ns['RE']
@@ -21,13 +21,23 @@ def sample_id(user_name="SMI",sample_name='test'):
 
 def proposal_id(cycle_id, proposal_id, analysis=True,*args, **kwargs):
     warn("WARNING: the proposal_id function is deprecated as of data security 2025.\n"
-                  "Use switch_proposal or project_set functions.\n "
-                  "This will NOT change the proposal folder, for that call switch_proposal()"
-                  "cycle_id is ignored, and proposal_id is interpreted as project_name\n")
-    project_set(proposal_id)
+                  "Use proposal_swap(proposal_id) or project_set(project_name) functions.\n "
+                  "This will NOT change the project folder, for that call project_set()"
+                  "cycle_id is ignored, and proposal_id must be a valid proposal ID\n")
+    #project_set(proposal_id)
+    proposal_swap(proposal_id)
+
+def proposal_swap(proposal_id):
+    switch_redis_proposal(proposal_id, beamline='smi', username=RE.md['username'])
 
 def project_set(project_name):
     RE.md["project_name"] = project_name
+
+
+
+
+        #XF:12IDB-BI:2{EM:BPM3}fast_pidX.FBON N
+
 
 
 

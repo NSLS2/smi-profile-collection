@@ -24,3 +24,10 @@ from smibase.humidity_cell import *
 from smibase.linkam import *
 from smibase.suspenders import *
 from smibase.utils import *
+
+from IPython import get_ipython
+ipython = get_ipython()
+
+if '__IPYTHON__' in globals():
+    ipython.magic('load_ext autoreload')
+    ipython.magic('autoreload 2')

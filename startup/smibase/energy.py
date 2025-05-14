@@ -29,3 +29,21 @@ from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([energy, dcm_config, ivugap, bragg])
+
+
+
+manual_PID_disable_pitch = energy.pitch_feedback_disabled
+manual_PID_disable_roll = energy.roll_feedback_disabled
+
+
+def feedback(action=None):
+    allowed_actions = ["on", "off"]
+    assert (
+        action in allowed_actions
+    ), f'Wrong action: {action}, must choose: {" or ".join(allowed_actions)}'
+    if action == "off":
+        manual_PID_disable_pitch.set("1")
+        manual_PID_disable_roll.set("1")
+    elif action == "on":
+        manual_PID_disable_pitch.set("0")
+        manual_PID_disable_roll.set("0")

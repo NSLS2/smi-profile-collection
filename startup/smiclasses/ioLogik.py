@@ -1,4 +1,5 @@
 from ophyd import Device, Component as Cpt, EpicsSignal
+import bluesky.plan_stubs as bps
 
 
 class ioLogik1241(Device):
@@ -22,3 +23,45 @@ class ioLogik1240(Device):
     ch7_read = Cpt(EpicsSignal, "7-I")
     ch8_read = Cpt(EpicsSignal, "8-I")
 
+#XF:12ID2A-DM{DM1-IOL1:E1213}:
+
+class Diag_Module(Device):
+    # real positions and readbacks
+    out_sts = Cpt(EpicsSignal,'DI2-Sts')
+    fs_sts = Cpt(EpicsSignal,'DI3-Sts')
+    pd_sts = Cpt(EpicsSignal,'DI1-Sts')
+    pd_vlv = Cpt(EpicsSignal,'DO2-Cmd')
+    fs_vlv = Cpt(EpicsSignal,'DO4-Cmd')
+    out_vlv = Cpt(EpicsSignal,'DO6-Cmd')
+    # virtual positions and readbacks
+    def fs_in(self):
+        yield from bps.mv(self.out_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)
+        yield from bps.sleep(.5)
+        yield from bps.mv(self.fs_vlv,1)
+        yield from bps.sleep(.5)
+        yield from bps.mv(self.pd_vlv,1)
+        yield from bps.sleep(1)
+        yield from bps.mv(self.fs_vlv,0)
+        yield from bps.mv(self.out_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)
+    def out(self):
+        yield from bps.mv(self.fs_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)
+        yield from bps.sleep(.5)
+        yield from bps.mv(self.out_vlv,1)
+        yield from bps.sleep(1)
+        yield from bps.mv(self.fs_vlv,0)
+        yield from bps.mv(self.out_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)
+    def pd_in(self):
+        yield from bps.mv(self.out_vlv,0)
+        yield from bps.mv(self.fs_vlv,0)
+        yield from bps.sleep(.5)
+        yield from bps.mv(self.pd_vlv,1)
+        yield from bps.sleep(.5)
+        yield from bps.mv(self.out_vlv,1)
+        yield from bps.sleep(1)
+        yield from bps.mv(self.fs_vlv,0)
+        yield from bps.mv(self.out_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)

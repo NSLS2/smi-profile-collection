@@ -10,7 +10,7 @@ from scipy.special import erf
 import datetime
 import matplotlib.pyplot as plt
 from .energy import energy
-from .pilatus import pil1m_pos, waxs
+from .pilatus import pil2m_pos, waxs
 from .electrometers import xbpm2
 
 from IPython import get_ipython
@@ -391,7 +391,7 @@ def get_scan_md(tender=False):
     #temp = str(np.round(float(temp_degC), 1)).zfill(5)
     wa = waxs.arc.position + 0.001
     wa = str(np.round(float(wa), 1)).zfill(4)
-    sdd = pil1m_pos.z.position / 1000
+    sdd = pil2m_pos.z.position / 1000
 
     md_fmt = ("_{energy}keV_wa{wa}_sdd{sdd}m")
 

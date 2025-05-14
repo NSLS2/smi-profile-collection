@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import os
 import bluesky.plan_stubs as bps
-from .pilatus import pil1m_pos
+from .pilatus import pil2m_pos
 from .beamstop import saxs_bs
 
 from smibase.base import RE
@@ -537,9 +537,9 @@ def interpolate_db_sdds():
     db_x_pos_registered = data["db_x_pos"].values
     db_y_pos_registered = data["db_y_pos"].values
 
-    det_posx = pil1m_pos.x.position
-    det_posy = pil1m_pos.y.position
-    det_posz = 0.001 * pil1m_pos.z.position
+    det_posx = pil2m_pos.x.position
+    det_posy = pil2m_pos.y.position
+    det_posz = 0.001 * pil2m_pos.z.position
 
     current_sdd = np.interp(det_posz, sdds_encodeded, sdds_calculated)
 
@@ -587,9 +587,9 @@ class SMI_SAXS_Det(object):
             smi_saxs_detector.bs_kind.put("rod_beamstop")
 
             # To be implemented with the good values for y and test x position
-            x_bs = 440.79 - (saxs_bs.x_rod.position / 0.172) + (pil1m_pos.x.position / 0.172)
+            x_bs = 440.79 - (saxs_bs.x_rod.position / 0.172) + (pil2m_pos.x.position / 0.172)
             smi_saxs_detector.xbs_mask.put(x_bs)
-            y_bs = 496.07 - (saxs_bs.y_rod.position / 0.172) + (pil1m_pos.y.position / 0.172)
+            y_bs = 496.07 - (saxs_bs.y_rod.position / 0.172) + (pil2m_pos.y.position / 0.172)
             smi_saxs_detector.ybs_mask.put(10)
 
         elif abs(saxs_bs.x_pin.position) > 50 and abs(saxs_bs.x_rod.position) < 50:
