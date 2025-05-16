@@ -8,9 +8,9 @@ from nslsii.ad33 import QuadEMV33
 ls = new_LakeShore("XF:12ID-ES", name="ls")
 
 
-#xbpm1 = XBPM("XF:12IDA-BI:2{EM:BPM1}", name="xbpm1")
-xbpm2 = XBPM("XF:12IDA-BI:2{EM:BPM2}", name="xbpm2")
-xbpm3 = XBPM("XF:12IDB-BI:2{EM:BPM3}", name="xbpm3")
+xbpm1 = XBPM("XF:12IDA-BI:2{EM:BPM1}", name="xbpm1") # fast shutter
+xbpm2 = XBPM("XF:12IDA-BI:2{EM:BPM2}", name="xbpm2") # xbpm2
+xbpm3 = XBPM("XF:12IDB-BI:2{EM:BPM3}", name="xbpm3") # xbpm3
 xbpm3.sumY.kind = "hinted"
 xbpm3.sumX.kind = "hinted"
 xbpm2.sumY.kind = "hinted"
