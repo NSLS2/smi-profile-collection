@@ -267,7 +267,7 @@ class Beamline(object):
         self.md.copy()
 
 
-class SMI_Beamline(Beamline):
+class SMI_Beamline(Beamline): # used in alignment
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -623,7 +623,7 @@ smi_waxs_detector = SMI_WAXS_detector(name="Pilatus900kw")
 smi_saxs_detector = SMI_SAXS_detector(name="Pilatus2M")
 
 SMI = SMI_Beamline()
-pilatus2M = SMI_SAXS_Det()
+# pilatus2M = SMI_SAXS_Det()
 
 
 from IPython import get_ipython

@@ -34,6 +34,7 @@ import time as ttime
 
 from smibase.energy import energy
 from smibase.base import RE
+from smibase.beamstop import SAXSBeamStops
 
 
 def set_energy_cam(cam,en_ev):
@@ -314,7 +315,7 @@ class FakeDetector(Device):
 
 
 
-class PIL1MPositions(Device):
+class SAXSPositions(Device):
     x = Cpt(EpicsMotor, "X}Mtr")
     y = Cpt(EpicsMotor, "Y}Mtr")
     z = Cpt(EpicsMotor, "Z}Mtr")
@@ -355,26 +356,151 @@ class WAXS(Device):
     arc = Cpt(EpicsMotor, "WAXS:1-Ax:Arc}Mtr")
     bs_x = Cpt(EpicsMotor, "MCS:1-Ax:5}Mtr")
     bs_y = Cpt(EpicsMotor, "BS:WAXS-Ax:y}Mtr")
-
+    # when moving the waxs detector, the beamstop must be moved to a new position
+    # the beamstop is moved to a new position based on the angle of the waxs detector
     def set(self, arc_value):
         st_arc = self.arc.set(arc_value)
+        # start moving the arc stage and return the status
 
         if self.arc.limits[0] <= arc_value <= 10.1:
             calc_value = self.calc_waxs_bsx(arc_value)
-
+            # calculate the position of the beamstop based on the angle of the waxs detector
         elif 10.1 < arc_value <= 13:
+            # the beamstop cannot be moved to block the beam
+            # this move is not safe
             raise ValueError(
-                "The waxs detector cannot be moved to {} deg until the new beamstop is mounted".format(
+                "The waxs detector cannot be moved to {} deg \n Do NOT take data between 10.1 and 13 WAXS arc".format(
                     arc_value
                 )
             )
         else:
-            calc_value = -100
+            calc_value = -100 # out of the path of the beam and scattering
 
         st_x = self.bs_x.set(calc_value)
-        return st_arc & st_x
+        # move the beamstop to the new position
+        return st_arc & st_x # return both statuses
 
+    # calculate the position of the beamstop based on the angle of the waxs detector
+    # the beamstop is on the arc stage, so as the angle of the waxs detector changes, the position of the beamstop must also change
     def calc_waxs_bsx(self, arc_value):
-        bsx_pos = -37.56 -249.69871 * np.tan(np.deg2rad(arc_value))    # 2025 March 26
-
+        bsx_pos = ( 
+            -37.56 
+                # offset from the beam center to the beamstop in mm
+                # this value should be reset in the motor offset - not here
+                # home the beamstop x motor, and set the offset in EPICS
+            - (249.69871 
+                # distance from the center of arc rotation (sample position) to the beamstop
+                # in mm   
+                # this value can change if the beamstop is bent or bumped
+            * np.tan( # beamstop movement is a linear movement on the arc stage
+                np.deg2rad(arc_value)))) # the angle of the waxs detector arc in degrees
+        # 2025 March 26
+        
         return bsx_pos
+
+
+class DetMotor(Device):
+    x = Cpt(EpicsMotor, "X}Mtr")
+    y = Cpt(EpicsMotor, "Y}Mtr")
+    z = Cpt(EpicsMotor, "Z}Mtr")
+
+
+class SAXS_Detector(Pilatus):
+## real positions of the SAXS detector and the beamstop
+    ## SAXS det position
+    motor = Cpt(DetMotor,"XF:12IDC-ES:2{Det:1M-Ax:",add_prefix= "", kind="config")
+    ## stages for SAXS beamstops (two beamstops, each with their own offset from the beam center)
+    beamstop = Cpt(SAXSBeamStops,"XF:12IDC-ES:2{BS:SAXS-Ax:",add_prefix= "", kind="config")
+
+## the virtual positions of the beamcenter (in pixels) and the sample distance
+# values will be over written by the beam center calculation
+# based on the motor positions and the constant offsets
+    beam_center_x_px = Cpt(Signal,value =0.0, kind="normal")
+    beam_center_x_mm = Cpt(Signal,value =0.0, kind="config")
+    beam_center_y_px = Cpt(Signal,value =0.0, kind="normal")
+    beam_center_y_mm = Cpt(Signal,value =0.0, kind="config")
+    sample_distance_mm = Cpt(Signal,value =0.0, kind="normal")
+
+## constants for the beam center calculation
+# offsets will be reset by the calc_offsets function
+# all other values should be set here from calibration / lookup table
+    pixel_size_mm = Cpt(Signal,value =0.172, kind="config") # in mm
+    # offset from 0th column pixel to the beam center at saxs position x = 0
+    beam_offst_x_mm = Cpt(Signal,value =0.0, kind="config") 
+    # offset from 0th row pixel to the beam center at saxs position y = 0
+    beam_offst_y_mm = Cpt(Signal,value =0.0, kind="config")
+    # difference between the position.z and the actual sample-detector distance
+    sample_offset_z_mm = Cpt(Signal,value =0.0, kind="config")
+    ## constants for the beamstop position
+    rod_offst_x_mm = Cpt(Signal,value =1.5, kind="config") # position of the beamstop when it IS in the beam x
+    rod_offst_y_mm = Cpt(Signal,value =0.0, kind="config") # position of the beamstop when it IS in the beam y
+    rod_safe_pos = Cpt(Signal,value =-205, kind="config") # x position of the beamstop when it IS NOT in the beam (out of the way for the pin diode)
+    pd_offst_x_mm = Cpt(Signal,value =-199.5, kind="config") # position of the beamstop when it IS in the beam x
+    pd_offst_y_mm = Cpt(Signal,value =0.0, kind="config") # position of the beamstop when it IS in the beam y
+    pd_safe_pos = Cpt(Signal,value =0.0, kind="config") # x position of the beamstop when it IS NOT in the beam (out of the way for the rod)
+
+
+# subscribe the virtual signals to the motors, so they are updated when the motors move
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.motor.x.subscribe(self.update_beam_center)
+        self.motor.y.subscribe(self.update_beam_center)
+        self.motor.z.subscribe(self.update_beam_center) # if there is wobble in the track, the x an y center will vary
+    
+# callback function to update the beam center based on the motor positions will be called often
+    def update_beam_center(self, *args, **kwargs):
+        # based on the position, update the offsets from a calibration file
+        self.calc_offsets(self.motor.z.position) # account for the wobble in the track
+        # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
+        self.beam_center_x_mm.set(
+            self.motor.x.position - self.beam_offst_x_mm.get()
+        )
+        self.beam_center_y_mm.set(
+            self.motor.y.position - self.beam_offst_y_mm.get()
+        )
+        self.sample_distance_mm.set(
+            self.motor.z.position + self.sample_offset_z_mm.get()
+        )
+        self.beam_center_x_px.set(
+            (self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
+        )
+        self.beam_center_y_px.set(
+            (self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
+        )
+    
+    # move the beamstop to the calculated position of the beam center
+    def insert_beamstop(self, beamstop='rod', offset=0.0):
+        if beamstop == 'rod':
+            #move pd to safe position
+            yield from bps.mv(self.beamstop.x_pin, self.pd_safe_pos.get())
+            #move rod to beam center
+            yield from bps.mv(self.beamstop.x_rod, self.rod_offst_x_mm.get())
+        elif beamstop == 'pd':
+            #move rod to safe position
+            yield from bps.mv(self.beamstop.x_rod, self.rod_safe_pos.get())
+            #move pd to beam center
+            yield from bps.mv(self.beamstop.x_pin, self.pd_offst_x_mm.get(),
+                              self.beamstop.y_pin, self.pd_offst_y_mm.get())
+        else:
+            raise ValueError("beamstop must be either 'rod' or 'pd'")
+    
+    def calc_offsets(self, distance, verbose=False):
+        # use a spline fit to calculate the offsets based on the distance
+        # this is a placeholder, the actual calculation will depend on the calibration
+        # the offsets are in mm
+        self.beam_offst_x_mm.set(0.0)
+        self.beam_offst_y_mm.set(0.0)
+        self.rod_offst_x_mm.set(0.0)
+        self.rod_offst_y_mm.set(0.0)
+        self.pd_offst_x_mm.set(0.0)
+        self.pd_offst_y_mm.set(0.0)
+        self.sample_offset_z_mm.set(0.0)
+        if verbose:
+            print("Offsets calculated based on distance: ", distance)
+            print("Beam center x offset: ", self.beam_offst_x_mm.get())
+            print("Beam center y offset: ", self.beam_offst_y_mm.get())
+            print("Rod x offset: ", self.rod_offst_x_mm.get())
+            print("Rod y offset: ", self.rod_offst_y_mm.get())
+            print("Pin diode x offset: ", self.pd_offst_x_mm.get())
+            print("Pin diode y offset: ", self.pd_offst_y_mm.get())
+            print("Sample distance offset: ", self.sample_offset_z_mm.get())

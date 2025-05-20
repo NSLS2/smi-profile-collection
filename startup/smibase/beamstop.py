@@ -6,7 +6,7 @@ from time import ctime
 
 
 
-saxs_bs = SAXSBeamStops("XF:12IDC-ES:2{BS:SAXS-Ax:", name="detector_saxs_bs_rod")
+saxs_bs = SAXSBeamStops("XF:12IDC-ES:2{BS:SAXS-Ax:", name="saxs_beamstop")
 
 
 

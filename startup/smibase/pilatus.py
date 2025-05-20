@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from smiclasses.pilatus import PIL1MPositions, FakeDetector, Pilatus, WAXS
+from smiclasses.pilatus import SAXSPositions, FakeDetector, Pilatus, WAXS, SAXS_Detector
 from .amptek import amptek
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
@@ -66,7 +66,7 @@ def det_next_file(n):
 fd = FakeDetector(name="fd")
 
 
-pil2m_pos = PIL1MPositions("XF:12IDC-ES:2{Det:1M-Ax:", name="detector_saxs_pos")
+pil2m_pos = SAXSPositions("XF:12IDC-ES:2{Det:1M-Ax:", name="detector_saxs_pos")
 
 for detpos in [pil2m_pos]:
     detpos.configuration_attrs = detpos.read_attrs
@@ -105,7 +105,7 @@ pil900KW.cam.ensure_nonblocking()
 #####################################################
 # Pilatus 1M definition  
 #pil1M = Pilatus("XF:12IDC-ES:2{Det:1M}", name="pil1M", asset_path="pilatus1m-1")  # , detector_id="SAXS")
-pil2M = Pilatus("XF:12ID2-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
+pil2M = SAXS_Detector("XF:12ID2-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
 pil2M.set_primary_roi(1)
 
 pil2mroi1 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats1:Total_RBV", name="pil2mroi1")
