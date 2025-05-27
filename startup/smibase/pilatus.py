@@ -1,6 +1,6 @@
 print(f"Loading {__file__}")
 
-from smiclasses.pilatus import SAXSPositions, FakeDetector, Pilatus, WAXS, SAXS_Detector
+from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector
 from .amptek import amptek
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
@@ -77,7 +77,7 @@ pil300KW = None
 #####################################################
 # Pilatus 900KW definition
 
-pil900KW = Pilatus("XF:12IDC-ES:2{Det:900KW}", name="pil900KW", asset_path="pilatus900kw-1")
+pil900KW = WAXS_Detector("XF:12IDC-ES:2{Det:900KW}", name="pil900KW", asset_path="pilatus900kw-1")
 pil900KW.set_primary_roi(1)
 
 pil900kwroi1 = EpicsSignal(
@@ -121,7 +121,7 @@ pil2M.cam.file_number.kind = 'normal'
 pil2M.cam.ensure_nonblocking()
 
 
-waxs = WAXS("XF:12IDC-ES:2{", name="waxs")
+waxs = pil900KW.motors # for backwards compatibility
 
 
 

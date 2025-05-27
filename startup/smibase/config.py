@@ -28,7 +28,7 @@ def proposal_id(cycle_id, proposal_id, analysis=True,*args, **kwargs):
     proposal_swap(proposal_id)
 
 def proposal_swap(proposal_id):
-    switch_redis_proposal(proposal_id, beamline='smi', username=RE.md['username'])
+    RE.md = switch_redis_proposal(proposal_id, beamline='smi', username=RE.md['username'],prefix='swaxs')
 
 def project_set(project_name):
     RE.md["project_name"] = project_name

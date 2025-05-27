@@ -552,6 +552,13 @@ def interpolate_db_sdds():
     return current_sdd, [current_dbx, current_dby]
 
 
+def fake_interpolate_db_sdds():
+    """
+    Fake function to be used when the interpolation_db_sdd2.txt file is not available
+    """
+    return pil2M.motor.z.position/1000, [-pil2M.beam_center_x_px.get(), -pil2M.beam_center_y_px.get()]
+    # return 8300, [pil2M.motor.x.position, pil2M.motor.y.position]
+
 class SMI_SAXS_Det(object):
     def __init__(self, **kwargs):
 
@@ -570,7 +577,7 @@ class SMI_SAXS_Det(object):
         """
 
         # Interpolate the distance and direct beam position
-        self.distance, self.direct_beam = interpolate_db_sdds()
+        self.distance, self.direct_beam = fake_interpolate_db_sdds()
         self.distance *= 1000
 
         smi_saxs_detector.x0_pix.put(self.direct_beam[0])
