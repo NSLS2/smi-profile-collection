@@ -124,6 +124,7 @@ def align_gisaxs_th_hex(rang=0.3, point=31):
     yield from bps.mv(stage.th, ps.peak)
 
 
+
 def alignment_gisaxs(angle=0.15):
     """
     Regular alignment routine for GISAXS and GIWAXS. First, scan the sample height and incident angle on the direct beam.
