@@ -1,5 +1,5 @@
-from utils import startup
-startup()
+# from utils import startup
+# startup()
 
 from nexus.device import SimMotor, Mono, MonoWithGratingCpt
 from ophyd.sim import det
