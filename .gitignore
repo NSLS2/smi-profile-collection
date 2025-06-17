@@ -99,3 +99,9 @@ startup/.22-oav.py.swx
 *user-Dinca*
 *user-Flu*
 *user-Kim_*
+
+# NeXus-related files
+*.nxs
+*.nxs.h5
+nexus/logs
+nexus/runs
