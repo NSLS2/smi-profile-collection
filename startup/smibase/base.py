@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
 
 class TiledInserter:
+    name = 'smi'
     def insert(self, name, doc):
         ATTEMPTS = 20
         error = None
@@ -58,7 +59,7 @@ RE.unsubscribe(0)
 RE.subscribe(tiled_inserter.insert)
 
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
-tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
+tiled_reading_client = from_profile("nsls2")["smi"]["raw"]
 
 db = Broker(tiled_reading_client)
 
