@@ -58,11 +58,17 @@ class Attenuator(Device):
 
         if val in ['Open', 'Insert', 'open', 'insert', 'in', 1]:
             while self.status.get() != 'Open':
-                self.open_cmd.set(1).wait()
+                try:
+                    self.open_cmd.set(1,timeout=1).wait()
+                except: # what is the error, a timeout error?  status error?  for now any error
+                    pass
 
         elif val in ['Close', 'Retract', 'close', 'retract', 'out', 0]:
             while self.status.get() != 'Not Open':
-                self.close_cmd.set(1).wait()
+                try:
+                    self.close_cmd.set(1,timeout=1).wait()
+                except:
+                    pass
 
         st.set_finished()
         return st

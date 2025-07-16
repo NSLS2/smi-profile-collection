@@ -27,19 +27,17 @@ class ioLogik1240(Device):
 
 class Diag_Module(Device):
     # real positions and readbacks
-    out_sts = Cpt(EpicsSignal,'DI2-Sts')
-    fs_sts = Cpt(EpicsSignal,'DI3-Sts')
-    pd_sts = Cpt(EpicsSignal,'DI1-Sts')
+    out_sts = Cpt(EpicsSignal,'DI1-Sts') # when negative - in position
+    fs_sts = Cpt(EpicsSignal,'DI3-Sts') # when negative - in position
+    pd_sts = Cpt(EpicsSignal,'DI2-Sts') # when negative - in position
     pd_vlv = Cpt(EpicsSignal,'DO2-Cmd')
     fs_vlv = Cpt(EpicsSignal,'DO4-Cmd')
     out_vlv = Cpt(EpicsSignal,'DO6-Cmd')
     # virtual positions and readbacks
     def fs_in(self):
         yield from bps.mv(self.out_vlv,0)
-        yield from bps.mv(self.pd_vlv,0)
         yield from bps.sleep(.5)
         yield from bps.mv(self.fs_vlv,1)
-        yield from bps.sleep(.5)
         yield from bps.mv(self.pd_vlv,1)
         yield from bps.sleep(1)
         yield from bps.mv(self.fs_vlv,0)
@@ -50,17 +48,19 @@ class Diag_Module(Device):
         yield from bps.mv(self.pd_vlv,0)
         yield from bps.sleep(.5)
         yield from bps.mv(self.out_vlv,1)
+        yield from bps.mv(self.fs_vlv,1)
         yield from bps.sleep(1)
         yield from bps.mv(self.fs_vlv,0)
-        yield from bps.mv(self.out_vlv,0)
-        yield from bps.mv(self.pd_vlv,0)
+        # yield from bps.mv(self.out_vlv,0)
+        # yield from bps.mv(self.pd_vlv,0)
     def pd_in(self):
+        yield from self.out()
+        yield from bps.sleep(.5)
         yield from bps.mv(self.out_vlv,0)
         yield from bps.mv(self.fs_vlv,0)
+        yield from bps.mv(self.pd_vlv,0)
         yield from bps.sleep(.5)
         yield from bps.mv(self.pd_vlv,1)
-        yield from bps.sleep(.5)
-        yield from bps.mv(self.out_vlv,1)
         yield from bps.sleep(1)
         yield from bps.mv(self.fs_vlv,0)
         yield from bps.mv(self.out_vlv,0)

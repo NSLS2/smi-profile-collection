@@ -290,8 +290,10 @@ class SMI_Beamline(Beamline): # used in alignment
         # Put in attenuators
         yield from SMIBeam().insertFoils("Alignement")
 
-        # Move beamstop
-        yield from saxs_bs.rod_in(x_pos=saxs_bs.x_rod.position + 5)
+        # move beamstop (whichever is active) out of direct beam by 5 mm
+        yield from pil2M.remove_beamstop()
+        
+        
 
         # Move the waxs beamstop up for safety. If tender, covers up to 1deg ai, if hard, covers up to 0.4deg ai
         yield from SMIBeam().calc_bswaxs_posy()
@@ -308,9 +310,8 @@ class SMI_Beamline(Beamline): # used in alignment
         Set the beamline for measurments: bring the beamstop in and
         remove the attenuator
         """
-        # Move beamstop
-        yield from saxs_bs.rod_in(x_pos=saxs_bs.x_rod.position)
-        # yield from bps.mv(pil1m_bs_rod.x, bsx_pos) #2 for 4000 mm, 1.2 for 6500
+        # Move beamstop back into position
+        yield from pil2M.restore_beamstop()
 
         # Remove attenuators
         yield from SMIBeam().insertFoils("Measurement")

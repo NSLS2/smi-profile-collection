@@ -30,7 +30,7 @@ from ophyd.utils.epics_pvs import AlarmStatus
 import uuid
 import numpy as np
 import time as ttime
-
+from warnings import warn
 
 from smibase.energy import energy
 from smibase.base import RE
@@ -483,6 +483,7 @@ class SAXS_Detector(Pilatus):
     beam_center_y_px = Cpt(Signal,value =-1107, kind="normal")
     beam_center_y_mm = Cpt(Signal,value =190.404, kind="config")
     sample_distance_mm = Cpt(Signal,value =0.0, kind="normal")
+    active_beamstop = Cpt(Signal,value ='none', kind="normal")
 
 ## constants for the beam center calculation
     # offsets will be reset by the calc_offsets function
@@ -502,9 +503,9 @@ class SAXS_Detector(Pilatus):
     # position of the beamstop when it IS in the beam y
     rod_safe_pos = Cpt(Signal,value =-200, kind="config") 
     # x position of the beamstop when it IS NOT in the beam (out of the way for the pin diode)
-    pd_offset_x_mm = Cpt(Signal,value =-226.5, kind="config") 
+    pd_offset_x_mm = Cpt(Signal,value =-227, kind="config") 
     # position of the beamstop when it IS in the beam x
-    pd_offset_y_mm = Cpt(Signal,value =8, kind="config") 
+    pd_offset_y_mm = Cpt(Signal,value =6.8, kind="config") 
     # position of the beamstop when it IS in the beam y
     pd_safe_pos = Cpt(Signal,value =0.0, kind="config") 
     # x position of the beamstop when it IS NOT in the beam (out of the way for the rod)
@@ -516,7 +517,23 @@ class SAXS_Detector(Pilatus):
         self.motor.x.subscribe(self.update_beam_center)
         self.motor.y.subscribe(self.update_beam_center)
         self.motor.z.subscribe(self.update_beam_center) # if there is wobble in the track, the x an y center will vary
-    
+        pin_safe = abs(self.beamstop.x_pin.position - self.pd_safe_pos.get()) < 1
+        rod_safe = abs(self.beamstop.x_rod.position - self.rod_safe_pos.get()) < 1
+        rod_in = abs(self.beamstop.x_rod.position - self.rod_offset_x_mm.get())
+        pin_in = abs(self.beamstop.x_pin.position - self.pd_offset_x_mm.get())
+        if(rod_in < 1 and pin_safe):
+            self.active_beamstop.set('rod')
+        elif(pin_in < 1 and rod_safe):
+            self.active_beamstop.set('pin')
+        elif(rod_in < 11 and pin_safe):
+            self.active_beamstop.set('rod_removed')
+        elif(pin_in < 11 and rod_safe):
+            self.active_beamstop.set('pin_removed')
+        else:
+            self.active_beamstop.set('none')
+
+
+
 # callback function to update the beam center based on the motor positions will be called often
     def update_beam_center(self, *args, **kwargs):
         # based on the position, update the offsets from a calibration file
@@ -539,21 +556,67 @@ class SAXS_Detector(Pilatus):
         )
     
     # move the beamstop to the calculated position of the beam center
-    def insert_beamstop(self, beamstop='rod', offset=0.0):
-        if beamstop == 'rod':
+    def insert_beamstop(self, beamstop='rod'):
+        if beamstop == 'rod' or beamstop == 'bar':
             #move pd to safe position
             yield from bps.mv(self.beamstop.x_pin, self.pd_safe_pos.get())
             #move rod to beam center
             yield from bps.mv(self.beamstop.x_rod, self.rod_offset_x_mm.get())
-        elif beamstop == 'pd':
+            yield from bps.mv(self.active_beamstop,'rod')
+        elif beamstop == 'pd' or beamstop == 'pin':
             #move rod to safe position
             yield from bps.mv(self.beamstop.x_rod, self.rod_safe_pos.get())
             #move pd to beam center
             yield from bps.mv(self.beamstop.x_pin, self.pd_offset_x_mm.get(),
                               self.beamstop.y_pin, self.pd_offset_y_mm.get())
+            yield from bps.mv(self.active_beamstop,'pin')
         else:
-            raise ValueError("beamstop must be either 'rod' or 'pd'")
+            raise ValueError("beamstop must be either 'rod' or 'pin'")
+        
+    def remove_beamstop(self):
+        if self.active_beamstop.get() == 'rod':
+            yield from self.remove_rod()
+        elif self.active_beamstop.get() == 'pin':
+            yield from self.remove_pin()
+        else:
+            Exception(ValueError('beamstop is not in place'))
+
+    def remove_rod(self):
+        # remove the rod beamstop by 5 mm, only if it is the active beamstop, if not error
+        warn('beamstop will be removed, run restore_beamstop to put it back')
+        if abs(self.beamstop.x_pin.position - self.pd_safe_pos.get())>1 and 'rod' not in self.active_beamstop.get():
+            Exception(ValueError('Beamstop is not in'))
+        else:
+            yield from bps.mv(self.beamstop.x_rod,self.rod_offset_x_mm.get()+5)
+            yield from bps.mv(self.active_beamstop,'rod_removed')
     
+    def remove_pin(self):
+        # remove the pin diode beamstop by 5 mm, only if it is the active beamstop, if not error
+        
+        warn('beamstop will be removed, run restore_beamstop to put it back')
+        if abs(self.beamstop.x_rod.position - self.rod_safe_pos.get())>1 and 'pin' not in self.active_beamstop.get():
+            Exception(ValueError('Beamstop is not in'))
+        else:
+            yield from bps.mv(self.beamstop.x_pin,self.pd_offset_x_mm.get() + 5)
+            yield from bps.mv(self.active_beamstop,'pin_removed')
+    
+    def restore_pin(self):
+        yield from bps.mv(self.beamstop.x_pin,self.pd_offset_x_mm.get())
+        yield from bps.mv(self.active_beamstop,'pin')
+    def restore_rod(self):
+        yield from bps.mv(self.beamstop.x_rod,self.rod_offset_x_mm.get())
+        yield from bps.mv(self.active_beamstop,'rod')
+    
+    def restore_beamstop(self):
+        if self.active_beamstop.get() == 'rod_removed':
+            yield from self.restore_rod()
+        elif self.active_beamstop.get() == 'pin_removed':
+            yield from self.restore_pin()
+        else:
+            Exception(ValueError('Beamstop is not removed - please check system manually before continuing'))
+    
+
+
     def calc_offsets(self, distance, verbose=False):
         # use a spline fit to calculate the offsets based on the distance
         # this is a placeholder, the actual calculation will depend on the calibration
