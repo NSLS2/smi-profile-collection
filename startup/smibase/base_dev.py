@@ -3,17 +3,27 @@ print(f"Loading {__file__}")
 import os
 from tiled.client import from_uri
 from bluesky.callbacks.tiled_writer import TiledWriter
-from copy import deepcopy
+import copy
 
 from IPython import get_ipython
 RE = get_ipython().user_ns['RE']
 RE.md["tiled_access_tags"] = [RE.md['data_session']]
 
-# This is a hack to insert a slash in the filepath.
-# TODO: Remove this when Bluesky is updated > 1.14.2
+
 def patch_resource(doc):
-    doc = deepcopy(doc)
-    doc['resource_kwargs']['template'] = '/' + doc['resource_kwargs']['template']
+    doc = copy.deepcopy(doc)
+
+    resource_kwargs = doc['resource_kwargs']
+    resource_kwargs['template'] = '/' + resource_kwargs['template']
+
+    if frame_per_point := resource_kwargs.pop('frame_per_point', None):
+        resource_kwargs['multiplier'] = frame_per_point
+
+    if "chunk_shape" not in resource_kwargs.keys():
+        resource_kwargs['chunk_shape'] = (1,)
+
+    resource_kwargs['join_method'] = 'concat'
+
     return doc
 
 # Configure a Tiled writing client
