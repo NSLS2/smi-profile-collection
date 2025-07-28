@@ -12,8 +12,8 @@ def shopen():
     yield from bps.mv(ph_shutter.open_cmd, 1)
     yield from bps.sleep(1)
 
-    #yield from bps.mv(energy.pitch_feedback_disabled, "0")
-    #yield from bps.mv(energy.roll_feedback_disabled, "0")
+    yield from bps.mv(energy.pitch_feedback_disabled, "0")
+    yield from bps.mv(energy.roll_feedback_disabled, "0")
 
     # #Check if te set-up is in-air or not. If so, open the GV automatically when opening the shutter
     # if get_chamber_pressure(chamber_pressure.waxs) > 1E-02 and get_chamber_pressure(chamber_pressure.maxs) < 1E-02:

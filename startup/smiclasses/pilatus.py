@@ -540,10 +540,10 @@ class SAXS_Detector(Pilatus):
         self.calc_offsets(self.motor.z.position) # account for the wobble in the track
         # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
         self.beam_center_x_mm.set(
-            self.motor.x.position - self.beam_offset_x_mm.get()
+            -self.motor.x.position - self.beam_offset_x_mm.get()
         )
         self.beam_center_y_mm.set(
-            self.motor.y.position - self.beam_offset_y_mm.get()
+            -self.motor.y.position - self.beam_offset_y_mm.get()
         )
         self.sample_distance_mm.set(
             self.motor.z.position + self.sample_offset_z_mm.get()
