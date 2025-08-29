@@ -14,7 +14,7 @@ from pathlib import Path
 def sample_id(user_name="SMI",sample_name='test'):
 
     sample_name = f'{user_name}_{sample_name}'.translate(
-                {ord(c): "_" for c in "!@#$%^&*{}:/<>?\|`~+ =,"})
+                {ord(c): "_" for c in r"!@#$%^&*{}:/<>?\|`~+ =,"})
 
     RE.md["sample_name"] = sample_name
 
