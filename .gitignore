@@ -99,3 +99,6 @@ startup/.22-oav.py.swx
 *user-Dinca*
 *user-Flu*
 *user-Kim_*
+# pixi environments
+.pixi/*
+!.pixi/config.toml
