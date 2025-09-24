@@ -17,9 +17,9 @@ from .electrometers import ls, xbpm2
 susp_waxs_motor = SuspendCeil(ls.input_C, 150 + 273, resume_thresh=120 + 273)
 RE.install_suspender(susp_waxs_motor)
 
-# Count on XBPM2 suspender
-susp_xbpm2_sum = SuspendFloor(xbpm2.sumY, 0.3, resume_thresh=0.8)
-RE.install_suspender(susp_xbpm2_sum)
+# # Count on XBPM2 suspender
+# susp_xbpm2_sum = SuspendFloor(xbpm2.sumY, 0.3, resume_thresh=0.8)
+# RE.install_suspender(susp_xbpm2_sum)
 
 
 def stop_turbo():
@@ -52,7 +52,7 @@ def turn_on_suspenders():
     RE.install_suspender(susp_waxs_motor)
     RE.install_suspender(susp_smi_shutter)
     RE.install_suspender(susp_beam)
-    RE.install_suspender(susp_xbpm2_sum)
+    # RE.install_suspender(susp_xbpm2_sum)
     print('Suspenders turned on')
     
 

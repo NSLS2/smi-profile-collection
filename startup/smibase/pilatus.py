@@ -33,10 +33,10 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     except:
         print('Problem with new exposure set, using old method')
         pil2M.cam.acquire_time.put(exp_t)
-        pil2M.cam.acquire_period.put(exp_t + 0.001)
+        pil2M.cam.acquire_period.put(exp_t + period_delay)
         pil2M.cam.num_images.put(int(meas_t / exp_t))
         pil900KW.cam.acquire_time.put(exp_t)
-        pil900KW.cam.acquire_period.put(exp_t + 0.001)
+        pil900KW.cam.acquire_period.put(exp_t + period_delay)
         pil900KW.cam.num_images.put(int(meas_t / exp_t))
 
 
@@ -99,8 +99,14 @@ pil900KW.cam.num_images.kind = "config"
 pil900KW.cam.kind = 'normal'
 pil900KW.cam.file_number.kind = 'normal'
 pil900KW.cam.ensure_nonblocking()
-
-
+pil900KW.motors.kind='normal'
+pil900KW.motors.arc.user_readback.name='waxs_arc'
+pil900KW.motors.bs_x.user_readback.name='waxs_bsx'
+pil900KW.motors.bs_y.user_readback.name='waxs_bsy'
+pil900KW.pixel_size_mm.kind='config'
+pil900KW.sdd_mm.kind='config' 
+pil900KW.beam_center_x_px.kind='config'
+pil900KW.beam_center_y_px.kind='config'
 
 #####################################################
 # Pilatus 1M definition  
@@ -122,7 +128,7 @@ pil2M.cam.ensure_nonblocking()
 
 
 waxs = pil900KW.motors # for backwards compatibility
-
+waxs.kind='normal'
 
 
 def multi_count(detectors, *args, **kwargs):
@@ -134,7 +140,7 @@ def multi_count(detectors, *args, **kwargs):
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([pil2m_pos])
+sd.baseline.extend([pil2m_pos,waxs])
 
 
 def set_energy_cam(cam,en_ev):

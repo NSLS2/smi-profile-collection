@@ -120,11 +120,11 @@ class SMIBeam(object):
         if self.dcm.energy.position < 2000:
             target_state = [att1_12]
         elif 2000 < self.dcm.energy.position < 2300:
-            target_state = [att2_11, att2_9]
-        elif 2300 < self.dcm.energy.position < 3000:
-            # target_state = [att2_12, att2_11, att2_10]
-            target_state = [att2_11]
-            # target_state = [att2_10, att2_9] #For humidity cell only
+            target_state = [att2_5, att2_6]
+        elif 2300 < self.dcm.energy.position < 2700:
+            target_state = [att2_10, att2_11, att2_12]
+        elif 2700 < self.dcm.energy.position < 3000:
+            target_state = [att2_10, att2_12]
         elif 3000 < self.dcm.energy.position < 3200:
             target_state = [att2_9, att2_10, att2_11]
         elif 3200 < self.dcm.energy.position <= 3500:
@@ -134,15 +134,15 @@ class SMIBeam(object):
         elif 3750 < self.dcm.energy.position <= 3900:
             target_state = [att2_5, att2_7, att2_8]
         elif 3900 < self.dcm.energy.position < 4200:
-            target_state = [att2_5, att2_10, att2_9]
+            target_state = [att2_5, att2_9, att2_10]
         elif 4200 < self.dcm.energy.position < 4500:
-            target_state = [att2_7, att2_6]
+            target_state = [att2_6, att2_7]
         elif 4500 < self.dcm.energy.position < 5500:
             target_state = [att2_5, att2_6]
         elif 5500 < self.dcm.energy.position < 7000:
             target_state = [att1_12]
         elif 7000 < self.dcm.energy.position < 7500:
-            target_state = [att2_7, att2_6, att2_5]
+            target_state = [att2_5, att2_6, att2_7]
         elif 7500 < self.dcm.energy.position < 8400:
             target_state = [att2_1, att2_3]
         elif 8400 < self.dcm.energy.position < 8800:
@@ -292,8 +292,6 @@ class SMI_Beamline(Beamline): # used in alignment
 
         # move beamstop (whichever is active) out of direct beam by 5 mm
         yield from pil2M.remove_beamstop()
-        
-        
 
         # Move the waxs beamstop up for safety. If tender, covers up to 1deg ai, if hard, covers up to 0.4deg ai
         yield from SMIBeam().calc_bswaxs_posy()
@@ -321,6 +319,8 @@ class SMI_Beamline(Beamline): # used in alignment
         Update the ROI (pil2m.roi1) for the direct beam on the SAXS detector.
         size: tuple argument: size in pixels) of the ROI [width, height]).
         """
+        #Reading the current position of 2M to adjust ROI position
+        self.SAXS.getPositions()
 
         # These positions are updated based on current detector position
         x0 = self.SAXS.direct_beam[0]
@@ -557,6 +557,7 @@ def fake_interpolate_db_sdds():
     """
     Fake function to be used when the interpolation_db_sdd2.txt file is not available
     """
+    pil2M.update_beam_center()
     return pil2M.motor.z.position/1000, [-pil2M.beam_center_x_px.get(), -pil2M.beam_center_y_px.get()]
     # return 8300, [pil2M.motor.x.position, pil2M.motor.y.position]
 

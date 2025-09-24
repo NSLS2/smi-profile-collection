@@ -8,6 +8,8 @@ from ophyd import (
     ProcessPlugin,
     OverlayPlugin,
     ProsilicaDetectorCam,
+    ColorConvPlugin,
+    
 )
 from .pilatus import TIFFPluginWithFileStore
 from ophyd import Component as Cpt
@@ -56,7 +58,8 @@ class StandardProsilicaV33(SingleTriggerV33, ProsilicaDetector):
     roi4 = Cpt(ROIPlugin, 'ROI4:')
     proc1 = Cpt(ProcessPlugin, 'Proc1:')
     over1 = Cpt(OverlayPlugin, 'Over1:')
-
+    cc1 = Cpt(ColorConvPlugin, 'CC1:')
+    
     # This class does not save TIFFs. We make it aware of the TIFF plugin
     # only so that it can ensure that the plugin is not auto-saving.
     tiff = Cpt(TIFFPluginEnsuredOff, suffix='TIFF1:')

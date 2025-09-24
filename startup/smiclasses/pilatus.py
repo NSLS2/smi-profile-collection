@@ -322,11 +322,11 @@ class SAXSPositions(Device):
 
 
 class WAXS_Motors(Device):
-    arc = Cpt(EpicsMotor, "WAXS:1-Ax:Arc}Mtr")
-    bs_x = Cpt(EpicsMotor, "MCS:1-Ax:5}Mtr")
-    bs_y = Cpt(EpicsMotor, "BS:WAXS-Ax:y}Mtr")
+    arc = Cpt(EpicsMotor, "WAXS:1-Ax:Arc}Mtr",name='arc')
+    bs_x = Cpt(EpicsMotor, "MCS:1-Ax:5}Mtr",name='bs_x')
+    bs_y = Cpt(EpicsMotor, "BS:WAXS-Ax:y}Mtr",name='bs_y')
     test = 5
-    bsx_offset = -54.8600000 
+    bsx_offset = -58.4
                 # offset from the beam center to the beamstop in mm
                 # this value should be reset in the motor offset - not here
                 # the procedure is to move the motor to the negative limit (outboard) and run home_forward.set(1) on the waxs beamstop x
@@ -336,7 +336,7 @@ class WAXS_Motors(Device):
                 # distance from the center of arc rotation (sample position) to the beamstop
                 # in mm   
                 # if the beamstop mounting is changed or bent, this value may need to be tweaked
-    bsx_safe_pos = -100 
+    bsx_safe_pos = 16 
                 # x position of the beamstop when it IS NOT in the beam (out of the way direct beam and scattering)
     
     # when moving the waxs detector, the beamstop must be moved to a new position
@@ -382,85 +382,18 @@ class WAXS_Motors(Device):
 class WAXS_Detector(Pilatus):
 ## real positions of the SAXS detector and the beamstop
     ## WAXS det position and beamstop (mounted on the same stage)
-    motors = Cpt(WAXS_Motors,"XF:12IDC-ES:2{",add_prefix= "", kind="config")
-    
-    
-## the virtual positions of the beamcenter (in pixels) and the sample distance
-    # values will be over written by the beam center calculation
-    # based on the motor positions and the constant offsets
-    col1_beam_center_x_px = Cpt(Signal,value =0, kind="normal")
-    col1_beam_center_x_mm = Cpt(Signal,value =0, kind="config")
-    col1_beam_center_y_px = Cpt(Signal,value =225, kind="normal")
-    col1_beam_center_y_mm = Cpt(Signal,value =225*0.172, kind="config")
-    col1_beam_center_angle_deg = Cpt(Signal,value = -7, kind="config")
-    col1_sample_distance_mm = Cpt(Signal,value =284, kind="normal")
-    col2_beam_center_x_px = Cpt(Signal,value =0, kind="normal")
-    col2_beam_center_x_mm = Cpt(Signal,value =0, kind="config")
-    col2_beam_center_y_px = Cpt(Signal,value =225, kind="normal")
-    col2_beam_center_y_mm = Cpt(Signal,value =225*0.172, kind="config")
-    col2_beam_center_angle_deg = Cpt(Signal,value =0, kind="config")
-    col2_sample_distance_mm = Cpt(Signal,value =284, kind="normal")
-    col3_beam_center_x_px = Cpt(Signal,value =0, kind="normal")
-    col3_beam_center_x_mm = Cpt(Signal,value =0, kind="config")
-    col3_beam_center_y_px = Cpt(Signal,value =225, kind="normal")
-    col3_beam_center_y_mm = Cpt(Signal,value =225*0.172, kind="config")
-    col3_beam_center_angle_deg = Cpt(Signal,value = 7, kind="config")
-    col3_sample_distance_mm = Cpt(Signal,value =284, kind="normal")
+    motors = Cpt(WAXS_Motors,"XF:12IDC-ES:2{",add_prefix= "", kind="normal")
 
 ## constants for the beam center calculation
-    # offsets will be reset by the calc_offsets function
-    # all other values should be set here from calibration / lookup table
-    pixel_size_mm = Cpt(Signal,value =0.172, kind="config") # in mm
-    # offset from 0th column pixel to the beam center at saxs position x = 0
-    col1_beam_offset_x_mm = Cpt(Signal,value =127.968, kind="config") 
-    col2_beam_offset_x_mm = Cpt(Signal,value =127.968, kind="config") 
-    col3_beam_offset_x_mm = Cpt(Signal,value =127.968, kind="config") 
-    # offset from 0th row pixel to the beam center at saxs position y = 0
-    col1_beam_offset_y_mm = Cpt(Signal,value =190.404, kind="config")
-    col2_beam_offset_y_mm = Cpt(Signal,value =190.404, kind="config")
-    col3_beam_offset_y_mm = Cpt(Signal,value =190.404, kind="config")
-    # difference between the position.z and the actual sample-detector distance
-    col1_sample_offset_z_mm = Cpt(Signal,value =0.0, kind="config")
-    col2_sample_offset_z_mm = Cpt(Signal,value =0.0, kind="config")
-    col3_sample_offset_z_mm = Cpt(Signal,value =0.0, kind="config")
-    # difference between the arc angle and the actual angle
-    col1_angle_offset = Cpt(Signal,value =-7.0, kind="config")
-    col2_angle_offset = Cpt(Signal,value =0.0, kind="config")
-    col3_angle_offset = Cpt(Signal,value =7, kind="config")
+    beam_center_x_px = Cpt(Signal,value =103, kind="normal")
+    beam_center_y_px = Cpt(Signal,value =1256, kind="normal")
+    sdd_mm = Cpt(Signal,value =280.0, kind="normal")
+    pixel_size_mm = Cpt(Signal,value =0.172, kind="normal") # in mm
+    
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.motors.arc.subscribe(self.update_beam_center)
     
-    def update_beam_center(self, *args, **kwargs):
-        # based on the position, update the offsets from a calibration file
-        self.calc_offsets(self.motors.arc.position)
-        # use the angle offsets and the arc position to update the virtyal beam angles
-        self.col1_beam_center_angle_deg.set(
-            self.motors.arc.position + self.col1_angle_offset.get()
-        )
-        self.col2_beam_center_angle_deg.set(
-            self.motors.arc.position + self.col2_angle_offset.get()
-        )
-        self.col3_beam_center_angle_deg.set(
-            self.motors.arc.position + self.col3_angle_offset.get()
-        )
-
-    def calc_offsets(self, angle):
-        # use a spline fit to calculate the offsets based on the angle
-        # this is a placeholder, the actual calculation will depend on the calibration
-        # the offsets are in mm
-        # self.col1_beam_offset_x_mm.set(0.0)
-        # self.col1_beam_offset_y_mm.set(0.0)
-        # self.col2_beam_offset_x_mm.set(0.0)
-        # self.col2_beam_offset_y_mm.set(0.0)
-        # self.col3_beam_offset_x_mm.set(0.0)
-        # self.col3_beam_offset_y_mm.set(0.0)
-        # self.col1_sample_offset_z_mm.set(0.0)
-        # self.col2_sample_offset_z_mm.set(0.0)
-        # self.col3_sample_offset_z_mm.set(0.0)
-        ...
-
 
 class DetMotor(Device):
     x = Cpt(EpicsMotor, "X}Mtr")
@@ -540,10 +473,10 @@ class SAXS_Detector(Pilatus):
         self.calc_offsets(self.motor.z.position) # account for the wobble in the track
         # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
         self.beam_center_x_mm.set(
-            self.motor.x.position - self.beam_offset_x_mm.get()
+            -self.motor.x.position - self.beam_offset_x_mm.get()
         )
         self.beam_center_y_mm.set(
-            self.motor.y.position - self.beam_offset_y_mm.get()
+            -self.motor.y.position - self.beam_offset_y_mm.get()
         )
         self.sample_distance_mm.set(
             self.motor.z.position + self.sample_offset_z_mm.get()

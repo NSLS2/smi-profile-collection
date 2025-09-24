@@ -170,7 +170,6 @@ def alignment_gisaxs(angle=0.15):
     # Deactivate the automated derivative calculation
     bec._calc_derivative_and_stats = False
 
-
 def alignement_gisaxs_doblestack(angle=0.15):
     """
     Modification of teh regular alignement routine for the doble-stack. Since top row is out of the center of rotation of of theta, the alignement on teh direc does not work.
@@ -199,7 +198,7 @@ def alignement_gisaxs_doblestack(angle=0.15):
     yield from align_gisaxs_th(0.9, 60)  # was 1.5 27
 
     # move to theta 0 + value
-    yield from bps.mv(piezo.th, ps.peak + angle)
+    yield from bps.mv(piezo.th, ps.peak -0.1 + angle)
 
     # Set reflected ROI
     yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs")
@@ -330,11 +329,11 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     # Scan theta and height
     yield from align_gisaxs_height_hex(rough_y, 21, der=True)
 
-    yield from smi.setReflectedBeamROI(total_angle=0.06, technique="gisaxs")
+    yield from smi.setReflectedBeamROI(total_angle=0.1, technique="gisaxs")
     yield from align_gisaxs_th_hex(0.5, 31)
 
     # move to theta 0 + value
-    yield from bps.mv(stage.th, ps.peak + angle)
+    yield from bps.mv(stage.th, ps.peak -0.1 + angle)
 
     # Set reflected ROI
     yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs")
