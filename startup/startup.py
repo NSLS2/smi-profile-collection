@@ -7,6 +7,7 @@ if '__IPYTHON__' in globals():
     ipython.magic('autoreload 2')
     
 from smibase.base import *
+from smibase.base_dev import *
 from smibase.waxschamber import *
 from smibase.shutter import *
 from smibase.beamstop import *
