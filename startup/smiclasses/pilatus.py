@@ -396,17 +396,17 @@ class WAXS_Detector(Pilatus):
     
 
 class DetMotor(Device):
-    x = Cpt(EpicsMotor, "X}Mtr")
-    y = Cpt(EpicsMotor, "Y}Mtr")
-    z = Cpt(EpicsMotor, "Z}Mtr")
+    x = Cpt(EpicsMotor, "X}Mtr",kind="normal")
+    y = Cpt(EpicsMotor, "Y}Mtr",kind="normal")
+    z = Cpt(EpicsMotor, "Z}Mtr",kind="hinted")
 
 
 class SAXS_Detector(Pilatus):
 ## real positions of the SAXS detector and the beamstop
     ## SAXS det position
-    motor = Cpt(DetMotor,"XF:12IDC-ES:2{Det:1M-Ax:",add_prefix= "", kind="config")
+    motor = Cpt(DetMotor,"XF:12IDC-ES:2{Det:1M-Ax:",add_prefix= "", kind="normal")
     ## stages for SAXS beamstops (two beamstops, each with their own offset from the beam center)
-    beamstop = Cpt(SAXSBeamStops,"XF:12IDC-ES:2{BS:SAXS-Ax:",add_prefix= "", kind="config")
+    beamstop = Cpt(SAXSBeamStops,"XF:12IDC-ES:2{BS:SAXS-Ax:",add_prefix= "", kind="normal")
 
 ## the virtual positions of the beamcenter (in pixels) and the sample distance
     # values will be over written by the beam center calculation

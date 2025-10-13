@@ -1,6 +1,7 @@
 print(f"Loading {__file__}")
 
 from smiclasses.shutter import TwoButtonShutter, SMIFastShutter
+from ophyd import EpicsMotor
 from .energy import energy
 import bluesky.plan_stubs as bps
 
@@ -42,6 +43,7 @@ def shclose(feedback=True):
 
 fs = SMIFastShutter("", name="fs")
 
+fs_motor = EpicsMotor("XF:12IDC:2{Sh:E-Ax:Y}Mtr", name="fshutter_motor")
 
 
 GV7 = TwoButtonShutter("XF:12IDC-VA:2{Det:1M-GV:7}", name="GV7")

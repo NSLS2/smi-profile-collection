@@ -66,10 +66,7 @@ def det_next_file(n):
 fd = FakeDetector(name="fd")
 
 
-pil2m_pos = SAXSPositions("XF:12IDC-ES:2{Det:1M-Ax:", name="detector_saxs_pos")
 
-for detpos in [pil2m_pos]:
-    detpos.configuration_attrs = detpos.read_attrs
 
 pil300KW = None
 
@@ -114,6 +111,11 @@ pil900KW.beam_center_y_px.kind='config'
 pil2M = SAXS_Detector("XF:12ID2-ES{Pilatus:Det-2M}", name="pil2M", asset_path="pilatus2m-1")  # , detector_id="SAXS")
 pil2M.set_primary_roi(1)
 
+pil2m_pos = pil2M.motor
+
+for detpos in [pil2m_pos]:
+    detpos.configuration_attrs = detpos.read_attrs
+
 pil2mroi1 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats1:Total_RBV", name="pil2mroi1")
 pil2mroi2 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats2:Total_RBV", name="pil2mroi2")
 pil2mroi3 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats3:Total_RBV", name="pil2mroi3")
@@ -121,10 +123,15 @@ pil2mroi4 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil
 
 pil2M.stats1.kind = "hinted"
 pil2M.stats1.total.kind = "hinted"
-pil2M.cam.num_images.kind = "config"
+pil2M.cam.num_images.kind = "normal"
 pil2M.cam.kind = 'normal'
 pil2M.cam.file_number.kind = 'normal'
 pil2M.cam.ensure_nonblocking()
+pil2M.active_beamstop.kind='normal'
+pil2M.motor.kind='normal'
+pil2M.beamstop.kind='normal'
+pil2M.beam_center_x_px.kind='normal'
+pil2M.beam_center_y_px.kind='normal'
 
 
 waxs = pil900KW.motors # for backwards compatibility
@@ -140,7 +147,7 @@ def multi_count(detectors, *args, **kwargs):
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([pil2m_pos,waxs])
+sd.baseline.extend([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,pil2M.beam_center_y_px])
 
 
 def set_energy_cam(cam,en_ev):

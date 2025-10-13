@@ -11,7 +11,7 @@ stage = STG("XF:12IDC-OP:2{HEX:Stg-Ax:", name="stage")
 sample = SMPL("XF:12IDC-OP:2{HEX:Sam-Ax:", name="sample")
 hp140 = HEXAPOD("XF:12IDC-OP:2{HEX:140-Ax:", name="hp140")
 hp430 = HEXAPOD("XF:12IDC-OP:2{HEX:430-Ax:", name="hp430")
-piezo = SMARACT("XF:12IDC-ES:2{MCS:1-Ax:", name="piezo")
+piezo = SMARACT("", name="piezo")
 
 
 for hp in [stage, sample, hp140, hp430]:
