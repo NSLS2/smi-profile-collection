@@ -38,7 +38,7 @@ from smibase.attenuators import (
             att2_12,
 )
 from smibase.energy import energy
-from smibase.pilatus import waxs, pil2M
+from smibase.pilatus import waxs, pil2M, pil900KW
 from smibase.beamstop import saxs_bs
 from smibase.crls import crl
 from smibase.waxschamber import get_chamber_pressure, chamber_pressure
@@ -234,7 +234,7 @@ class SMIBeam(object):
             yield from bps.mv(waxs.bs_y, 0.95)
         else:
             # it is -7 for transmission, around -2 to -3 for reflection
-            yield from bps.mv(waxs.bs_y, -3)
+            yield from bps.mv(waxs.bs_y, -7)
 
 
 # End class SMIBeam(object)
@@ -274,6 +274,7 @@ class SMI_Beamline(Beamline): # used in alignment
         # Metadata
         self.md = kwargs
         self.SAXS = SMI_SAXS_Det()
+        self.WAXS = SMI_WAXS_Det() # for bdm using 900KW
 
         self.attenuators_state()
         # self.crl_state()
@@ -299,9 +300,14 @@ class SMI_Beamline(Beamline): # used in alignment
         self.setReflectedBeamROI(technique=technique)
         self.setDirectBeamROI()
 
-        # Move the waxs detector out of the way
-        if waxs.arc.position < 15:
-            yield from bps.mv(waxs.arc, 15)
+        if technique == "gisaxs":
+            # Move the waxs detector out of the way
+            if waxs.arc.position < 15:
+                yield from bps.mv(waxs.arc, 15)
+        
+        elif technique == "giwaxs": # for bdm
+            print('giwaxs mode: move waxs to 0 deg!')
+            yield from bps.mv(waxs.arc, 0)
 
     def modeMeasurement(self):
         """
@@ -339,9 +345,26 @@ class SMI_Beamline(Beamline): # used in alignment
             yield from bps.mv(pil2M.roi1.size.x, int(size[1]))
             yield from bps.mv(pil2M.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
             yield from bps.mv(pil2M.roi1.size.y, int(size[0]))
+        
+        elif technique == "giwaxs":  # for bdm using 900KW
+
+            #Reading the current position of 2M to adjust ROI position
+            self.WAXS.getPositions()
+
+            # These positions are updated based on current detector position
+            x0 = self.WAXS.direct_beam[0]
+            y0 = self.WAXS.direct_beam[1]
+
+            yield from bps.mv(pil900KW.roi1.min_xyz.min_x, int(x0 - size[1] / 2))
+            yield from bps.mv(pil900KW.roi1.size.x, int(size[1]))
+            yield from bps.mv(pil900KW.roi1.min_xyz.min_y, int(y0 - size[0] / 2))
+            yield from bps.mv(pil900KW.roi1.size.y, int(size[0]))
+
+
+
 
     def setReflectedBeamROI(self, total_angle=0.16, technique="gisaxs", size=[48, 8],
-                            roi=pil2M.roi1):
+                            roi=pil2M.roi1,sample_z_offset_mm=0, sample_y_offset_mm=0):
         """
         Update the ROI (pil2m.roi3) for the reflected beam on the SAXS detector.
         total_ange: float: incident angle of the alignement in degrees
@@ -351,7 +374,7 @@ class SMI_Beamline(Beamline): # used in alignment
         # These positions are updated based on current detector position
         x0 = self.SAXS.direct_beam[0]
         y0 = self.SAXS.direct_beam[1]
-        d = self.SAXS.distance  # mm
+        d = self.SAXS.distance + sample_z_offset_mm  # mm
         pixel_size = self.SAXS.pixel_size  # mm
 
         if technique == "gisaxs":
@@ -377,6 +400,42 @@ class SMI_Beamline(Beamline): # used in alignment
             yield from bps.mv(roi.size.x, int(size[1]))
             yield from bps.mv(roi.min_xyz.min_y, int(y0 - size[0] / 2))
             yield from bps.mv(roi.size.y, int(size[0]))
+    
+        elif technique == "giwaxs": # for bdm using 900KW
+
+            # These positions are updated based on current detector position
+            x0 = self.WAXS.direct_beam[0]
+            y0 = self.WAXS.direct_beam[1]
+            d = self.WAXS.distance + sample_z_offset_mm  # mm
+            pixel_size = self.WAXS.pixel_size  # mm
+
+            # Calculate the y position of the reflected beam
+            y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+            y_offset_pix = y_offset_mm / pixel_size
+            y_pos = int(y0 - size[1] / 2 - y_offset_pix)
+
+            # Define the reflected beam ROI on the pilatus 900KW detector
+            yield from bps.mv(roi.min_xyz.min_x, int(x0 - size[0] / 2))
+            yield from bps.mv(roi.size.x, int(size[0]))
+            yield from bps.mv(roi.min_xyz.min_y, int(y_pos))
+            yield from bps.mv(roi.size.y, int(size[1]))
+        
+        elif technique == "bdm_gisaxs": # for bdm with sample tracking
+            # Calculate the y position of the reflected beam
+            y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+            y_offset_pix = y_offset_mm / pixel_size
+            # y_pos = int(y0 - size[1] / 2 - y_offset_pix)
+            sample_y_offset_pix = sample_y_offset_mm / pixel_size
+            y_pos = int(y0 - size[1] / 2 - y_offset_pix + sample_y_offset_pix)
+
+            # Define the reflected beam ROI on the pilatus 2M detector
+            yield from bps.mv(roi.min_xyz.min_x, int(x0 - size[0] / 2))
+            yield from bps.mv(roi.size.x, int(size[0]))
+            yield from bps.mv(roi.min_xyz.min_y, int(y_pos))
+            yield from bps.mv(roi.size.y, int(size[1]))
+        
+        
+        
         else:
             raise ValueError("Unknown geometry fo alignement mode")
 
@@ -559,7 +618,7 @@ def fake_interpolate_db_sdds():
     Fake function to be used when the interpolation_db_sdd2.txt file is not available
     """
     pil2M.update_beam_center()
-    return pil2M.motor.z.position/1000, [-pil2M.beam_center_x_px.get(), -pil2M.beam_center_y_px.get()]
+    return pil2M.motor.z.position/1000, [pil2M.beam_center_x_px.get(), pil2M.beam_center_y_px.get()]
     # return 8300, [pil2M.motor.x.position, pil2M.motor.y.position]
 
 class SMI_SAXS_Det(object):
@@ -627,6 +686,35 @@ class SMI_SAXS_Det(object):
 
         # ToDo: Compare beamstop position vs direct beam position and change bs position
         pass
+
+
+
+
+class SMI_WAXS_Det(object): ### for bdm using 900KW
+    def __init__(self, **kwargs):
+
+        # ToDo: add here the position of the gap
+        self.detector_gap_x = [[830, 850], [617, 637], [405, 425], [193, 213]]
+        self.detector_gap_y = [[485, 495]]
+
+        self.pixel_size = 0.172
+        self.getPositions()
+        # self.get_beamstop()
+
+    def getPositions(self, **md):
+        """
+        Get the interpolated sample detector distance and beam position from interpolate_db_sdds
+        function defined in 01_load.py
+        """
+
+        # Interpolate the distance and direct beam position
+        # pil900KW.update_beam_center()
+        self.distance, self.direct_beam = 0.2749, [pil900KW.beam_center_x_px.get(), pil900KW.beam_center_y_px.get()]
+        self.distance *= 1000
+
+        smi_waxs_detector.x0_pix.put(self.direct_beam[0])
+        smi_waxs_detector.y0_pix.put(self.direct_beam[1])
+        smi_waxs_detector.sdd.put(self.distance)
 
 
 smi_waxs_detector = SMI_WAXS_detector(name="Pilatus900kw")

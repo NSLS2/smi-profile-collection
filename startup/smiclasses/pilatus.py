@@ -326,7 +326,7 @@ class WAXS_Motors(Device):
     bs_x = Cpt(EpicsMotor, "MCS:1-Ax:5}Mtr",name='bs_x')
     bs_y = Cpt(EpicsMotor, "BS:WAXS-Ax:y}Mtr",name='bs_y')
     test = 5
-    bsx_offset = -58.4
+    bsx_offset = -58.5
                 # offset from the beam center to the beamstop in mm
                 # this value should be reset in the motor offset - not here
                 # the procedure is to move the motor to the negative limit (outboard) and run home_forward.set(1) on the waxs beamstop x
@@ -423,7 +423,7 @@ class SAXS_Detector(Pilatus):
     # all other values should be set here from calibration / lookup table
     pixel_size_mm = Cpt(Signal,value =0.172, kind="config") # in mm
     # offset from 0th column pixel to the beam center at saxs position x = 0
-    beam_offset_x_mm = Cpt(Signal,value =127.968, kind="config") 
+    beam_offset_x_mm = Cpt(Signal,value =128.398, kind="config") 
     # offset from 0th row pixel to the beam center at saxs position y = 0
     beam_offset_y_mm = Cpt(Signal,value =190.404, kind="config")
     # difference between the position.z and the actual sample-detector distance
@@ -482,10 +482,10 @@ class SAXS_Detector(Pilatus):
             self.motor.z.position + self.sample_offset_z_mm.get()
         )
         self.beam_center_x_px.set(
-            (self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
+            np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
         )
         self.beam_center_y_px.set(
-            (self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
+            np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
         )
     
     # move the beamstop to the calculated position of the beam center
@@ -570,3 +570,5 @@ class SAXS_Detector(Pilatus):
             print("Pin diode x offset: ", self.pd_offset_x_mm.get())
             print("Pin diode y offset: ", self.pd_offset_y_mm.get())
             print("Sample distance offset: ", self.sample_offset_z_mm.get())
+
+

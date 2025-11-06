@@ -1,5 +1,6 @@
 print(f"Loading {__file__}")
 
+from time import ctime
 from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector
 from .amptek import amptek
 import bluesky.plans as bp
@@ -123,19 +124,19 @@ pil2mroi4 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil
 
 pil2M.stats1.kind = "hinted"
 pil2M.stats1.total.kind = "hinted"
-pil2M.cam.num_images.kind = "normal"
-pil2M.cam.kind = 'normal'
-pil2M.cam.file_number.kind = 'normal'
+pil2M.cam.num_images.kind = "config"
+pil2M.cam.kind = 'config'
+pil2M.cam.file_number.kind = 'config'
 pil2M.cam.ensure_nonblocking()
-pil2M.active_beamstop.kind='normal'
-pil2M.motor.kind='normal'
-pil2M.beamstop.kind='normal'
-pil2M.beam_center_x_px.kind='normal'
-pil2M.beam_center_y_px.kind='normal'
+pil2M.active_beamstop.kind='config'
+pil2M.motor.kind='config'
+pil2M.beamstop.kind='config'
+pil2M.beam_center_x_px.kind='config'
+pil2M.beam_center_y_px.kind='config'
 
 
 waxs = pil900KW.motors # for backwards compatibility
-waxs.kind='normal'
+waxs.kind='config'
 
 
 def multi_count(detectors, *args, **kwargs):
@@ -180,3 +181,46 @@ def set_energy_cam(cam,en_ev):
 
     cam.energyset.set(en) # store so it remembers on failure and resets
 
+
+def beamstop_save():
+    """
+    Save the current configuration
+    """
+    # TODO: ELIOT - change save to redis
+
+    # SMI_CONFIG_FILENAME = os.path.join(
+    #     get_ipython().profile_dir.location, "smi_config.csv"
+    # )
+
+    # Beamstop position in x and y
+    bs_rod_x = pil2M.beamstop.x_rod.position
+    bs_rod_y = pil2M.beamstop.y_rod.position
+
+    bs_pin_x = pil2M.beamstop.x_pin.position
+    bs_pin_y = pil2M.beamstop.y_pin.position
+
+    # collect the current positions of motors
+    current_config = {
+        "bs_rod_x": bs_rod_x,
+        "bs_rod_y": bs_rod_y,
+        "bs_pin_x": bs_pin_x,
+        "bs_pin_y": bs_pin_y,
+        "time": ctime(),
+    }
+
+    if pil2M.active_beamstop.get() == 'rod':
+        pil2M.rod_offset_x_mm.set(bs_rod_x)
+        pil2M.rod_offset_y_mm.set(bs_rod_y)
+        print(f"resetting the rod offsets to {bs_rod_x}, {bs_rod_y}")
+    elif pil2M.active_beamstop.get() == 'pin':
+        pil2M.pd_offset_x_mm.set(bs_pin_x)
+        pil2M.pd_offset_y_mm.set(bs_pin_y)
+        print(f"resetting the pin offsets to {bs_pin_x}, {bs_pin_y}")
+    else:
+        print("No active beamstop selected, not resetting offsets\n")
+        print("Please run pil2M.insert_beamstop('rod' or 'pin')\n")
+
+    # TODO - append config to redis
+
+
+    print(current_config)
