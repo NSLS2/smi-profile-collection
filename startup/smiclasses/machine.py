@@ -33,6 +33,11 @@ class InsertionDevice(EpicsMotor):
         read_pv="BrakesDisengaged-Sts",
         add_prefix=("read_pv", "write_pv", "suffix"),
     )
+    gap_speed = Component(EpicsSignal,
+        write_pv = "SR:C12-ID:G1{IVU:1}GapSpeed-SP",
+        read_pv = "SR:C12-ID:G1{IVU:1}GapSpeed-RB",
+        add_prefix = (),
+    )
 
     def move(self, *args, **kwargs):
         self.brake.set(1).wait() # changed from set_and_wait Oct 2024 - Eliot

@@ -18,7 +18,7 @@ from ophyd.utils.epics_pvs import set_and_wait
 from ophyd.status import StatusBase, MoveStatus
 from ophyd.pseudopos import pseudo_position_argument, real_position_argument
 from ophyd import Component as Cpt
-
+import bluesky.plan_stubs as bps
 from .machine import InsertionDevice
 
 
@@ -94,6 +94,7 @@ class Energy(PseudoPositioner):
     # Harmonic signals
     target_harmonic = Cpt(Signal, value=21)
     harmonic = Cpt(Signal, kind="hinted", value=21)
+
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -234,6 +235,8 @@ class Energy(PseudoPositioner):
         if np.abs(energy - self.position[0]) < 0.01:
             return MoveStatus(self, energy, success=True, done=True)
 
+
+
 # TODO change self.settle_time here based on energy we are moving to 
         # if False:
         #     self.settle_time = per_energy(energy)
@@ -254,3 +257,52 @@ class Energy(PseudoPositioner):
         return sts
 
 
+    def small_move(self, target_energy):
+        """
+        Perform a small move to the target energy while keeping DCM gap constant.
+
+        Parameters:
+            target_energy (float): Target energy in eV.
+
+        Returns:
+            StatusBase: Status of the move.
+        """
+
+        current_bragg = self.bragg.position
+        current_ivu = self.ivugap.position
+        print(f"Current bragg: {current_bragg}, Current IVU gap: {current_ivu}")
+        # calculate the target bragg angle and IVU gap for the target energy
+        target_bragg = self.energy_to_bragg(target_energy)
+        target_ivu = self.energy_to_gap(target_energy, self.harmonic.get())
+        print(f"Target bragg: {target_bragg}, Target IVU gap: {target_ivu}")
+        if not (6200 <= target_ivu < 15100):
+            raise RuntimeError("Target IVU gap out of range for small move.")
+        # calculate the distance to move each axis
+        delta_bragg = target_bragg - current_bragg
+        delta_ivu = target_ivu - current_ivu
+        # determine the time to move based on the bragg.velocity and ivugap.gap_speed
+        bragg_time = abs(delta_bragg) / self.bragg.velocity.get()
+        ivu_time = abs(delta_ivu) / self.ivugap.gap_speed.get()
+        move_time = max(bragg_time, ivu_time)
+        print(f"Estimated move time: {move_time} seconds. changing to a minimum of 1 second.")
+        # move_time = max(move_time, 1)
+        # temporarilly set the speed of the faster axis to complete in the same move_time
+        if bragg_time > ivu_time:
+            original_ivu_gapspeed = self.ivugap.gap_speed.get()
+            yield from bps.mv(self.ivugap.gap_speed,
+                              abs(delta_ivu) / move_time)
+            print(f"changed the IVU gap speed from {original_ivu_gapspeed} to {self.ivugap.gapspeed.get()} for small move.")
+        else:
+            original_bragg_velocity = self.bragg.velocity.get()
+            yield from bps.mv(self.bragg.velocity, abs(delta_bragg) / move_time)
+            print(f"changed the Bragg velocity from {original_bragg_velocity} to {self.bragg.velocity.get()} for small move.")
+
+        # Perform the move now (no status tracking for a small move)
+        yield from bps.mv(self.bragg, target_bragg, self.ivugap, target_ivu)
+        # Restore the original velocity
+        if bragg_time > ivu_time:
+            yield from bps.mv(self.ivugap.gap_speed, original_ivu_gapspeed)
+            print(f"restored the IVU gap speed to {original_ivu_gapspeed}.")
+        else:
+            yield from bps.mv(self.bragg.velocity, original_bragg_velocity)
+            print(f"restored the Bragg velocity to {original_bragg_velocity}.")

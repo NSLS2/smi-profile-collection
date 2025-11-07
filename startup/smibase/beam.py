@@ -619,7 +619,7 @@ def fake_interpolate_db_sdds():
     """
     pil2M.update_beam_center()
     return pil2M.motor.z.position/1000, [pil2M.beam_center_x_px.get(), pil2M.beam_center_y_px.get()]
-    # return 8300, [pil2M.motor.x.position, pil2M.motor.y.position]
+
 
 class SMI_SAXS_Det(object):
     def __init__(self, **kwargs):
