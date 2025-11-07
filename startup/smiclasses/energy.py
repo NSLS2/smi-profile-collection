@@ -287,22 +287,25 @@ class Energy(PseudoPositioner):
         print(f"Estimated move time: {move_time} seconds. changing to a minimum of 1 second.")
         # move_time = max(move_time, 1)
         # temporarilly set the speed of the faster axis to complete in the same move_time
-        if bragg_time > ivu_time:
+        # set the minimum time to 1 second to avoid too fast moves
+        move_time = max(move_time, 1)
+        # change both speeds to match move_time
+        if bragg_time != move_time:
             original_ivu_gapspeed = self.ivugap.gap_speed.get()
-            yield from bps.mv(self.ivugap.gap_speed,
+            yield from bps.abs_set(self.ivugap.gap_speed,
                               abs(delta_ivu) / move_time)
             print(f"changed the IVU gap speed from {original_ivu_gapspeed} to {self.ivugap.gapspeed.get()} for small move.")
-        else:
+        if ivu_time != move_time:
             original_bragg_velocity = self.bragg.velocity.get()
-            yield from bps.mv(self.bragg.velocity, abs(delta_bragg) / move_time)
+            yield from bps.abs_set(self.bragg.velocity, abs(delta_bragg) / move_time)
             print(f"changed the Bragg velocity from {original_bragg_velocity} to {self.bragg.velocity.get()} for small move.")
 
         # Perform the move now (no status tracking for a small move)
         yield from bps.mv(self.bragg, target_bragg, self.ivugap, target_ivu)
         # Restore the original velocity
-        if bragg_time > ivu_time:
-            yield from bps.mv(self.ivugap.gap_speed, original_ivu_gapspeed)
+        if bragg_time != move_time:
+            yield from bps.abs_set(self.ivugap.gap_speed, original_ivu_gapspeed)
             print(f"restored the IVU gap speed to {original_ivu_gapspeed}.")
-        else:
-            yield from bps.mv(self.bragg.velocity, original_bragg_velocity)
+        if ivu_time != move_time:
+            yield from bps.abs_set(self.bragg.velocity, original_bragg_velocity)
             print(f"restored the Bragg velocity to {original_bragg_velocity}.")
