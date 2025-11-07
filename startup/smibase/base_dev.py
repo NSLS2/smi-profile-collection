@@ -3,6 +3,7 @@ print(f"Loading {__file__}")
 import os
 from tiled.client import from_uri
 from bluesky_tiled_plugins import TiledWriter
+from bluesky.callbacks.buffer import BufferingWrapper
 import copy
 
 from IPython import get_ipython
@@ -43,6 +44,9 @@ def patch_resource(doc):
 # Configure a Tiled writing client
 tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi/migration"]
 tw = TiledWriter(tiled_writing_client_sql, batch_size=1, patches = {'resource': patch_resource, 'descriptor': patch_descriptor})
+
+# Optional: Thread-safe wrapper for TiledWriter
+tw = BufferingWrapper(tw)
 
 RE.subscribe(tw)
 
