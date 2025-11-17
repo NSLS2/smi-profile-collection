@@ -50,7 +50,7 @@ class HFM_voltage(Device):
     )
 
     def set_target(self, mode="SWAXS"):
-        ch_pattern = re.compile("ch(?P<number>\d{1,2})")
+        ch_pattern = re.compile(r"ch(?P<number>\d{1,2})")
         for att_an in dir(self):
             ch_pattern_match = ch_pattern.match(att_an)
             if ch_pattern_match and "trg" in att_an:
@@ -155,7 +155,7 @@ class VFM_voltage(Device):
     ]
 
     def set_target(self, mode="SWAXS"):
-        ch_pattern = re.compile("ch(?P<number>\d{1,2})")
+        ch_pattern = re.compile(r"ch(?P<number>\d{1,2})")
         for att_an in dir(self):
             ch_pattern_match = ch_pattern.match(att_an)
             if ch_pattern_match and "trg" in att_an:
