@@ -1,4 +1,4 @@
-name: Test IPython beamline profiles
+name: Test Pixi Startup
 permissions:
   contents: read
 

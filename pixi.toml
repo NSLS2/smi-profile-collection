@@ -54,6 +54,14 @@ numpy = ">2"
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 
+[feature.test.dependencies]
+pytest = ">=9.0.2,<10"
+ipython = ">=9.5.0"
+
+[feature.test.tasks]
+tests = "pytest tests"
+
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
+test = {features=["profile", "test"], solve-group="profile"}

@@ -71,17 +71,20 @@ def mock_services():
          patch("tiled.client.from_profile", return_value=MagicMock()), \
          patch("tiled.client.from_uri", return_value=MagicMock()), \
          patch("pyOlog.SimpleOlogClient", return_value=MagicMock()):
-        os.environ["TILED_BLUESKY_WRITING_API_KEY_SIX"] = "mocked_api_key"
+        os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"] = "mocked_api_key"
         yield
-    del os.environ["TILED_BLUESKY_WRITING_API_KEY_SIX"]
+    del os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"]
 
 @pytest.fixture
 def mock_nslsii():
-    def mock_configure_base(ipython_user_ns, beamline_name, **kwargs):
+    def mock_configure_base(ipython_user_ns, beamline_name=None, **kwargs):
+        from bluesky.callbacks.best_effort import BestEffortCallback
         ipython_user_ns["RE"] = MagicMock()
         ipython_user_ns["sd"] = MagicMock()
+        ipython_user_ns["bec"] = BestEffortCallback()
+        
 
-    def mock_configure_kafka_publisher(run_engine, beamline_name):
+    def mock_configure_kafka_publisher(run_engine, beamline_name=None, **kwargs):
         ...
 
     with patch("nslsii.configure_base", side_effect=mock_configure_base), \
@@ -110,7 +113,7 @@ def startup_shell(mock_all_ophyd_devices, mock_services, mock_nslsii, startup_di
     shell = InteractiveShell.instance(profile_dir=profile_dir)
     
     try:
-        with patch("builtins.input", return_value="SIX"):
+        with patch("builtins.input", return_value="SMI"):
             for file in sorted(startup_dir.glob("*.py")):
                 print(f"Running {file}")
                 with open(file, "r") as f:
@@ -125,3 +128,4 @@ def startup_shell(mock_all_ophyd_devices, mock_services, mock_nslsii, startup_di
 
 def test_startup_namespace(startup_shell):
     assert "RE" in globals(), "RunEngine not found"
+    assert "bec" in globals(), "BestEffortCallback not found"
