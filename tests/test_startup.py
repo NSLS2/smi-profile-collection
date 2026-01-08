@@ -25,7 +25,7 @@ def mock_all_ophyd_devices():
         return
     
     def mock_get(self, *args, **kwargs):
-        return 0
+        return 7
     
     def mock_subscribe(self, *args, **kwargs):
         return 0
@@ -33,6 +33,7 @@ def mock_all_ophyd_devices():
     # Save originals
     originals = {
         'Device.wait_for_connection': ophyd.Device.wait_for_connection,
+        'Device.connected': ophyd.Device.connected,
         'EpicsSignal.wait_for_connection': ophyd.signal.EpicsSignal.wait_for_connection,
         'EpicsSignalBase.wait_for_connection': ophyd.signal.EpicsSignalBase.wait_for_connection,
         'EpicsSignalBase.get': ophyd.signal.EpicsSignalBase.get,
@@ -40,10 +41,13 @@ def mock_all_ophyd_devices():
         'EpicsSignalBase.subscribe': ophyd.signal.EpicsSignalBase.subscribe,
         'EpicsSignalBase.set': ophyd.signal.EpicsSignalBase.set,
         'EpicsSignalBase.set_defaults': ophyd.signal.EpicsSignalBase.set_defaults,
+        'PVPositioner.position': ophyd.PVPositioner.position,
+        'EpicsMotor.position': ophyd.EpicsMotor.position,
     }
 
     # Apply mocks
     ophyd.Device.wait_for_connection = noop
+    ophyd.Device.connected = property(lambda self: True)
     ophyd.signal.EpicsSignal.wait_for_connection = noop
     ophyd.signal.EpicsSignalBase.wait_for_connection = noop
     ophyd.signal.EpicsSignalBase.get = mock_get
@@ -52,10 +56,15 @@ def mock_all_ophyd_devices():
     ophyd.signal.EpicsSignalBase.set = noop
     ophyd.signal.EpicsSignalBase.set_defaults = cls_noop
     
+    # Mock position property to return a safe default for disconnected motors
+    ophyd.PVPositioner.position = property(lambda self: 0.0)
+    ophyd.EpicsMotor.position = property(lambda self: 0.0)
+    
     yield
     
     # Restore originals
     ophyd.Device.wait_for_connection = originals['Device.wait_for_connection']
+    ophyd.Device.connected = originals['Device.connected']
     ophyd.signal.EpicsSignal.wait_for_connection = originals['EpicsSignal.wait_for_connection']
     ophyd.signal.EpicsSignalBase.wait_for_connection = originals['EpicsSignalBase.wait_for_connection']
     ophyd.signal.EpicsSignalBase.get = originals['EpicsSignalBase.get']
@@ -63,6 +72,8 @@ def mock_all_ophyd_devices():
     ophyd.signal.EpicsSignalBase.subscribe = originals['EpicsSignalBase.subscribe']
     ophyd.signal.EpicsSignalBase.set = originals['EpicsSignalBase.set']
     ophyd.signal.EpicsSignalBase.set_defaults = originals['EpicsSignalBase.set_defaults']
+    ophyd.PVPositioner.position = originals['PVPositioner.position']
+    ophyd.EpicsMotor.position = originals['EpicsMotor.position']
 
 
 @pytest.fixture
