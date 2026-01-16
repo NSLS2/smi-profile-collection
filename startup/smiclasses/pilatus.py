@@ -320,11 +320,10 @@ class SAXSPositions(Device):
 
 # "multi_count" plan is dedicated to the time resolved Pilatus runs when the number of images in area detector is more than 1
 
-
 class WAXS_Motors(Device):
-    arc = Cpt(EpicsMotor, "WAXS:1-Ax:Arc}Mtr",name='arc')
-    bs_x = Cpt(EpicsMotor, "MCS:1-Ax:5}Mtr",name='bs_x')
-    bs_y = Cpt(EpicsMotor, "BS:WAXS-Ax:y}Mtr",name='bs_y')
+    arc = Cpt(EpicsMotor, "XF:12IDC-ES:2{WAXS:1-Ax:Arc}Mtr",name='arc')
+    bs_x = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:1}Mtr",name='bs_x')
+    bs_y = Cpt(EpicsMotor, "XF:12IDC-ES:2{BS:WAXS-Ax:y}Mtr",name='bs_y')
     test = 5
     bsx_offset = -58.5
                 # offset from the beam center to the beamstop in mm
@@ -382,7 +381,7 @@ class WAXS_Motors(Device):
 class WAXS_Detector(Pilatus):
 ## real positions of the SAXS detector and the beamstop
     ## WAXS det position and beamstop (mounted on the same stage)
-    motors = Cpt(WAXS_Motors,"XF:12IDC-ES:2{",add_prefix= "", kind="normal")
+    motors = Cpt(WAXS_Motors,"",add_prefix= "", kind="normal")
 
 ## constants for the beam center calculation
     beam_center_x_px = Cpt(Signal,value =103, kind="normal")
@@ -572,3 +571,33 @@ class SAXS_Detector(Pilatus):
             print("Sample distance offset: ", self.sample_offset_z_mm.get())
 
 
+
+def set_energy_cam(cam,en_ev):
+     
+    en = en_ev / 1000 # change to kev
+
+    if en<2 : # invalid energy
+        en = 16.1
+        gain = 1
+    elif en<4:
+        gain = 3
+    elif en < 7:
+        gain = 2
+    elif en < 20:
+        gain = 1
+    else:
+        gain = 0    
+
+    if en < 3.2:
+        thresh = 1.6
+    elif 13 < en < 22 and 'waxs' in cam.name: ## avoid the fluoresence from the waxs beamstop
+        thresh = 11.5
+    else:
+        thresh = en/2
+
+    cam.cam_energy.put(en)
+    cam.threshold_energy.put(thresh)
+    cam.gain_menu.put(gain)
+    cam.threshold_apply.put(1)
+
+    cam.energyset.set(en) # store so it remembers on failure and resets

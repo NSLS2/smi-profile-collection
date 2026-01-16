@@ -197,6 +197,7 @@ class SMIBeam(object):
                 yield from self._actuateFoil(foil, "Retract")
 
         # Double check that it worked
+        # This does not work
         current_state = yield from self._foilState()
         if current_state != target_state:
             print("WARNING: Foils did not actuate correctly")

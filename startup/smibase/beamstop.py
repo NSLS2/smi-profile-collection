@@ -8,7 +8,7 @@ from time import ctime
 
 
 saxs_bs = SAXSBeamStops("XF:12IDC-ES:2{BS:SAXS-Ax:", name="saxs_beamstop")
-waxs_bs = EpicsMotor("XF:12IDC-ES:2{MCS:1-Ax:5}Mtr", name="waxs_beamstop")
+waxs_bs = EpicsMotor("XF:12ID2C-ES{MCS:2-Ax:1}Mtr", name="waxs_beamstop")
 
 
 
