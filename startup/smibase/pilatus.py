@@ -150,38 +150,6 @@ sd = get_ipython().user_ns['sd']
 
 sd.baseline.extend([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,pil2M.beam_center_y_px])
 
-
-def set_energy_cam(cam,en_ev):
-     
-    en = en_ev / 1000 # change to kev
-
-    if en<2 : # invalid energy
-        en = 16.1
-        gain = 1
-    elif en<4:
-        gain = 3
-    elif en < 7:
-        gain = 2
-    elif en < 20:
-        gain = 1
-    else:
-        gain = 0    
-
-    if en < 3.2:
-        thresh = 1.6
-    elif 13 < en < 22 and 'waxs' in cam.name: ## avoid the fluoresence from the waxs beamstop
-        thresh = 11.5
-    else:
-        thresh = en/2
-
-    cam.cam_energy.put(en)
-    cam.threshold_energy.put(thresh)
-    cam.gain_menu.put(gain)
-    cam.threshold_apply.put(1)
-
-    cam.energyset.set(en) # store so it remembers on failure and resets
-
-
 def beamstop_save():
     """
     Save the current configuration

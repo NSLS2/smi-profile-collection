@@ -2,6 +2,7 @@ print(f"Loading {__file__}")
 
 import matplotlib.pyplot as plt
 import bluesky.plan_stubs as bps
+import bluesky.preprocessors as bpp
 import bluesky.plans as bp
 from smibase.manipulators import prs, piezo, stage
 from .pilatus import pil2M
@@ -381,6 +382,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     yield from align_gisaxs_th_hex(0.5, 31)
 
     # move to theta 0 + value
+    # Should this go to ps.peak - total_angle rather than -1????
     yield from bps.mv(stage.th, ps.peak -0.1 + angle)
 
     # Set reflected ROI

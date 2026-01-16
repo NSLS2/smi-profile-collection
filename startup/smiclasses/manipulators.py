@@ -35,17 +35,20 @@ class HEXAPOD(Device):
 
 
 class SMARACT(Device):
-    x = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:0}Mtr", labels=["piezo"])
-    y = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:3}Mtr", labels=["piezo"])
-    z = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:6}Mtr", labels=["piezo"])
+   # x = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:0}Mtr", labels=["piezo"])
+   # y = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:3}Mtr", labels=["piezo"])
+   # z = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:6}Mtr", labels=["piezo"])
     # swapping Th and ch as of Oct 2024 when old th motor seems to fail it's sensor
     #th = Cpt(EpicsMotor, "4}Mtr", labels=["piezo"])
     #ch = Cpt(EpicsMotor, "1}Mtr", labels=["piezo"])
-    ch1 = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:4}Mtr", labels=["piezo"])
-    th1 = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:1}Mtr", labels=["piezo"])
+   # ch1 = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:4}Mtr", labels=["piezo"])
+   # th1 = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:1}Mtr", labels=["piezo"])
     # changing the smaract 1 motors to ch1 and th1 to add smaract 2 replacements below
-    ch = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:6}Mtr", labels=["piezo"])
-    th = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:5}Mtr", labels=["piezo"])
+    x = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:3}Mtr", labels=["piezo"])
+    y = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:5}Mtr", labels=["piezo"])
+    z = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:4}Mtr", labels=["piezo"])
+    ch = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:2}Mtr", labels=["piezo"])
+    th = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:6}Mtr", labels=["piezo"])
 
 
 
