@@ -42,7 +42,7 @@ def align_bdm_height(rang=0.3, point=31, der=False):
     """
     yield from bp.rel_scan([pil2M], bdm.y, -rang, rang, point)
     ps(der=der, plot=False)
-    print(f'Moving to halfcut at {ps.peak}')
+    print(f'Moving to halfcut at {ps.cen}')
     yield from bps.mv(bdm.y, ps.cen)
 
 
@@ -101,8 +101,11 @@ def align_bdm_th(rang=0.3, point=31):
     """
     yield from bp.rel_scan([pil2M], bdm.th, -rang, rang, point)
     ps(plot=False)
-    print(f'Moving to peak position at {ps.peak}')
-    yield from bps.mv(bdm.th, ps.peak)
+    # print(f'Moving to peak position at {ps.peak}')
+    # yield from bps.mv(bdm.th, ps.peak)
+    # using center instead of peak
+    print(f'Moving to peak center position at {ps.cen}')
+    yield from bps.mv(bdm.th, ps.cen)
 
 
 def align_xrr_prs(rang=0.3, point=31):
@@ -957,7 +960,7 @@ def bisection_search_plan(motor=piezo.y, step_size=1.0, min_step=0.05, intensity
 from .manipulators import bdm
 
 
-def alignment_bdm(angle=0.1):
+def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     """
     Regular alignment routine for the bounce down mirror. 
     First, scan the mirror height and incident angle on the direct beam.
@@ -995,7 +998,7 @@ def alignment_bdm(angle=0.1):
     yield from bps.mv(bdm.th, ps.peak + angle)
 
     # Set reflected ROI for beam bending down
-    yield from smi.setReflectedBeamROI(total_angle=-angle, technique="gisaxs",sample_z_offset_mm=185)
+    yield from smi.setReflectedBeamROI(total_angle=-angle, technique="gisaxs",sample_z_offset_mm=sample_z_offset_mm)
 
     # Scan theta and height
     yield from align_bdm_th(0.15, 21)
@@ -1004,7 +1007,7 @@ def alignment_bdm(angle=0.1):
 
     # Scan theta and height finer
     yield from align_bdm_height_rb(.1, 21)
-    yield from align_bdm_th(0.05, 51)  # was .025, 21 changed to .1 31
+    yield from align_bdm_th(0.02, 51)  # was .025, 21 changed to .1 31
 
     # Close all the matplotlib windows
     plt.close("all")
@@ -1067,6 +1070,8 @@ def alignment_gisaxs_finer_for_bdm(angle=0.1):
 
     # Return angle
     yield from bps.mv(piezo.th, piezo.th.position-angle)
+    print(f'final piezo_y pos:{piezo.y.position}.')
+    print(f'final piezo_th pos:{piezo.th.position}.')
     # yield from smi.modeMeasurement()
 
     # Deactivate the automated derivative calculation

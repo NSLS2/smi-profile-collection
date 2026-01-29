@@ -25,6 +25,7 @@ databroker = "==2.0.0"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
 bluesky-tiled-plugins = ">=2.0.0b68"
 ophyd-async = ">=0.13.7,<0.14"
+openai = ">=2.15.0,<3"
 
 
 [feature.profile.pypi-dependencies]
@@ -57,3 +58,4 @@ pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
+
