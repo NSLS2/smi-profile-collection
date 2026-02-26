@@ -20,4 +20,4 @@ thorlabs_su = ThorlabsMotor('XF:12ID2-ES{DDSM100-Ax:X1}Mtr',name='thorlabs_su')
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([ MDrive, thorlabs_su])
+#sd.baseline.extend([ MDrive, thorlabs_su])

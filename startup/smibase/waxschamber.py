@@ -1,7 +1,7 @@
 print(f"Loading {__file__}")
 
 
-from smiclasses.waxschamber import sample_chamber_pressure
+from smiclasses.waxschamber import Sample_Chamber
 
 def get_chamber_pressure(signal):
     value = signal.get()
@@ -13,8 +13,8 @@ def get_chamber_pressure(signal):
         raise
 
 
-chamber_pressure = sample_chamber_pressure(
-    "XF:12IDC-VA:2", name="chamber_pressure"
+chamber_pressure = Sample_Chamber(
+    "", name="chamber"
 )  # Change PVs
 chamber_pressure.waxs.kind = "hinted"
 chamber_pressure.maxs.kind = "hinted"

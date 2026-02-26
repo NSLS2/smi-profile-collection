@@ -12,10 +12,10 @@ from ophyd import (
 class TwoButtonShutter(Device):
     # TODO this needs to be fixed in EPICS as these names make no sense
     # the vlaue comingout of the PV do not match what is shown in CSS
-    open_cmd = Cpt(EpicsSignal, "Cmd:Opn-Cmd", string=True)
+    open_cmd = Cpt(EpicsSignal, "Cmd:Opn-Cmd", string=True,put_complete=False)
     open_val = "Open"
 
-    close_cmd = Cpt(EpicsSignal, "Cmd:Cls-Cmd", string=True)
+    close_cmd = Cpt(EpicsSignal, "Cmd:Cls-Cmd", string=True,put_complete=False)
     close_val = "Not Open"
 
     status = Cpt(EpicsSignalRO, "Pos-Sts", string=True)
@@ -31,7 +31,10 @@ class TwoButtonShutter(Device):
         if self._set_st is not None:
             raise RuntimeError("trying to set while a set is in progress")
 
-        cmd_map = {self.open_str: self.open_cmd, self.close_str: self.close_cmd}
+        cmd_map = {self.open_str: self.open_cmd,
+                   'open': self.open_cmd, 
+                   self.close_str: self.close_cmd,
+                   'close': self.close_cmd}
         target_map = {self.open_str: self.open_val, self.close_str: self.close_val}
 
         cmd_sig = cmd_map[val]

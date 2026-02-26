@@ -4,9 +4,10 @@ from time import ctime
 from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
 from .amptek import amptek
 from .energy import energy
+from smiclasses.waxschamber import Sample_Chamber
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
-from ophyd import EpicsSignal
+from ophyd import EpicsSignal, Device, Component
 
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
@@ -284,7 +285,6 @@ def set_energy(en_ev, threshold=None, gain=1):
     set_energy_cam(pil2M.cam, en_ev, thresh_ev=threshold, gain=gain)
 
 
-
 # def check_condition():
 #     #TODO: check if the pressure in the chamber is low enough or if the 900KW power is enabled
 
@@ -300,3 +300,8 @@ def set_energy(en_ev, threshold=None, gain=1):
 #         else:
 #             print(f"Condition not met. Sleeping for {2} second(s).")
 #             time.sleep(2) # Pause the loop for the specified interval
+
+
+
+
+
