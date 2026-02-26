@@ -132,7 +132,7 @@ class SMIBeam(object):
         elif 3500 < self.dcm.energy.position <= 3750:
             target_state = [att2_5, att2_9]
         elif 3750 < self.dcm.energy.position <= 3900:
-            target_state = [att2_5, att2_7, att2_8]
+            target_state = [att2_5, att2_9]
         elif 3900 < self.dcm.energy.position < 4200:
             target_state = [att2_5, att2_9, att2_10]
         elif 4200 < self.dcm.energy.position < 4500:
@@ -232,10 +232,10 @@ class SMIBeam(object):
     def calc_bswaxs_posy(self):
         # Move the waxs beamstop up for safety. If tender, covers up to 1deg ai, if hard, covers up to 0.4deg ai
         if self.dcm.energy.position < 6000:
-            yield from bps.mv(waxs.bs_y, 0.95)
+            yield from bps.mv(waxs.bs_y, -0.05)
         else:
             # it is -7 for transmission, around -2 to -3 for reflection
-            yield from bps.mv(waxs.bs_y, -7)
+            yield from bps.mv(waxs.bs_y, -0.05)
 
 
 # End class SMIBeam(object)

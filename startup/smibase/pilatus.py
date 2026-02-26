@@ -1,8 +1,9 @@
 print(f"Loading {__file__}")
 
 from time import ctime
-from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector
+from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
 from .amptek import amptek
+from .energy import energy
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
 from ophyd import EpicsSignal
@@ -192,3 +193,110 @@ def beamstop_save():
 
 
     print(current_config)
+
+# Todo: No module paramiko
+import telnetlib
+import paramiko
+import time
+
+# SSH connection details
+hostname = 'xf12id2-det3'
+username = 'det'
+password = 'Pilatus2'
+# Create an SSH client
+client = paramiko.SSHClient()
+client.load_system_host_keys()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+telnet_command = 'telnet localhost 20002'
+
+#ToDo need to add the good threshold in the restart function> It currently run the default from the camserver
+def restartWAXS():
+    try:
+        # Connect to the SSH server
+        client.connect(hostname=hostname,username=username, password=password)
+
+        command_to_run = './start_camserver'  # Replace this with your desired command
+        stdin, stdout, stderr = client.exec_command(command_to_run)
+
+        # Start an interactive shell session
+        ssh_shell = client.invoke_shell()
+
+        # Send the Telnet command to the shell
+        ssh_shell.send(telnet_command + '\n')
+
+        # Create a Telnet session on the SSH server
+        tn = telnetlib.Telnet()
+
+        # Attach the shell transport to the Telnet session
+        tn.sock = ssh_shell
+
+        ssh_shell.send('\x18\x18')
+        # Read and monitor the output of the Telnet command
+
+        start_time=time.time()
+        completed = False
+        while time.time()-start_time<120:
+            output = tn.read_very_eager().decode()
+            if output:
+                # print(output)
+                if 'Set detector gap-fill to: -1' in output:
+                    yield from bps.sleep(3)
+                    print('Detector up and running')
+                    completed = True
+                    break
+
+            # Check if the Telnet connection is closed
+            if tn.eof:
+                print('Connection failed. Either Detector is not on or chamber not pumped')
+                break
+        
+        if not completed:
+            print('something went wrong, the detector is not ready to use')
+        
+        # Close the SSH connection
+        client.close()
+
+    finally:
+        # Close the SSH connection
+        client.close()
+
+
+
+#restartWAXS after pumping the vacuum below 0.5mbar
+def startWAXS():
+    #telnet and restart camserver
+    yield from restartWAXS()
+
+    #Reset exposure time and acquire period qdter tyurning on the detector
+    det_exposure_time(0.5, 0.5)
+
+    #set the energy and threshold
+    pil900KW.cam.threshold_apply.put(1)
+
+    # ToDo: Confirm if the default value saved in camserver are well loaded
+    # to add - set energy of the camera to the current beamline energy
+    #set_energy_cam(pil900KW.cam,energy.get())
+
+def set_energy(en_ev, threshold=None, gain=1):
+    energy.move(en_ev)
+    set_energy_cam(pil900KW.cam, en_ev, thresh_ev=threshold, gain=gain)
+    set_energy_cam(pil2M.cam, en_ev, thresh_ev=threshold, gain=gain)
+
+
+
+# def check_condition():
+#     #TODO: check if the pressure in the chamber is low enough or if the 900KW power is enabled
+
+# def auto_pump():
+#     print(f'starting chamber pumping')
+#     # TODO: find all of the PVs in the auto pumping routine, and make objects
+#     # perform the autopumping routine
+#     print(f"Starting periodic check (every {2} seconds)... to wait for chamber to be pumped down")
+#     while True:
+#         if check_condition():
+#             restartWAXS()
+#             break  # Exit the loop once the condition is met and action is performed
+#         else:
+#             print(f"Condition not met. Sleeping for {2} second(s).")
+#             time.sleep(2) # Pause the loop for the specified interval

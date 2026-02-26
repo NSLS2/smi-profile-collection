@@ -325,7 +325,7 @@ class WAXS_Motors(Device):
     bs_x = Cpt(EpicsMotor, "XF:12ID2C-ES{MCS:2-Ax:1}Mtr",name='bs_x')
     bs_y = Cpt(EpicsMotor, "XF:12IDC-ES:2{BS:WAXS-Ax:y}Mtr",name='bs_y')
     test = 5
-    bsx_offset = -58.5
+    bsx_offset = -58 # ToDo: change this to 58.5 but the bsz offset to adjust 
                 # offset from the beam center to the beamstop in mm
                 # this value should be reset in the motor offset - not here
                 # the procedure is to move the motor to the negative limit (outboard) and run home_forward.set(1) on the waxs beamstop x
@@ -335,7 +335,7 @@ class WAXS_Motors(Device):
                 # distance from the center of arc rotation (sample position) to the beamstop
                 # in mm   
                 # if the beamstop mounting is changed or bent, this value may need to be tweaked
-    bsx_safe_pos = 16 
+    bsx_safe_pos = -68.5
                 # x position of the beamstop when it IS NOT in the beam (out of the way direct beam and scattering)
     
     # when moving the waxs detector, the beamstop must be moved to a new position
@@ -572,28 +572,36 @@ class SAXS_Detector(Pilatus):
 
 
 
-def set_energy_cam(cam,en_ev):
+def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
      
     en = en_ev / 1000 # change to kev
+    thresh = thresh_ev / 1000 # change to kev
 
-    if en<2 : # invalid energy
-        en = 16.1
-        gain = 1
-    elif en<4:
-        gain = 3
-    elif en < 7:
-        gain = 2
-    elif en < 20:
-        gain = 1
-    else:
-        gain = 0    
+    if not thresh:
+        if en<2 : # invalid energy
+            en = 16.1
+            gain = 1
+        elif en<4:
+            gain = 3
+        elif en < 7:
+            gain = 2
+        elif en < 20:
+            gain = 1
+        else:
+            gain = 0    
+        if en < 2.6:
+            thresh = 1.6
+        elif en < 3.5:
+            thresh = 1.7
+        elif en < 4:
+            en_ev = 1.8
+        elif en < 5:
+            en_ev = 2
 
-    if en < 3.2:
-        thresh = 1.6
-    elif 13 < en < 22 and 'waxs' in cam.name: ## avoid the fluoresence from the waxs beamstop
-        thresh = 11.5
-    else:
-        thresh = en/2
+        elif 13 < en < 22 and 'pil900KW' in cam.name: ## avoid the fluoresence from the waxs beamstop
+            thresh = 11.0
+        else:
+            thresh = en/2
 
     cam.cam_energy.put(en)
     cam.threshold_energy.put(thresh)

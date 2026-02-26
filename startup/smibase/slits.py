@@ -27,4 +27,6 @@ dsa = APER("XF:12IDC-OP:2{Lens:CRL-Ax:", name="dsa")
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([wbs, ssa, eslit, cslit, dsa])
+#ToDO put back wbs when bach
+# sd.baseline.extend([wbs, ssa, eslit, cslit, dsa])
+sd.baseline.extend([ssa, eslit, cslit, dsa])

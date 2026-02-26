@@ -15,6 +15,13 @@ from .beam import SMI as smi
 # Get the bluesky callback
 bec = get_ipython().user_ns['bec']
 
+from bluesky.callbacks.mpl_plotting import QtAwareCallback
+class close_plots(QtAwareCallback):
+    def stop(self,doc):
+        uid = doc['run_start']
+        plt.close('all')
+        # close plots on a stop document plotting
+
 
 def align_gisaxs_height(rang=0.3, point=31, der=False):
     """
@@ -210,10 +217,14 @@ def alignment_gisaxs(angle=0.15):
     # Scan theta and height
     yield from align_gisaxs_th(0.2, 21)
     yield from align_gisaxs_height_rb(150, 16)
-    yield from align_gisaxs_th(0.1, 31)  # was .025, 21 changed to .1 31
+    # yield from align_gisaxs_th(0.1, 31) # was .025, 21 changed to .1 31
+    # replacing above line with the two lines below to automatically close matplotlib plots after that scan
+    
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th(0.1, 31), cb)  
 
-    # Close all the matplotlib windows
-    plt.close("all")
+    # Close all the matplotlib windows  # integrated into the command above
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(piezo.th, piezo.th.position-angle)
@@ -258,10 +269,13 @@ def alignement_gisaxs_doblestack(angle=0.15):
     # Scan theta and height
     yield from align_gisaxs_th(0.2, 21)
     yield from align_gisaxs_height_rb(150, 16)
-    yield from align_gisaxs_th(0.1, 21)  # changed from .025 to .1)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th(0.1, 21), cb)  
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
+
 
     # Return angle
     yield from bps.mv(piezo.th, ps.cen - angle)
@@ -296,8 +310,11 @@ def alignement_gisaxs_rough(angle=0.15):
     yield from align_gisaxs_height(800, 21, der=True)
     yield from align_gisaxs_th(2.0, 40)  # was 1.5 27
 
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th(2.0, 40), cb) 
+
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from smi.modeMeasurement()
@@ -341,10 +358,12 @@ def alignement_gisaxs_multisample(angle=0.15):
     # Scan theta and height
     yield from align_gisaxs_th(0.2, 31)
     yield from align_gisaxs_height_rb(150, 21)
-    yield from align_gisaxs_th(0.025, 21)  # changed from .025 to .1 on 3-38-22
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th(0.025, 21), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(piezo.th, ps.cen - angle)
@@ -394,10 +413,13 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     # Scan theta and height
     yield from align_gisaxs_th_hex(0.3, 31)
     yield from align_gisaxs_height_hex(0.15, 26)
-    yield from align_gisaxs_th_hex(0.05, 21)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th_hex(0.05, 21), cb) 
+
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(stage.th, ps.cen - angle)
@@ -432,34 +454,13 @@ def alignement_gisaxs_hex_roughsample(angle=0.1):
     yield from align_gisaxs_height_hex(0.5, 15, der=True)
     yield from align_gisaxs_th_hex(0.5, 21)
     yield from align_gisaxs_height_hex(0.2, 25, der=True)
-    yield from align_gisaxs_th_hex(0.2, 21)
-    # # move to theta 0 + value
-    # yield from bps.mv(stage.th, ps.peak + angle)
 
-    # # Set reflected ROI
-    # yield from smi.setReflectedBeamROI(total_angle=angle, technique='gisaxs')
-
-    # yield from bps.mv(att2_10.open_cmd, 1)
-    # yield from bps.sleep(1)
-    # yield from bps.mv(att2_10.open_cmd, 1)
-    # yield from bps.sleep(1)
-    # yield from bps.mv(att2_9.open_cmd, 1)
-    # yield from bps.sleep(1)
-    # yield from bps.mv(att2_9.open_cmd, 1)
-    # yield from bps.sleep(1)
-    # yield from bps.mv(att2_11.close_cmd, 1)
-    # yield from bps.sleep(1)
-    # yield from bps.mv(att2_11.close_cmd, 1)
-    # # Scan theta and height
-    # #yield from align_gisaxs_th_hex(0.3, 21)
-    # yield from align_gisaxs_height_hex(0.08, 21)
-    # #yield from align_gisaxs_th_hex(0.05, 21)
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th_hex(0.2, 21), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
-    # Return angle
-    #      yield from bps.mvr(stage.th, -angle)
     yield from smi.modeMeasurement()
 
     # Deactivate the automated derivative calculation
@@ -497,10 +498,12 @@ def alignement_gisaxs_hex_short(angle=0.12):
     # Scan theta and height
     yield from align_gisaxs_th_hex(0.7, 23)
     yield from align_gisaxs_height_hex(0.15, 31)
-    yield from align_gisaxs_th_hex(0.06, 25)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th_hex(0.06, 25), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(stage.th, ps.cen - angle)
@@ -533,10 +536,12 @@ def quickalign_gisaxs(angle=0.15):
 
     # Scan theta and height
     yield from align_gisaxs_height_rb(200, 31)
-    yield from align_gisaxs_th(0.1, 21)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th(0.1, 21), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(piezo.th, ps.cen - angle)
@@ -591,10 +596,12 @@ def alignement_xrr(angle=0.15):
     # Scan theta and height
     yield from align_xrr_prs(0.2, 31)
     yield from align_xrr_height(200, 21)
-    yield from align_xrr_prs(0.05, 21)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(prs, ps.cen + angle)
@@ -649,10 +656,12 @@ def alignement_xrr_xmotor(angle=0.15):
     # Scan theta and height
     yield from align_xrr_prs(0.2, 31)
     yield from align_xrr_height_motx(200, 21)
-    yield from align_xrr_prs(0.05, 21)
+
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(prs, ps.cen + angle) # finish the alignment at 0
@@ -693,8 +702,11 @@ def alignement_gisaxs_short(angle=0.15):
     yield from align_gisaxs_height(800, 21, der=True)
     yield from align_gisaxs_th(1.5, 27)
     
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_th_hex(0.06, 25), cb) 
+
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
     yield from smi.modeMeasurement()
 
     # Deactivate the automated derivative calculation
@@ -739,7 +751,7 @@ def fast_align(angle=0.1):
     print('y position is {:.3f} and theta position is {:.3f}'.format(piezo.y.position, piezo.th.position))
 
 
-def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=1000):
+def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=40):
     '''
     Fast alignment procedure for GISAXS. This involves first taking a direct beam data to know the db intensity.
     Then, the sample height and incident angle are scanned with the direct beam roi.
@@ -775,7 +787,6 @@ def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=1000):
                                        size=[48, 8], roi=pil2M.roi2)
 
     #set ROI3 as a fixed larged area
-
     yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs", 
                                        size=[40,10], roi=pil2M.roi3)
 
@@ -813,11 +824,12 @@ def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=1000):
                                          detector_suffix='_stats1_total')
                 
     #check reflection beam
-    yield from bps.mv(piezo.th, angle)
-    yield from bp.count([pil2M])
+    yield from bps.mvr(piezo.th, angle)
+    yield from bp.count([detector])
     
     #check if there is the reflected beam in roi2, enough intensity and max and centroid match
-    if abs(pil2M.stats3.max_xy.get().y - pil2M.stats3.centroid.get().y) < 20 and pil2M.stats3.max_value.get() > intensity_threshold:
+    # if abs(pil2M.stats3.max_xy.get().y - pil2M.stats3.centroid.get().y) < 20 and pil2M.stats3.max_value.get() > intensity_threshold:
+    if pil2M.stats3.max_value.get() > intensity_threshold:
         #continue the fast alignment 
         print('The reflective beam is found! Continue the fast alignment')
         
@@ -1010,7 +1022,7 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     yield from align_bdm_th(0.02, 51)  # was .025, 21 changed to .1 31
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(bdm.th, bdm.th.get() - angle)
@@ -1066,7 +1078,7 @@ def alignment_gisaxs_finer_for_bdm(angle=0.1):
 
 
     # Close all the matplotlib windows
-    plt.close("all")
+    # plt.close("all")
 
     # Return angle
     yield from bps.mv(piezo.th, piezo.th.position-angle)
