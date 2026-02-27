@@ -19,7 +19,6 @@ from ophyd.areadetector.cam import PilatusDetectorCam
 from ophyd.areadetector.detectors import PilatusDetector
 from ophyd.areadetector.base import EpicsSignalWithRBV as SignalWithRBV
 from ophyd.areadetector.filestore_mixins import FileStoreTIFFIterativeWrite
-
 import bluesky.plans as bp
 import time
 from nslsii.ad33 import StatsPluginV33, SingleTriggerV33
@@ -33,7 +32,7 @@ import time as ttime
 from warnings import warn
 
 from smibase.energy import energy
-from smibase.base import RE
+from smibase.base import RE,mdsave
 from smibase.beamstop import SAXSBeamStops
 
 
@@ -410,6 +409,7 @@ class SAXS_Detector(Pilatus):
 ## the virtual positions of the beamcenter (in pixels) and the sample distance
     # values will be over written by the beam center calculation
     # based on the motor positions and the constant offsets
+
     beam_center_x_px = Cpt(Signal,value =-744, kind="normal")
     beam_center_x_mm = Cpt(Signal,value =127.968, kind="config")
     beam_center_y_px = Cpt(Signal,value =-1107, kind="normal")
@@ -422,24 +422,24 @@ class SAXS_Detector(Pilatus):
     # all other values should be set here from calibration / lookup table
     pixel_size_mm = Cpt(Signal,value =0.172, kind="config") # in mm
     # offset from 0th column pixel to the beam center at saxs position x = 0
-    beam_offset_x_mm = Cpt(Signal,value =128.398, kind="config") 
+    beam_offset_x_mm = Cpt(Signal,value =mdsave.get('saxs_beam_offset_x_mm',128.398), kind="config") 
     # offset from 0th row pixel to the beam center at saxs position y = 0
-    beam_offset_y_mm = Cpt(Signal,value =190.404, kind="config")
+    beam_offset_y_mm = Cpt(Signal,value =mdsave.get('saxs_beam_offset_y_mm',190.404), kind="config")
     # difference between the position.z and the actual sample-detector distance
-    sample_offset_z_mm = Cpt(Signal,value =0.0, kind="config")
+    sample_offset_z_mm = Cpt(Signal,value =mdsave.get('saxs_sample_offset_z_mm',0.0), kind="config")
     
 ## constants for the beamstop position
-    rod_offset_x_mm = Cpt(Signal,value =6.8, kind="config")
+    rod_offset_x_mm = Cpt(Signal,value = mdsave.get('saxs_rod_offset_x_mm',6.8), kind="config")
     # position of the beamstop when it IS in the beam x
-    rod_offset_y_mm = Cpt(Signal,value =0.0, kind="config") 
+    rod_offset_y_mm = Cpt(Signal,value = mdsave.get('saxs_rod_offset_y_mm',0.0), kind="config") 
     # position of the beamstop when it IS in the beam y
-    rod_safe_pos = Cpt(Signal,value =-200, kind="config") 
+    rod_safe_pos = Cpt(Signal,value = mdsave.get('saxs_rod_safe_pos',-200), kind="config") 
     # x position of the beamstop when it IS NOT in the beam (out of the way for the pin diode)
-    pd_offset_x_mm = Cpt(Signal,value =-227, kind="config") 
+    pd_offset_x_mm = Cpt(Signal,value = mdsave.get('saxs_pd_offset_x_mm',-227), kind="config") 
     # position of the beamstop when it IS in the beam x
-    pd_offset_y_mm = Cpt(Signal,value =6.8, kind="config") 
+    pd_offset_y_mm = Cpt(Signal,value = mdsave.get('saxs_pd_offset_y_mm',6.8), kind="config") 
     # position of the beamstop when it IS in the beam y
-    pd_safe_pos = Cpt(Signal,value =0.0, kind="config") 
+    pd_safe_pos = Cpt(Signal,value = mdsave.get('saxs_pd_safe_pos',0.0), kind="config") 
     # x position of the beamstop when it IS NOT in the beam (out of the way for the rod)
 
 
@@ -547,30 +547,141 @@ class SAXS_Detector(Pilatus):
         else:
             Exception(ValueError('Beamstop is not removed - please check system manually before continuing'))
     
+    def save_all_offsets(self):
+        mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
+        mdsave['saxs_rod_safe_pos']=self.rod_safe_pos.get()
+        mdsave['saxs_pd_offset_x_mm']=self.pd_offset_x_mm.get()
+        mdsave['saxs_pd_offset_y_mm']=self.pd_offset_y_mm.get()
+        mdsave['saxs_pd_safe_pos']=self.pd_safe_pos.get()
 
+    def save_rod_position(self):
+        self.rod_offset_x_mm.set(self.beamstop.x_rod.position)
+        mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
 
+    def save_pd_position(self):
+        self.pd_offset_x_mm.set(self.beamstop.x_pin.position)
+        self.pd_offset_y_mm.set(self.beamstop.y_pin.position)
+        mdsave['saxs_pd_offset_x_mm']=self.pd_offset_x_mm.get()
+        mdsave['saxs_pd_offset_y_mm']=self.pd_offset_y_mm.get()
+
+    
     def calc_offsets(self, distance, verbose=False):
-        # use a spline fit to calculate the offsets based on the distance
-        # this is a placeholder, the actual calculation will depend on the calibration
-        # the offsets are in mm
-        #self.beam_offset_x_mm.set(0.0)
-        #self.beam_offset_y_mm.set(0.0)
-        #self.rod_offset_x_mm.set(0.0)
-        #self.rod_offset_y_mm.set(0.0)
-        #self.pd_offset_x_mm.set(0.0)
-        #self.pd_offset_y_mm.set(0.0)
-        #self.sample_offset_z_mm.set(0.0)
+
+        attr_map = {
+            "beam_offset_x": self.beam_offset_x_mm,
+            "beam_offset_y": self.beam_offset_y_mm,
+            "rod_offset_x": self.rod_offset_x_mm,
+            "rod_offset_y": self.rod_offset_y_mm,
+            "pd_offset_x": self.pd_offset_x_mm,
+            "pd_offset_y": self.pd_offset_y_mm,
+            "sample_offset_z": self.sample_offset_z_mm,
+        }
+
+        for key, tk_var in attr_map.items():
+            value = self._interpolate_offset(distance, key)
+            tk_var.set(value)
+
         if verbose:
-            print("Offsets calculated based on distance: ", distance)
-            print("Beam center x offset: ", self.beam_offset_x_mm.get())
-            print("Beam center y offset: ", self.beam_offset_y_mm.get())
-            print("Rod x offset: ", self.rod_offset_x_mm.get())
-            print("Rod y offset: ", self.rod_offset_y_mm.get())
-            print("Pin diode x offset: ", self.pd_offset_x_mm.get())
-            print("Pin diode y offset: ", self.pd_offset_y_mm.get())
-            print("Sample distance offset: ", self.sample_offset_z_mm.get())
+            print(f"\nOffsets for distance {distance:.3f} mm:")
+            for key, tk_var in attr_map.items():
+                print(f"{key}: {tk_var.get():.4f} mm")
 
+    def _distance_key(self, distance):
+        """Convert float distance to canonical string key."""
+        return f"{float(distance):.6f}"
+    
+    def _interpolate_offset(self, distance, key, clamp=True):
 
+        cal = mdsave.get("distance_calibration", {})
+        if not cal:
+            return 0.0
+
+        valid_points = []
+
+        for d_str, offsets in cal.items():
+            if key in offsets:
+                valid_points.append((float(d_str), offsets[key]))
+
+        if not valid_points:
+            return 0.0
+
+        valid_points.sort()
+
+        distances = np.array([p[0] for p in valid_points])
+        values = np.array([p[1] for p in valid_points])
+
+        if len(distances) == 1:
+            return values[0]
+
+        if clamp:
+            if distance <= distances[0]:
+                return values[0]
+            if distance >= distances[-1]:
+                return values[-1]
+
+        return float(np.interp(distance, distances, values))
+
+    def add_calibration_point(self, distance, offsets_dict):
+        """
+        Add or update a calibration point.
+        offset_dict looks like
+        {
+            "beam_offset_x": 0.12,
+            "beam_offset_y": -0.03,
+            "rod_offset_x": 0.00,
+            "rod_offset_y": 0.01,
+            "pd_offset_x": -0.05,
+            "pd_offset_y": 0.02,
+            "sample_offset_z": 0.10,
+        }
+
+        Parameters
+        ----------
+        distance : float
+            Sample distance in mm.
+        offsets_dict : dict
+            Dictionary of offsets in mm.
+        """
+
+        if "distance_calibration" not in self.mdsave:
+            self.mdsave["distance_calibration"] = {}
+
+        key = self._distance_key(distance)
+
+        self.mdsave["distance_calibration"][key] = offsets_dict.copy()
+
+        print(f"Added calibration point at {float(key):.3f} mm")
+    
+
+    def get_current_offset_dict(self, include_zeros=True):
+        """
+        Return a dictionary of the current offset values (in mm).
+
+        Parameters
+        ----------
+        include_zeros : bool
+            If False, parameters equal to 0.0 are omitted.
+        """
+
+        attr_map = {
+            "beam_offset_x": self.beam_offset_x_mm,
+            "beam_offset_y": self.beam_offset_y_mm,
+            "rod_offset_x": self.rod_offset_x_mm,
+            "rod_offset_y": self.rod_offset_y_mm,
+            "pd_offset_x": self.pd_offset_x_mm,
+            "pd_offset_y": self.pd_offset_y_mm,
+            "sample_offset_z": self.sample_offset_z_mm,
+        }
+
+        offset_dict = {}
+
+        for key, tk_var in attr_map.items():
+            value = float(tk_var.get())
+
+            if include_zeros or abs(value) > 1e-12:
+                offset_dict[key] = value
+
+        return offset_dict
 
 def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
      

@@ -7,7 +7,7 @@ from ophyd import (
     Component as Cpt,
     DeviceStatus,
 )
-
+import datetime, time
 
 class TwoButtonShutter(Device):
     # TODO this needs to be fixed in EPICS as these names make no sense
@@ -35,7 +35,10 @@ class TwoButtonShutter(Device):
                    'open': self.open_cmd, 
                    self.close_str: self.close_cmd,
                    'close': self.close_cmd}
-        target_map = {self.open_str: self.open_val, self.close_str: self.close_val}
+        target_map = {self.open_str: self.open_val,
+                      'open': self.open_val,
+                      self.close_str: self.close_val,
+                      'close': self.close_val}
 
         cmd_sig = cmd_map[val]
         target_val = target_map[val]
@@ -64,8 +67,9 @@ class TwoButtonShutter(Device):
                 st._finished(success=False)
             if value == "None":
                 if not st.done:
-                    yield from bps.sleep(0.5)
+                    time.sleep(0.5)
                     cmd_sig.set(1)
+                    _time_fmtstr = '%Y-%m-%d %H:%M:%S'
                     ts = datetime.datetime.fromtimestamp(timestamp).strftime(
                         _time_fmtstr
                     )

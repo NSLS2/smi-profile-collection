@@ -12,25 +12,28 @@ from ophyd import EpicsSignal, Device, Component
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     """
-    Waits broke pilatus exposure set when setting burst mode
-    and hitting ctrl+c
+    exp_t: one image exposure time
+    meas_t: Total measurment time
+    Set the exposure ti;e for the Pil900KW and Pil2M detectors.
+    Waits broke pilatus exposure set when setting burst mode and hitting ctrl+c
     """
-
     try:
         for j in range(2):
             waits = []
             waits.append(pil2M.cam.acquire_time.set(exp_t))
             waits.append(pil2M.cam.acquire_period.set(exp_t + period_delay))
             waits.append(pil2M.cam.num_images.set(int(meas_t / exp_t)))
-            if pil300KW is not None:
-                waits.append(pil300KW.cam.acquire_time.set(exp_t))
-                waits.append(pil300KW.cam.acquire_period.set(exp_t + period_delay))
-                waits.append(pil300KW.cam.num_images.set(int(meas_t / exp_t)))
+
+            #Keep this commented for now but should be removed
+            # waits.append(pil300KW.cam.acquire_time.set(exp_t))
+            # waits.append(pil300KW.cam.acquire_period.set(exp_t + period_delay))
+            # waits.append(pil300KW.cam.num_images.set(int(meas_t / exp_t)))
+
+            if amptek_det is not None:
+                waits.append(amptek.mca.preset_real_time.put(exp_t))
             waits.append(pil900KW.cam.acquire_time.set(exp_t))
             waits.append(pil900KW.cam.acquire_period.set(exp_t + period_delay))
             waits.append(pil900KW.cam.num_images.set(int(meas_t / exp_t)))
-            waits.append(amptek.mca.preset_real_time.put(exp_t))
-
             for w in waits:
                 w.wait()
     except:
@@ -42,36 +45,21 @@ def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
         pil900KW.cam.acquire_period.put(exp_t + period_delay)
         pil900KW.cam.num_images.put(int(meas_t / exp_t))
 
-
-def det_exposure_time_old(exp_t, meas_t=1):
-    """
-    The above broke, using old version as weekend workaround
-    """
-    for j in range(2):
-        pil2M.cam.acquire_time.put(exp_t)
-        pil2M.cam.acquire_period.put(exp_t + 0.001)
-        pil2M.cam.num_images.put(int(meas_t / exp_t))
-        pil900KW.cam.acquire_time.put(exp_t)
-        pil900KW.cam.acquire_period.put(exp_t + 0.001)
-        pil900KW.cam.num_images.put(int(meas_t / exp_t))
-
-
-
 def det_next_file(n):
     pil2M.cam.file_number.put(n)
     pil900KW.cam.file_number.put(n)
-    if pil300KW is not None:
-        pil300KW.cam.file_number.put(n)
+    
+    #Keep this commented for now but should be removed
+    # pil300KW.cam.file_number.put(n)
     # rayonix.cam.file_number.put(n)
-
 
 
 fd = FakeDetector(name="fd")
 
 
-
-
-pil300KW = None
+#Keep this commented for now but should be removed
+# pil300KW = None
+amptek_det = None
 
 
 #####################################################
@@ -80,18 +68,10 @@ pil300KW = None
 pil900KW = WAXS_Detector("XF:12IDC-ES:2{Det:900KW}", name="pil900KW", asset_path="pilatus900kw-1")
 pil900KW.set_primary_roi(1)
 
-pil900kwroi1 = EpicsSignal(
-    "XF:12IDC-ES:2{Det:900KW}Stats1:Total_RBV", name="pil900kwroi1"
-)
-pil900kwroi1 = EpicsSignal(
-    "XF:12IDC-ES:2{Det:900KW}Stats2:Total_RBV", name="pil900kwroi2"
-)
-pil900kwroi1 = EpicsSignal(
-    "XF:12IDC-ES:2{Det:900KW}Stats3:Total_RBV", name="pil900kwroi3"
-)
-pil900kwroi1 = EpicsSignal(
-    "XF:12IDC-ES:2{Det:900KW}Stats4:Total_RBV", name="pil900kwroi4"
-)
+pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats1:Total_RBV", name="pil900kwroi1")
+pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats2:Total_RBV", name="pil900kwroi2")
+pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats3:Total_RBV", name="pil900kwroi3")
+pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats4:Total_RBV", name="pil900kwroi4")
 
 pil900KW.stats1.kind = "hinted"
 pil900KW.stats1.total.kind = "hinted"

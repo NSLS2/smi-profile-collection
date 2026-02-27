@@ -15,7 +15,11 @@ from IPython import get_ipython
 from IPython.terminal.prompts import Prompts, Token
 import matplotlib.pyplot as plt
 
+import redis
+from redis_json_dict import RedisJSONDict
 
+mdclient = redis.Redis('info.smi.nsls2.bnl.gov', db=1)
+mdsave = RedisJSONDict(mdclient,'swaxsmetadata')
 
 
 # Configure a Tiled writing client
