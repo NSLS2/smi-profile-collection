@@ -135,24 +135,7 @@ class VFM_voltage(Device):
     # default_vfm_v2 =  [-281, -235,  -9, -10, -335, 165, -252, 127, -29, -190, 286, -150, -48, 117, -128, -628] #S edge
 
     # This is the default vfm mirror voltage for opls hutch
-    default_vfm_opls = [
-        -206,
-        -191,
-        6,
-        71,
-        -316,
-        184,
-        -223,
-        120,
-        45,
-        -130,
-        202,
-        -111,
-        17,
-        62,
-        -75,
-        -553,
-    ]
+    default_vfm_opls = [ -206, -191, 6, 71, -316, 184, -223, 120, 45, -130, 202, -111, 17, 62, -75, -553]
 
     def set_target(self, mode="SWAXS"):
         ch_pattern = re.compile(r"ch(?P<number>\d{1,2})")

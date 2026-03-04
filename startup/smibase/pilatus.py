@@ -9,6 +9,13 @@ import bluesky.plans as bp
 import bluesky.plan_stubs as bps
 from ophyd import EpicsSignal, Device, Component
 
+# Packages needed to restart camserver
+import telnetlib
+import paramiko
+import time
+
+from IPython import get_ipython
+sd = get_ipython().user_ns['sd']
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     """
@@ -120,27 +127,20 @@ pil2M.beam_center_y_px.kind='config'
 waxs = pil900KW.motors # for backwards compatibility
 waxs.kind='config'
 
-
 def multi_count(detectors, *args, **kwargs):
     delay = detectors[0].cam.num_images.get() * detectors[0].cam.acquire_time.get() + 1
     yield from bp.count(detectors, *args, delay=delay, **kwargs)
 
-
-
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
-
 sd.baseline.extend([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,pil2M.beam_center_y_px])
 
+
+# This needs to be remove because not used
+ # TODO: ELIOT - change save to redis
 def beamstop_save():
     """
     Save the current configuration
     """
-    # TODO: ELIOT - change save to redis
-
-    # SMI_CONFIG_FILENAME = os.path.join(
-    #     get_ipython().profile_dir.location, "smi_config.csv"
-    # )
+    # SMI_CONFIG_FILENAME = os.path.join(get_ipython().profile_dir.location, "smi_config.csv")
 
     # Beamstop position in x and y
     bs_rod_x = pil2M.beamstop.x_rod.position
@@ -150,13 +150,11 @@ def beamstop_save():
     bs_pin_y = pil2M.beamstop.y_pin.position
 
     # collect the current positions of motors
-    current_config = {
-        "bs_rod_x": bs_rod_x,
-        "bs_rod_y": bs_rod_y,
-        "bs_pin_x": bs_pin_x,
-        "bs_pin_y": bs_pin_y,
-        "time": ctime(),
-    }
+    current_config = {"bs_rod_x": bs_rod_x,
+                      "bs_rod_y": bs_rod_y,
+                      "bs_pin_x": bs_pin_x,
+                      "bs_pin_y": bs_pin_y,
+                      "time": ctime()}
 
     if pil2M.active_beamstop.get() == 'rod':
         pil2M.rod_offset_x_mm.set(bs_rod_x)
@@ -170,25 +168,18 @@ def beamstop_save():
         print("No active beamstop selected, not resetting offsets\n")
         print("Please run pil2M.insert_beamstop('rod' or 'pin')\n")
 
-    # TODO - append config to redis
-
-
     print(current_config)
 
-# Todo: No module paramiko
-import telnetlib
-import paramiko
-import time
 
 # SSH connection details
 hostname = 'xf12id2-det3'
 username = 'det'
 password = 'Pilatus2'
+
 # Create an SSH client
 client = paramiko.SSHClient()
 client.load_system_host_keys()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
 telnet_command = 'telnet localhost 20002'
 
 #ToDo need to add the good threshold in the restart function> It currently run the default from the camserver
@@ -259,10 +250,10 @@ def startWAXS():
     # to add - set energy of the camera to the current beamline energy
     #set_energy_cam(pil900KW.cam,energy.get())
 
-def set_energy(en_ev, threshold=None, gain=1):
+def set_energy(en_ev, thresh_ev=None, gain=1):
     energy.move(en_ev)
-    set_energy_cam(pil900KW.cam, en_ev, thresh_ev=threshold, gain=gain)
-    set_energy_cam(pil2M.cam, en_ev, thresh_ev=threshold, gain=gain)
+    set_energy_cam(pil900KW.cam, en_ev, thresh_ev=thresh_ev, gain=gain)
+    set_energy_cam(pil2M.cam, en_ev, thresh_ev=thresh_ev, gain=gain)
 
 
 # def check_condition():

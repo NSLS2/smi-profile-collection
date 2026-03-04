@@ -5,7 +5,6 @@ class bladecoater_smaract(Device):
     x2 = Cpt(EpicsMotor, "X2}Mtr", labels=["piezo"])
 
 
-
 # class syringe_pump(Device):
 #     x1 = Cpt(EpicsSignal, "Val:Vol-SP", labels=["piezo1"]) 
 #     x2 = Cpt(EpicsSignal, "Val:Rate-SP", labels=["piezo2"])
@@ -21,6 +20,4 @@ class syringe_pump(Device):
     stop_flow = Cpt(EpicsSignal, "Cmd:Stop-Cmd",)
     dia = Cpt(EpicsSignal, "Val:Dia-RB")
     dir = Cpt(EpicsSignal, "Val:Dir-Sel",) 
-
-# XF:12ID2-ES{Pmp:1}Val:Vol-SP
 

@@ -334,7 +334,7 @@ class WAXS_Motors(Device):
                 # distance from the center of arc rotation (sample position) to the beamstop
                 # in mm   
                 # if the beamstop mounting is changed or bent, this value may need to be tweaked
-    bsx_safe_pos = -68.5
+    bsx_safe_pos = -190
                 # x position of the beamstop when it IS NOT in the beam (out of the way direct beam and scattering)
     
     # when moving the waxs detector, the beamstop must be moved to a new position
@@ -428,6 +428,7 @@ class SAXS_Detector(Pilatus):
     # difference between the position.z and the actual sample-detector distance
     sample_offset_z_mm = Cpt(Signal,value =mdsave.get('saxs_sample_offset_z_mm',0.0), kind="config")
     
+
 ## constants for the beamstop position
     rod_offset_x_mm = Cpt(Signal,value = mdsave.get('saxs_rod_offset_x_mm',6.8), kind="config")
     # position of the beamstop when it IS in the beam x
@@ -566,6 +567,7 @@ class SAXS_Detector(Pilatus):
 
     
     def calc_offsets(self, distance, verbose=False):
+        #return
 
         attr_map = {
             "beam_offset_x": self.beam_offset_x_mm,
@@ -682,6 +684,7 @@ class SAXS_Detector(Pilatus):
                 offset_dict[key] = value
 
         return offset_dict
+
 
 def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
      

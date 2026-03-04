@@ -9,34 +9,9 @@ import os
 import bluesky.plan_stubs as bps
 from .pilatus import pil2m_pos
 from .beamstop import saxs_bs
-
 from smibase.base import RE
-from smibase.attenuators import (
-            att1_1,
-            att1_2,
-            att1_3,
-            att1_4,
-            att1_5,
-            att1_6,
-            att1_7,
-            att1_8,
-            att1_9,
-            att1_10,
-            att1_11,
-            att1_12,
-            att2_1,
-            att2_2,
-            att2_3,
-            att2_4,
-            att2_5,
-            att2_6,
-            att2_7,
-            att2_8,
-            att2_9,
-            att2_10,
-            att2_11,
-            att2_12,
-)
+from smibase.attenuators import (att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12,
+                                 att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12)
 from smibase.energy import energy
 from smibase.pilatus import waxs, pil2M, pil900KW
 from smibase.beamstop import saxs_bs
@@ -65,7 +40,6 @@ class SMI_SAXS_detector(Device):
     sdd = Component(Signal, value=8300, name=prefix + "sdd", kind="hinted")
 
 
-
 class SMIBeam(object):
     """
     This class represents the 'beam' at the beamline. This collects together aspects
@@ -78,45 +52,18 @@ class SMIBeam(object):
         self._SHUTTER_CLOSED_VOLTAGE = 7
         self.hc_over_e = 1.23984197e-6  # eV*m
         self.D_Si111 = 3.1293  # Angstroms
-
-        # self.dcm = Energy(prefix='', name='energy', read_attrs=['energy', 'ivugap', 'bragg'], configuration_attrs=['enableivu', 'enabledcmgap', 'target_harmonic'])
         self.dcm = energy
 
     def _foilState(self):
         current_state = []
-        for foil_num in [
-            att1_1,
-            att1_2,
-            att1_3,
-            att1_4,
-            att1_5,
-            att1_6,
-            att1_7,
-            att1_8,
-            att1_9,
-            att1_10,
-            att1_11,
-            att1_12,
-            att2_1,
-            att2_2,
-            att2_3,
-            att2_4,
-            att2_5,
-            att2_6,
-            att2_7,
-            att2_8,
-            att2_9,
-            att2_10,
-            att2_11,
-            att2_12,
-        ]:
+        for foil_num in [att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12,
+                         att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12]:
             foil = yield from bps.read(foil_num)
             if foil["{}_status".format(foil_num.name)]["value"] == "Open":
                 current_state.append(foil_num)
         return current_state
 
     def _determineFoils(self):
-
         if self.dcm.energy.position < 2000:
             target_state = [att1_12]
         elif 2000 < self.dcm.energy.position < 2300:
@@ -178,12 +125,10 @@ class SMIBeam(object):
         return target_state
 
     def insertFoils(self, num_foils):
-
         if num_foils == "Measurement":
             target_state = []
         else:
             target_state = self._determineFoils()
-
         current_state = yield from self._foilState()
 
         # First insert foils
@@ -208,23 +153,12 @@ class SMIBeam(object):
         itry = 0
         foil_st = yield from bps.read(foil)
 
-        while itry < max_retries and (
-            (
-                foil_st["{}_status".format(foil.name)]["value"] == "Not Open"
-                and state == "Insert"
-            )
-            or (
-                foil_st["{}_status".format(foil.name)]["value"] == "Open"
-                and state == "Retract"
-            )
-        ):
-
+        while itry < max_retries and (( foil_st["{}_status".format(foil.name)]["value"] == "Not Open" and state == "Insert")
+                                      or (foil_st["{}_status".format(foil.name)]["value"] == "Open" and state == "Retract")):
             if state == "Retract":
                 yield from bps.mv(foil.close_cmd, 1)
-
             elif state == "Insert":
                 yield from bps.mv(foil.open_cmd, 1)
-
             itry += 1
             yield from bps.sleep(wait_time)
             foil_st = yield from bps.read(foil)
@@ -237,16 +171,10 @@ class SMIBeam(object):
             # it is -7 for transmission, around -2 to -3 for reflection
             yield from bps.mv(waxs.bs_y, -0.05)
 
-
 # End class SMIBeam(object)
 ########################################
 
-
-
-
-
 beam = SMIBeam()
-
 
 
 class Beamline(object):
@@ -257,7 +185,6 @@ class Beamline(object):
     """
 
     def __init__(self, **kwargs):
-
         self.md = {}
         self.current_mode = "undefined"
 
@@ -362,8 +289,6 @@ class SMI_Beamline(Beamline): # used in alignment
             yield from bps.mv(pil900KW.roi1.size.y, int(size[0]))
 
 
-
-
     def setReflectedBeamROI(self, total_angle=0.16, technique="gisaxs", size=[48, 8],
                             roi=pil2M.roi1,sample_z_offset_mm=0, sample_y_offset_mm=0):
         """
@@ -435,93 +360,20 @@ class SMI_Beamline(Beamline): # used in alignment
             yield from bps.mv(roi.min_xyz.min_y, int(y_pos))
             yield from bps.mv(roi.size.y, int(size[1]))
         
-        
-        
         else:
             raise ValueError("Unknown geometry fo alignement mode")
 
     def attenuators_state(self):
         self.att_state = {}
-        att_ophyd = [
-            att1_1,
-            att1_2,
-            att1_3,
-            att1_4,
-            att1_5,
-            att1_6,
-            att1_7,
-            att1_8,
-            att1_9,
-            att1_10,
-            att1_11,
-            att1_12,
-            att2_1,
-            att2_2,
-            att2_3,
-            att2_4,
-            att2_5,
-            att2_6,
-            att2_7,
-            att2_8,
-            att2_9,
-            att2_10,
-            att2_11,
-            att2_12,
-        ]
+        att_ophyd = [ att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12, 
+                      att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12]
 
-        att_material = [
-            "Cu_68um",
-            "Cu_68um",
-            "Cu_68um",
-            "Cu_68um",
-            "Sn_60um",
-            "Sn_60um",
-            "Sn_60um",
-            "Sn_60um",
-            "Sn_30um",
-            "Sn_30um",
-            "Sn_30um",
-            "Sn_30um",
-            "Mo_20um",
-            "Mo_20um",
-            "Mo_20um",
-            "Mo_20um",
-            "Al_102um",
-            "Al_102um",
-            "Al_102um",
-            "Al_102um",
-            "Al_9um",
-            "Al_9um",
-            "Al_9um",
-            "Al_9um",
-        ]
+        att_material = ["Cu_68um", "Cu_68um", "Cu_68um", "Cu_68um", "Sn_60um", "Sn_60um", "Sn_60um", "Sn_60um", "Sn_30um", 
+                        "Sn_30um", "Sn_30um", "Sn_30um", "Mo_20um", "Mo_20um", "Mo_20um", "Mo_20um", "Al_102um", "Al_102um", 
+                        "Al_102um", "Al_102um", "Al_9um", "Al_9um", "Al_9um", "Al_9um"]
 
-        att_thickness = [
-            "1x",
-            "2x",
-            "4x",
-            "8x",
-            "1x",
-            "2x",
-            "4x",
-            "8x",
-            "1x",
-            "2x",
-            "4x",
-            "8x",
-            "1x",
-            "2x",
-            "4x",
-            "8x",
-            "1x",
-            "2x",
-            "4x",
-            "8x",
-            "1x",
-            "2x",
-            "4x",
-            "6x",
-        ]
+        att_thickness = [ "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", 
+                          "1x", "2x", "4x", "8x", "1x", "2x", "4x", "6x"]
 
         for att, material, thickness in zip(att_ophyd, att_material, att_thickness):
             if att.status.get() == "Open":

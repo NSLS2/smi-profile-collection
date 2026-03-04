@@ -3,9 +3,6 @@ from ophyd import EpicsSignal, EpicsSignalRO
 from ophyd import Component as Cpt
 import bluesky.plan_stubs as bps
 
-
-
-
 class output_lakeshore(Device):
 
     status = Cpt(EpicsSignal, "Val:Range-Sel")
@@ -42,15 +39,6 @@ class new_LakeShore(Device):
     output2 = output_lakeshore("XF:12ID-ES{Env:01-Out:2}", name="ls_outpu2")
     output3 = output_lakeshore("XF:12ID-ES{Env:01-Out:3}", name="ls_outpu3")
     output4 = output_lakeshore("XF:12ID-ES{Env:01-Out:4}", name="ls_outpu4")
-    # xrange =
-
-
-# ls.ch1_read.kind = 'hinted'
-# # ls.ch1_sp.kind = 'hinted'
-# ls.ch2_read.kind = 'hinted'
-# # ls.ch2_sp.kind = 'hinted'
-# ls.ch3_read.kind = 'hinted'
-
 
 class XBPM(Device):
     """
@@ -70,10 +58,8 @@ class XBPM(Device):
     posY = Cpt(EpicsSignal, "PosY:MeanValue_RBV")
 
 
-
 # this doesn't work, because the PV names do not end in .VAL ??
 # full PV names are given in the above.
-
 
 class Keithly2450(Device):
     run = Cpt(EpicsSignal, "run")

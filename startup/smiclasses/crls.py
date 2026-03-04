@@ -1,14 +1,9 @@
-
-
-from ophyd import (
-    EpicsMotor,
-    EpicsSignalRO,
-    EpicsSignal,
-    Device,
-    Component as Cpt,
-    PseudoPositioner,
-)
-
+from ophyd import (EpicsMotor,
+                   EpicsSignalRO,
+                   EpicsSignal,
+                   Device,
+                   Component as Cpt,
+                   PseudoPositioner)
 
 class CRL(Device):
     lens1 = Cpt(EpicsMotor, "L1}Mtr")
