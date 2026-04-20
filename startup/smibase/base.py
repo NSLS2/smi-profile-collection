@@ -18,7 +18,10 @@ import matplotlib.pyplot as plt
 import redis
 from redis_json_dict import RedisJSONDict
 
-mdclient = redis.Redis('info.smi.nsls2.bnl.gov', db=1)
+with open("/etc/bluesky/redis.secret", "r") as f:
+    redis_secret = f.read().strip()
+
+mdclient = redis.Redis('xf12id2-smi-redis1.nsls2.bnl.gov', db=1, ssl=True, port=6380, password=redis_secret)
 mdsave = RedisJSONDict(mdclient,'swaxsmetadata')
 
 
@@ -49,8 +52,10 @@ nslsii.configure_base(get_ipython().user_ns,
                broker_name='smi',
                bec_derivative=True, 
                publish_documents_with_kafka=True,
-               redis_url="info.smi.nsls2.bnl.gov",
-               redis_prefix="swaxs-")
+               redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
+               redis_prefix="swaxs-",
+               redis_port=6380,
+               redis_ssl=True)
 
 # # This is a workaround to enable us subscribe to Kafka publisher, which requires a beamline acronym when calling
 # # configuration_base above (ideally, we would just pass tiled_inserter there).
