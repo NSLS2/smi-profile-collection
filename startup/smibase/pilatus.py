@@ -2,6 +2,8 @@ print(f"Loading {__file__}")
 
 from time import ctime
 from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
+from smibase.waxschamber import chamber_pressure
+from smibase.shutter import shopen, shclose
 from .amptek import amptek
 from .energy import energy
 from smiclasses.waxschamber import Sample_Chamber
@@ -94,6 +96,11 @@ pil900KW.pixel_size_mm.kind='config'
 pil900KW.sdd_mm.kind='config' 
 pil900KW.beam_center_x_px.kind='config'
 pil900KW.beam_center_y_px.kind='config'
+pil900KW.motors.arc.user_readback.kind = 'normal'
+pil900KW.motors.bs_x.user_readback.kind = 'normal'
+pil900KW.motors.bs_y.user_readback.kind = 'normal'
+
+
 
 #####################################################
 # Pilatus 1M definition  
@@ -139,36 +146,9 @@ sd.baseline.extend([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,
 def beamstop_save():
     """
     Save the current configuration
+    this is now in the mdsave dictionary not in a file anymore
     """
-    # SMI_CONFIG_FILENAME = os.path.join(get_ipython().profile_dir.location, "smi_config.csv")
-
-    # Beamstop position in x and y
-    bs_rod_x = pil2M.beamstop.x_rod.position
-    bs_rod_y = pil2M.beamstop.y_rod.position
-
-    bs_pin_x = pil2M.beamstop.x_pin.position
-    bs_pin_y = pil2M.beamstop.y_pin.position
-
-    # collect the current positions of motors
-    current_config = {"bs_rod_x": bs_rod_x,
-                      "bs_rod_y": bs_rod_y,
-                      "bs_pin_x": bs_pin_x,
-                      "bs_pin_y": bs_pin_y,
-                      "time": ctime()}
-
-    if pil2M.active_beamstop.get() == 'rod':
-        pil2M.rod_offset_x_mm.set(bs_rod_x)
-        pil2M.rod_offset_y_mm.set(bs_rod_y)
-        print(f"resetting the rod offsets to {bs_rod_x}, {bs_rod_y}")
-    elif pil2M.active_beamstop.get() == 'pin':
-        pil2M.pd_offset_x_mm.set(bs_pin_x)
-        pil2M.pd_offset_y_mm.set(bs_pin_y)
-        print(f"resetting the pin offsets to {bs_pin_x}, {bs_pin_y}")
-    else:
-        print("No active beamstop selected, not resetting offsets\n")
-        print("Please run pil2M.insert_beamstop('rod' or 'pin')\n")
-
-    print(current_config)
+    pil2M.save_beamstop()
 
 
 # SSH connection details
@@ -259,20 +239,15 @@ def set_energy(en_ev, thresh_ev=None, gain=1):
 # def check_condition():
 #     #TODO: check if the pressure in the chamber is low enough or if the 900KW power is enabled
 
-# def auto_pump():
-#     print(f'starting chamber pumping')
-#     # TODO: find all of the PVs in the auto pumping routine, and make objects
-#     # perform the autopumping routine
-#     print(f"Starting periodic check (every {2} seconds)... to wait for chamber to be pumped down")
-#     while True:
-#         if check_condition():
-#             restartWAXS()
-#             break  # Exit the loop once the condition is met and action is performed
-#         else:
-#             print(f"Condition not met. Sleeping for {2} second(s).")
-#             time.sleep(2) # Pause the loop for the specified interval
+def pump_waxs():
+    print(f'starting chamber pumping - this can take ~10-15 minutes')
+    # perform the autopumping routine
+    yield from chamber_pressure.pump_and_wait(verbose=False)
+    print('starting the WAXS detector - this can take a couple minutes')
+    yield from startWAXS()
 
-
-
+def vent_waxs():
+    print(f'starting chamber venting - this can take 5-10 minutes')
+    yield from chamber_pressure.vent()
 
 

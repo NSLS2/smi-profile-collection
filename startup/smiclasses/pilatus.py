@@ -115,8 +115,9 @@ class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
         return ret
 
     def get_frames_per_point(self):
+        # added for debugging - removing the print March 2026
         ret = super().get_frames_per_point()
-        print('get_frames_per_point returns', ret)
+        #print('get_frames_per_point returns', ret)
         return ret
 
     def _update_paths(self):
@@ -215,7 +216,6 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
         return self.energy_read, self.threshold_read, self.gain_read
 
     def trigger(self):
-        "Trigger one acquisition."
         if self._staged != Staged.yes:
             raise RuntimeError("This detector is not ready to trigger."
                                "Call the stage() method before triggering.")
@@ -228,31 +228,17 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
             if data.alarm_status is not AlarmStatus.NO_ALARM:
 
  
-                if fail_count < 4:
-                    # chosen after testing and it failing 2x per cam server restart so
+                if fail_count < 2:
                     # so two extra tries seems reasonable
-                    print('\n\n\n\nYOL0(or twice): retrying detector failure')
-                    print('Reset detector camserver if this is the start of the macro\n\n\n\n\n')
+                    print('Detector did not respond, trying again, in case it needs to initialize connection\n\n\n\n\n')
                     self._acquisition_signal.put(1, use_complete=True, callback=_acq_done, 
                                      callback_data=self.cam.detector_state)
                 
                     fail_count += 1
                     time.sleep(1)
-                elif fail_count < 7:
-                    # chosen after testing and it failing 2x per cam server restart so
-                    # so two extra tries seems reasonable
-                    print('\n\n\n\nYOL0(or twice): retrying detector failure')
-                    print('Reset detector camserver if this is the start of the macro\n\n\n\n\n')
-                    self._acquisition_signal.put(1, use_complete=True, callback=_acq_done, 
-                                     callback_data=self.cam.detector_state)
-                
-                    fail_count += 1
-                    time.sleep(60)
-                    #reset the threshold 
-                    set_energy_cam(self.cam,self.cam.energyset.get())
-                    time.sleep(5)
-
                 else:
+                    # if it fails again, there is probably something wrong
+                    print('\n\nFailed again!\nDid you forget to run "RE(restartwaxs())??\n\n\n\n\n')
                     self._status.set_exception(
                         RuntimeError(f"FAILED {pvname}: {data.alarm_status}: {data.alarm_severity}")
                     )
@@ -261,7 +247,7 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
 
         self._acquisition_signal.put(1, use_complete=True, callback=_acq_done, 
                                      callback_data=self.cam.detector_state)
-        self.dispatch(self._image_name, ttime.time())
+        self.generate_datum(self._image_name, ttime.time())
         return self._status
 
 
@@ -334,7 +320,7 @@ class WAXS_Motors(Device):
                 # distance from the center of arc rotation (sample position) to the beamstop
                 # in mm   
                 # if the beamstop mounting is changed or bent, this value may need to be tweaked
-    bsx_safe_pos = -190
+    bsx_safe_pos = 15
                 # x position of the beamstop when it IS NOT in the beam (out of the way direct beam and scattering)
     
     # when moving the waxs detector, the beamstop must be moved to a new position
@@ -548,6 +534,14 @@ class SAXS_Detector(Pilatus):
         else:
             Exception(ValueError('Beamstop is not removed - please check system manually before continuing'))
     
+    def save_beamstop(self):
+        if self.active_beamstop == 'rod':
+            self.save_rod_position()
+        elif self.active_beamstop == 'pin':
+            self.save_pd_position()
+        else:
+            warn('beamstop is not in position, please run restore_beamstop (i.e. smi.modeMeasurement()) and try again')
+
     def save_all_offsets(self):
         mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
         mdsave['saxs_rod_safe_pos']=self.rod_safe_pos.get()
@@ -558,12 +552,15 @@ class SAXS_Detector(Pilatus):
     def save_rod_position(self):
         self.rod_offset_x_mm.set(self.beamstop.x_rod.position)
         mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
+        self.add_calibration_point(self.motor.z.position, self.get_current_offset_dict())
+
 
     def save_pd_position(self):
         self.pd_offset_x_mm.set(self.beamstop.x_pin.position)
         self.pd_offset_y_mm.set(self.beamstop.y_pin.position)
         mdsave['saxs_pd_offset_x_mm']=self.pd_offset_x_mm.get()
         mdsave['saxs_pd_offset_y_mm']=self.pd_offset_y_mm.get()
+        self.add_calibration_point(self.motor.z.position, self.get_current_offset_dict())
 
     
     def calc_offsets(self, distance, verbose=False):
@@ -645,12 +642,12 @@ class SAXS_Detector(Pilatus):
             Dictionary of offsets in mm.
         """
 
-        if "distance_calibration" not in self.mdsave:
-            self.mdsave["distance_calibration"] = {}
+        if "distance_calibration" not in mdsave:
+            mdsave["distance_calibration"] = {}
 
         key = self._distance_key(distance)
 
-        self.mdsave["distance_calibration"][key] = offsets_dict.copy()
+        mdsave["distance_calibration"][key] = offsets_dict.copy()
 
         print(f"Added calibration point at {float(key):.3f} mm")
     
