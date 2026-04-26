@@ -1,4 +1,4 @@
 #!/bin/bash
 
-cp -v smi_config.csv ~/.ipython/profile_${TEST_PROFILE}/smi_config.csv
+cp -v "${CLONED_REPO}/smi_config.csv" ~/.ipython/profile_test/smi_config.csv
 
