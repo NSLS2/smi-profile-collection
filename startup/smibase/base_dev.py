@@ -8,6 +8,8 @@ import copy
 
 from IPython import get_ipython
 RE = get_ipython().user_ns['RE']
+
+_ci = os.environ.get("CI", "false").lower() == "true"
 RE.md["tiled_access_tags"] = [RE.md['data_session']]
 
 
@@ -41,14 +43,15 @@ def patch_resource(doc):
     return doc
 
 
-# Configure a Tiled writing client
-tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi/migration"]
-tw = TiledWriter(tiled_writing_client_sql, batch_size=1, patches = {'resource': patch_resource, 'descriptor': patch_descriptor})
+if not _ci:
+    # Configure a Tiled writing client
+    tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi/migration"]
+    tw = TiledWriter(tiled_writing_client_sql, batch_size=1, patches = {'resource': patch_resource, 'descriptor': patch_descriptor})
 
-# Optional: Thread-safe wrapper for TiledWriter
-tw = BufferingWrapper(tw)
+    # Optional: Thread-safe wrapper for TiledWriter
+    tw = BufferingWrapper(tw)
 
-RE.subscribe(tw)
+    RE.subscribe(tw)
 
-print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
-tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
+    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
+    tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
