@@ -455,25 +455,25 @@ class SAXS_Detector(Pilatus):
 
 # callback function to update the beam center based on the motor positions will be called often
     def update_beam_center(self, *args, **kwargs):
-        # based on the position, update the offsets from a calibration file
-        self.calc_offsets(self.motor.z.position) # account for the wobble in the track
-        # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
-        self.beam_center_x_mm.set(
-            -self.motor.x.position - self.beam_offset_x_mm.get()
-        )
-        self.beam_center_y_mm.set(
-            -self.motor.y.position - self.beam_offset_y_mm.get()
-        )
-        self.sample_distance_mm.set(
-            self.motor.z.position + self.sample_offset_z_mm.get()
-        )
-        self.beam_center_x_px.set(
-            np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
-        )
-        self.beam_center_y_px.set(
-            np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
-        )
-    
+        # # based on the position, update the offsets from a calibration file
+        # self.calc_offsets(self.motor.z.position) # account for the wobble in the track
+        # # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
+        # self.beam_center_x_mm.set(
+        #     -self.motor.x.position - self.beam_offset_x_mm.get()
+        # )
+        # self.beam_center_y_mm.set(
+        #     -self.motor.y.position - self.beam_offset_y_mm.get()
+        # )
+        # self.sample_distance_mm.set(
+        #     self.motor.z.position + self.sample_offset_z_mm.get()
+        # )
+        # self.beam_center_x_px.set(
+        #     np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
+        # )
+        # self.beam_center_y_px.set(
+        #     np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
+        # )
+        ...
     # move the beamstop to the calculated position of the beam center
     def insert_beamstop(self, beamstop='rod'):
         if beamstop == 'rod' or beamstop == 'bar':

@@ -28,7 +28,7 @@ def proposal_id(cycle_id, proposal_id, analysis=True,*args, **kwargs):
     proposal_swap(proposal_id)
 
 def proposal_swap(proposal_id):
-    RE.md = switch_redis_proposal(proposal_id, beamline='smi', username=RE.md['username'],prefix='swaxs')
+    RE.md = switch_redis_proposal(proposal_id, beamline='smi', username=RE.md['username'], redis_ssl= True)
     
     # Ensure tiled_access_tags is always a list
     if tags := RE.md.get('tiled_access_tags'):

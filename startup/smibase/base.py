@@ -53,7 +53,6 @@ nslsii.configure_base(get_ipython().user_ns,
                bec_derivative=True, 
                publish_documents_with_kafka=True,
                redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
-               redis_prefix="swaxs-",
                redis_port=6380,
                redis_ssl=True)
 

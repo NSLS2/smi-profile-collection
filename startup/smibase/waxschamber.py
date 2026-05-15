@@ -10,6 +10,8 @@ def get_chamber_pressure(signal):
     except:
         if isinstance(value, str) and value.startswith("LO"):
             return float("1E-03")
+        if isinstance(value, str) and value.startswith("NO"):
+            return 10000.0
         raise
 
 

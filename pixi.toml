@@ -7,12 +7,15 @@ version = "2026.2.0"
 [system-requirements]
 libc = "2.17"
 
+[activation.env]
+REDIS_HOST="xf12id2-smi-redis1.nsls2.bnl.gov"
+
 [feature.profile.dependencies]
 bluesky-base = "==1.15.0"
 bluesky-queueserver = "*"
 matplotlib-base= ">=3.10"
 networkx = ">=3.4.2,<4"
-nslsii = "==0.11.8"
+nslsii = "==0.11.9"
 numpy = "*"
 ophyd = ">=1.11.0"
 pyepics = "*"
