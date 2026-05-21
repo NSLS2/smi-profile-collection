@@ -1,33 +1,24 @@
 print(f"Loading {__file__}")
 
-from smiclasses.manipulators import BDMStage, STG, SMPL, HEXAPOD, SMARACT
+from smiclasses.manipulators import BDMStage, STG, SMARACT, STG_pseudo
 from ophyd import EpicsMotor
 
 
 bdm = BDMStage("XF:12IDC-ES:2:", name="bdm")
 
 
-stage = STG("XF:12IDC-OP:2{HEX:Stg-Ax:", name="stage")
-sample = SMPL("XF:12IDC-OP:2{HEX:Sam-Ax:", name="sample")
-hp140 = HEXAPOD("XF:12IDC-OP:2{HEX:140-Ax:", name="hp140")
-hp430 = HEXAPOD("XF:12IDC-OP:2{HEX:430-Ax:", name="hp430")
+stage = STG("XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage")
+stage_pseudo = STG_pseudo("XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage")
 piezo = SMARACT("", name="piezo")
 
 
-for hp in [stage, sample, hp140, hp430]:
+for hp in [stage]:
     hp.configuration_attrs = hp.read_attrs
 
 for pz in [piezo]:
     pz.configuration_attrs = pz.read_attrs
 
-prs = EpicsMotor("XF:12IDC-OP:2{HEX:PRS-Ax:Rot}Mtr", name="prs", labels=["prs"])
-
-for pr in [prs]:
-    pr.configuration_attrs = pr.read_attrs
-
-
-
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([stage,  prs, piezo,])
+sd.baseline.extend([stage,  piezo,])

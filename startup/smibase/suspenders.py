@@ -16,6 +16,8 @@ from .electrometers import ls, xbpm2
 # Temperature of the WAXS motor suspender
 susp_waxs_motor = SuspendCeil(ls.input_C, 150 + 273, resume_thresh=120 + 273)
 RE.install_suspender(susp_waxs_motor)
+susp_phi_motor = SuspendCeil(ls.input_D, 150 + 273, resume_thresh=120 + 273)
+RE.install_suspender(susp_phi_motor)
 
 # # Count on XBPM2 suspender
 # susp_xbpm2_sum = SuspendFloor(xbpm2.sumY, 0.3, resume_thresh=0.8)

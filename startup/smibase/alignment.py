@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
 import bluesky.plans as bp
-from smibase.manipulators import prs, piezo, stage
+from smibase.manipulators import piezo, stage
 from .pilatus import pil2M
 from .config import sample_id
 from .pilatus import det_exposure_time
@@ -112,17 +112,17 @@ def align_bdm_th(rang=0.3, point=31):
     yield from bps.mv(bdm.th, ps.cen)
 
 
-def align_xrr_prs(rang=0.3, point=31):
-    """
-    Align XRR using the prs stage.
+# def align_xrr_prs(rang=0.3, point=31):
+#     """
+#     Align XRR using the prs stage.
 
-    Parameters:
-        rang (float): Range for the scan.
-        point (int): Number of points in the scan.
-    """
-    yield from bp.rel_scan([pil2M], prs, -rang, rang, point)
-    ps(plot=False)
-    yield from bps.mv(prs, ps.peak)
+#     Parameters:
+#         rang (float): Range for the scan.
+#         point (int): Number of points in the scan.
+#     """
+#     yield from bp.rel_scan([pil2M], prs, -rang, rang, point)
+#     ps(plot=False)
+#     yield from bps.mv(prs, ps.peak)
 
 
 def align_xrr_height(rang=0.3, point=31, der=False):
@@ -512,115 +512,115 @@ def quickalign_gisaxs(angle=0.15):
     bec._calc_derivative_and_stats = False
 
 
-def alignement_xrr(angle=0.15):
-    """
-    This routine is for samples mounted at 90 degrees, so the alignement is done using prs stage as incident angle and piezo.x as height
+# def alignement_xrr(angle=0.15):
+#     """
+#     This routine is for samples mounted at 90 degrees, so the alignement is done using prs stage as incident angle and piezo.x as height
 
-    param angle: np.float. Angle at which the alignement on the reflected beam will be done
+#     param angle: np.float. Angle at which the alignement on the reflected beam will be done
 
-    """
+#     """
 
-    # Activate the automated derivative calculation
-    bec._calc_derivative_and_stats = True
+#     # Activate the automated derivative calculation
+#     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
+#     sample_id(user_name="test", sample_name="test")
+#     det_exposure_time(0.5, 0.5)
 
-    yield from smi.modeAlignment(technique="xrr")
+#     yield from smi.modeAlignment(technique="xrr")
 
-    # Set direct beam ROI
-    yield from smi.setDirectBeamROI(technique="xrr")
+#     # Set direct beam ROI
+#     yield from smi.setDirectBeamROI(technique="xrr")
 
-    # Scan theta and height
-    yield from align_xrr_height(800, 16, der=True)
+#     # Scan theta and height
+#     yield from align_xrr_height(800, 16, der=True)
 
-    # For XRR alignment, a poor results was obtained at incident angle 0. To improve the alignment success
-    # the prs alignment is done at an angle of 0.15 deg
-    yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
-    yield from align_xrr_prs(1, 20)
-    yield from bps.mv(prs, ps.peak + 0.15)
+#     # For XRR alignment, a poor results was obtained at incident angle 0. To improve the alignment success
+#     # the prs alignment is done at an angle of 0.15 deg
+#     yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
+#     yield from align_xrr_prs(1, 20)
+#     yield from bps.mv(prs, ps.peak + 0.15)
 
-    yield from smi.setDirectBeamROI()
-    yield from align_xrr_height(500, 13, der=True)
+#     yield from smi.setDirectBeamROI()
+#     yield from align_xrr_height(500, 13, der=True)
 
-    yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
-    yield from align_xrr_prs(0.5, 21)
-    yield from bps.mv(prs, ps.peak + 0.15)
+#     yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
+#     yield from align_xrr_prs(0.5, 21)
+#     yield from bps.mv(prs, ps.peak + 0.15)
 
-    # move to theta 0 + value
-    yield from bps.mv(prs, (ps.peak + 0.15) - angle)
+#     # move to theta 0 + value
+#     yield from bps.mv(prs, (ps.peak + 0.15) - angle)
 
-    # Set reflected ROI
-    yield from smi.setReflectedBeamROI(total_angle=angle, technique="xrr")
+#     # Set reflected ROI
+#     yield from smi.setReflectedBeamROI(total_angle=angle, technique="xrr")
 
-    # Scan theta and height
-    yield from align_xrr_prs(0.2, 31)
-    yield from align_xrr_height(200, 21)
-    cb=close_plots()
-    yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
+#     # Scan theta and height
+#     yield from align_xrr_prs(0.2, 31)
+#     yield from align_xrr_height(200, 21)
+#     cb=close_plots()
+#     yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
 
-    # Return angle
-    yield from bps.mv(prs, ps.cen + angle)
-    yield from smi.modeMeasurement()
+#     # Return angle
+#     yield from bps.mv(prs, ps.cen + angle)
+#     yield from smi.modeMeasurement()
 
-    # Deactivate the automated derivative calculation
-    bec._calc_derivative_and_stats = False
-
-
-
-def alignement_xrr_xmotor(angle=0.15):
-    """
-    This routine is for samples mounted at 90 degrees, so the alignement is done using prs stage as incident angle and piezo.x as height
-
-    param angle: np.float. Angle at which the alignement on the reflected beam will be done
-
-    """
-
-    # Activate the automated derivative calculation
-    bec._calc_derivative_and_stats = True
-
-    sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
-
-    yield from smi.modeAlignment(technique="xrr")
-
-    # Set direct beam ROI
-    yield from smi.setDirectBeamROI(technique="xrr")
-
-    # Scan theta and height
-    yield from align_xrr_height_motx(1000, 31, der=True)
-
-    # For XRR alignment, a poor results was obtained at incident angle 0. To improve the alignment success
-    # the prs alignment is done at an angle of 0.15 deg
-    yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
-    yield from align_xrr_prs(3, 60)
-
-    yield from smi.setDirectBeamROI()
-    yield from align_xrr_height_motx(500, 13, der=True)
-
-    yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
-    yield from align_xrr_prs(0.5, 21)
-    yield from bps.mv(prs, ps.peak + 0.15)
-
-    # move to theta 0 = (ps.peak + 0.15) + value
-    yield from bps.mv(prs, (ps.peak + 0.15) - angle)
-
-    # Set reflected ROI
-    yield from smi.setReflectedBeamROI(total_angle=-angle, technique="xrr")
-
-    # Scan theta and height
-    yield from align_xrr_prs(0.2, 31)
-    yield from align_xrr_height_motx(200, 21)
-    cb=close_plots()
-    yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
+#     # Deactivate the automated derivative calculation
+#     bec._calc_derivative_and_stats = False
 
 
-    # Return angle
-    yield from bps.mv(prs, ps.cen + angle) # finish the alignment at 0
-    yield from smi.modeMeasurement()
 
-    # Deactivate the automated derivative calculation
-    bec._calc_derivative_and_stats = False
+# def alignement_xrr_xmotor(angle=0.15):
+#     """
+#     This routine is for samples mounted at 90 degrees, so the alignement is done using prs stage as incident angle and piezo.x as height
+
+#     param angle: np.float. Angle at which the alignement on the reflected beam will be done
+
+#     """
+
+#     # Activate the automated derivative calculation
+#     bec._calc_derivative_and_stats = True
+
+#     sample_id(user_name="test", sample_name="test")
+#     det_exposure_time(0.5, 0.5)
+
+#     yield from smi.modeAlignment(technique="xrr")
+
+#     # Set direct beam ROI
+#     yield from smi.setDirectBeamROI(technique="xrr")
+
+#     # Scan theta and height
+#     yield from align_xrr_height_motx(1000, 31, der=True)
+
+#     # For XRR alignment, a poor results was obtained at incident angle 0. To improve the alignment success
+#     # the prs alignment is done at an angle of 0.15 deg
+#     yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
+#     yield from align_xrr_prs(3, 60)
+
+#     yield from smi.setDirectBeamROI()
+#     yield from align_xrr_height_motx(500, 13, der=True)
+
+#     yield from smi.setReflectedBeamROI(total_angle=-0.15, technique="xrr")
+#     yield from align_xrr_prs(0.5, 21)
+#     yield from bps.mv(prs, ps.peak + 0.15)
+
+#     # move to theta 0 = (ps.peak + 0.15) + value
+#     yield from bps.mv(prs, (ps.peak + 0.15) - angle)
+
+#     # Set reflected ROI
+#     yield from smi.setReflectedBeamROI(total_angle=-angle, technique="xrr")
+
+#     # Scan theta and height
+#     yield from align_xrr_prs(0.2, 31)
+#     yield from align_xrr_height_motx(200, 21)
+#     cb=close_plots()
+#     yield from bpp.subs_wrapper(align_xrr_prs(0.05, 21), cb) 
+
+
+#     # Return angle
+#     yield from bps.mv(prs, ps.cen + angle) # finish the alignment at 0
+#     yield from smi.modeMeasurement()
+
+#     # Deactivate the automated derivative calculation
+#     bec._calc_derivative_and_stats = False
 
 
 def alignement_gisaxs_short(angle=0.15):
