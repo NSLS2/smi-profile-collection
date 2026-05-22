@@ -252,7 +252,7 @@ class STG_pseudo(PseudoPositioner):
     cz_chi = Cpt(Signal, value=0.0, kind="config")
 
     # phi center
-    cx_phi = Cpt(Signal, value=2.15, kind="config")
+    cx_phi = Cpt(Signal, value=2.79, kind="config")
     cy_phi = Cpt(Signal, value=0.0, kind="config")
     cz_phi = Cpt(Signal, value=-1.38, kind="config")
 
