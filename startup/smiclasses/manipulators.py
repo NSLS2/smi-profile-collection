@@ -242,18 +242,19 @@ class STG_pseudo(PseudoPositioner):
     # ------------------------------------------------------------------
 
     # theta center
-    cx_theta = Cpt(Signal, value=0.0, kind="config")
-    cy_theta = Cpt(Signal, value=0.0, kind="config")
-    cz_theta = Cpt(Signal, value=0.0, kind="config")
+    cx_theta = Cpt(Signal, value=2.7, kind="config")
+    cy_theta = Cpt(Signal, value=-1.5, kind="config")
+    cz_theta = Cpt(Signal, value=-1.38, kind="config")
 
     # chi center
-    cx_chi = Cpt(Signal, value=0.0, kind="config")
-    cy_chi = Cpt(Signal, value=0.0, kind="config")
-    cz_chi = Cpt(Signal, value=0.0, kind="config")
+    cx_chi = Cpt(Signal, value=2.7, kind="config")
+    cy_chi = Cpt(Signal, value=-1.5, kind="config")
+    cz_chi = Cpt(Signal, value=-1.38, kind="config")
 
     # phi center
-    cx_phi = Cpt(Signal, value=2.79, kind="config")
-    cy_phi = Cpt(Signal, value=0.0, kind="config")
+    cx_phi = Cpt(Signal, value=2.7, kind="config")
+    #cx_phi = Cpt(Signal, value=2.19, kind="config")
+    cy_phi = Cpt(Signal, value=-1.5, kind="config")
     cz_phi = Cpt(Signal, value=-1.38, kind="config")
 
     # ------------------------------------------------------------------

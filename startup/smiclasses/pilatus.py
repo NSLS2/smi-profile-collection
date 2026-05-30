@@ -436,7 +436,7 @@ class SAXS_Detector(Pilatus):
         self.motor.x.subscribe(self.update_beam_center)
         self.motor.y.subscribe(self.update_beam_center)
         self.motor.z.subscribe(self.update_beam_center) # if there is wobble in the track, the x an y center will vary
-        pin_safe = abs(self.beamstop.x_pin.position - self.pd_safe_pos.get()) < 1
+        pin_safe = abs(self.beamstop.x_pin.position - self.pd_safe_pos.get()) < 1 
         rod_safe = abs(self.beamstop.x_rod.position - self.rod_safe_pos.get()) < 1
         rod_in = abs(self.beamstop.x_rod.position - self.rod_offset_x_mm.get())
         pin_in = abs(self.beamstop.x_pin.position - self.pd_offset_x_mm.get())
@@ -455,24 +455,24 @@ class SAXS_Detector(Pilatus):
 
 # callback function to update the beam center based on the motor positions will be called often
     def update_beam_center(self, *args, **kwargs):
-        # # based on the position, update the offsets from a calibration file
-        # self.calc_offsets(self.motor.z.position) # account for the wobble in the track
-        # # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
-        # self.beam_center_x_mm.set(
-        #     -self.motor.x.position - self.beam_offset_x_mm.get()
-        # )
-        # self.beam_center_y_mm.set(
-        #     -self.motor.y.position - self.beam_offset_y_mm.get()
-        # )
-        # self.sample_distance_mm.set(
-        #     self.motor.z.position + self.sample_offset_z_mm.get()
-        # )
-        # self.beam_center_x_px.set(
-        #     np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
-        # )
-        # self.beam_center_y_px.set(
-        #     np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
-        # )
+        # based on the position, update the offsets from a calibration file
+        self.calc_offsets(self.motor.z.position) # account for the wobble in the track
+        # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
+        self.beam_center_x_mm.set(
+            -self.motor.x.position - self.beam_offset_x_mm.get()
+        )
+        self.beam_center_y_mm.set(
+            -self.motor.y.position - self.beam_offset_y_mm.get()
+        )
+        self.sample_distance_mm.set(
+            self.motor.z.position + self.sample_offset_z_mm.get()
+        )
+        self.beam_center_x_px.set(
+            np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
+        )
+        self.beam_center_y_px.set(
+            np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
+        )
         ...
     # move the beamstop to the calculated position of the beam center
     def insert_beamstop(self, beamstop='rod'):
@@ -564,26 +564,57 @@ class SAXS_Detector(Pilatus):
 
     
     def calc_offsets(self, distance, verbose=False):
-        #return
-
+        # Beam-to-pixel offsets vary with z (track wobble)
         attr_map = {
-            "beam_offset_x": self.beam_offset_x_mm,
-            "beam_offset_y": self.beam_offset_y_mm,
-            "rod_offset_x": self.rod_offset_x_mm,
-            "rod_offset_y": self.rod_offset_y_mm,
-            "pd_offset_x": self.pd_offset_x_mm,
-            "pd_offset_y": self.pd_offset_y_mm,
-            "sample_offset_z": self.sample_offset_z_mm,
+            "beam_offset_x":   self.beam_offset_x_mm,
+            "beam_offset_y":   self.beam_offset_y_mm,
         }
+        for key, sig in attr_map.items():
+            sig.set(self._interpolate_offset(distance, key))
 
-        for key, tk_var in attr_map.items():
-            value = self._interpolate_offset(distance, key)
-            tk_var.set(value)
+        # Beamstop must also track the wobble so it stays centered on the beam.
+        # The beamstop is on the same carriage but at a different z from the
+        # detector face.  The beam offset change (wobble) at the detector face
+        # is the reference; the beamstop sees a scaled version based on its
+        # lever arm ratio.  For now, assume the beamstop is close enough to
+        # the detector face that the ratio ≈ 1 (i.e. same lateral shift).
+        #
+        # rod_offset_x = nominal_rod_x + delta_beam_offset_x
+        # where delta = current interpolated offset - nominal (at reference z)
+        nominal_beam_offset_x = mdsave.get('saxs_beam_offset_x_mm', 128.398)
+        nominal_beam_offset_y = mdsave.get('saxs_beam_offset_y_mm', 190.404)
+
+        delta_x = self.beam_offset_x_mm.get() - nominal_beam_offset_x
+        delta_y = self.beam_offset_y_mm.get() - nominal_beam_offset_y
+
+        # Apply the wobble correction to the beamstop positions
+        base_rod_x = mdsave.get('saxs_rod_offset_x_mm', 6.8)
+        base_rod_y = mdsave.get('saxs_rod_offset_y_mm', 0.0)
+        base_pd_x  = mdsave.get('saxs_pd_offset_x_mm', -227.0)
+        base_pd_y  = mdsave.get('saxs_pd_offset_y_mm', 6.8)
+
+        self.rod_offset_x_mm.set(base_rod_x - delta_x)
+        self.rod_offset_y_mm.set(base_rod_y - delta_y)
+        self.pd_offset_x_mm.set(base_pd_x - delta_x)
+        self.pd_offset_y_mm.set(base_pd_y - delta_y)
+
+        # Apply linear correction for sample_offset_z
+        linear_coeffs = mdsave.get("saxs_sample_offset_z_linear", None)
+        if linear_coeffs is not None:
+            slope, intercept = linear_coeffs
+            self.sample_offset_z_mm.set(slope * distance + intercept)
+        else:
+            self.sample_offset_z_mm.set(
+                self._interpolate_offset(distance, "sample_offset_z")
+            )
 
         if verbose:
             print(f"\nOffsets for distance {distance:.3f} mm:")
-            for key, tk_var in attr_map.items():
-                print(f"{key}: {tk_var.get():.4f} mm")
+            print(f"  beam_offset_x: {self.beam_offset_x_mm.get():.4f} mm")
+            print(f"  beam_offset_y: {self.beam_offset_y_mm.get():.4f} mm")
+            print(f"  delta_x: {delta_x:.4f}, delta_y: {delta_y:.4f}")
+            print(f"  rod_offset_x: {self.rod_offset_x_mm.get():.4f} mm")
+            print(f"  pd_offset_x: {self.pd_offset_x_mm.get():.4f} mm")
 
     def _distance_key(self, distance):
         """Convert float distance to canonical string key."""
