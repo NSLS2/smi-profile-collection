@@ -1,14 +1,14 @@
 print(f"Loading {__file__}")
 
-from smiclasses.manipulators import BDMStage, STG, SMARACT, STG_pseudo
-from ophyd import EpicsMotor
+from smiclasses.manipulators import BDMStage, SMARACT, STG_pseudo
 
 
 bdm = BDMStage("XF:12IDC-ES:2:", name="bdm")
 
 
-stage = STG("XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage")
-stage_pseudo = STG_pseudo("XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage")
+# The Huber sample stack, driven through the STG_pseudo PseudoPositioner
+# (laboratory-frame x/y/z/theta/chi/phi with rotation-center compensation).
+stage = STG_pseudo("XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage")
 piezo = SMARACT("", name="piezo")
 
 

@@ -7,15 +7,6 @@ from ophyd import (
     Component as Cpt,
 )
 
-class STG(Device):
-    x = Cpt(EpicsMotor, "X}Mtr", labels=["stage"])
-    y = Cpt(EpicsMotor, "Y}Mtr", labels=["stage"])
-    z = Cpt(EpicsMotor, "Z}Mtr", labels=["stage"])
-    th = Cpt(EpicsMotor, "theta}Mtr", labels=["stage"])
-    ph = Cpt(EpicsMotor, "phi}Mtr", labels=["stage"])
-    ch = Cpt(EpicsMotor, "chi}Mtr", labels=["stage"])
-
-
 
 class SMARACT(Device):
    # x = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:0}Mtr", labels=["piezo"])
