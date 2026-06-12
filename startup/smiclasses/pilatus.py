@@ -451,6 +451,16 @@ class SAXS_Detector(Pilatus):
         self.motor.x.subscribe(self.update_beam_center)
         self.motor.y.subscribe(self.update_beam_center)
         self.motor.z.subscribe(self.update_beam_center) # if there is wobble in the track, the x an y center will vary
+        # Infer the initially-active beamstop from the live stage positions.  Guard against
+        # unconnected positioners (``.position is None`` on a fresh/fake/disconnected device): in
+        # that case leave ``active_beamstop`` at its 'none' default.  On real, connected hardware
+        # every ``.position`` is a number so this guard never changes behaviour.
+        _positions = (
+            self.beamstop.x_pin.position,
+            self.beamstop.x_rod.position,
+        )
+        if any(p is None for p in _positions):
+            return
         pin_safe = abs(self.beamstop.x_pin.position - self.pd_safe_pos.get()) < 1 
         rod_safe = abs(self.beamstop.x_rod.position - self.rod_safe_pos.get()) < 1
         rod_in = abs(self.beamstop.x_rod.position - self.rod_offset_x_mm.get())
@@ -471,6 +481,11 @@ class SAXS_Detector(Pilatus):
 # callback function to update the beam center based on the motor positions will be called often
     def update_beam_center(self, *args, **kwargs):
         # based on the position, update the offsets from a calibration file
+        # Guard against unconnected positioners (``.position is None`` on a fresh/fake/disconnected
+        # device); the subscription that calls this fires once at construction time.  On real,
+        # connected hardware the positions are always numbers so this guard never changes behaviour.
+        if any(getattr(self.motor, ax).position is None for ax in ("x", "y", "z")):
+            return
         self.calc_offsets(self.motor.z.position) # account for the wobble in the track
         # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
         self.beam_center_x_mm.set(
