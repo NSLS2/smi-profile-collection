@@ -70,10 +70,16 @@ pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 pytest = ">=7"
 
 [feature.test.tasks]
-# Hardware-free unit tests of the ophyd device classes (uses ophyd.sim.make_fake_device).
-# Disable EPICS CA auto-addressing so no real channel access is attempted from the test env
-# (the device classes are faked via make_fake_device; this just keeps pyepics quiet at teardown).
-test = { cmd = "pytest", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+# Hardware-free tiers (unit + sim). Uses ophyd.sim.make_fake_device; EPICS CA is
+# disabled so no real channel access is attempted (conftest also locks it down).
+test = { cmd = "pytest -m 'not hardware'", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+# Just the pure-code tier.
+test-unit = { cmd = "pytest -m unit", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+# Just the fake-device tier.
+test-sim = { cmd = "pytest -m sim", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+# HARDWARE tier -- connects to REAL PVs. Only run this ON the beamline.
+# Note: no CA lock-down here on purpose; opt-in via --run-hardware.
+test-hardware = "pytest --run-hardware -m hardware"
 
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}

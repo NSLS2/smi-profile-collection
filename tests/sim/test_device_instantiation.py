@@ -1,25 +1,31 @@
-"""Instantiate device classes against MOCK PVs (no hardware) via ``ophyd.sim.make_fake_device``.
+"""Build the device classes as FAKE devices through :mod:`smiclasses.device_factory`.
 
-This proves the ``smiclasses`` device classes are fully constructible off the beamline -- the
-core Phase-1 capability.  ``make_fake_device`` swaps every ``EpicsSignal``/``EpicsMotor`` for an
-in-memory fake, so no CA connection is attempted.  We assert each device builds, exposes the
-expected components, and (where applicable) ``describe()``/``read()`` succeed.
+This proves the ``smiclasses`` device classes are fully constructible off the
+beamline via the same factory the live profile uses (``force="fake"`` here;
+``SMI_FAKE_DEVICES=all`` in production).  ``make_fake_device`` swaps every
+``EpicsSignal``/``EpicsMotor`` for an in-memory fake, so no CA connection is
+attempted.  We assert each device builds, exposes the expected components, and
+(where applicable) ``describe()``/``read()`` succeed.
 """
+from smiclasses import device_factory as df
 import pytest
 
-from ophyd.sim import make_fake_device
+
+def test_factory_records_mode_and_registry(make_fake):
+    from smiclasses.manipulators import SMARACT
+
+    piezo = make_fake(SMARACT, name="piezo")
+    assert ("piezo") in df.registered()
+    mode, inst = df.registry()["piezo"]
+    assert mode == df.FAKE
+    assert inst is piezo
 
 
-def _fake(cls, **kwargs):
-    return make_fake_device(cls)(prefix="FAKE:", name="dev", **kwargs)
-
-
-def test_stg_pseudo_builds_and_has_backcompat_aliases():
+def test_stg_pseudo_builds_and_has_backcompat_aliases(make_fake):
     """STG_pseudo (the Huber stack) builds, and the legacy .th/.ph/.ch aliases resolve."""
     from smiclasses.manipulators import STG_pseudo
 
-    stg = _fake(STG_pseudo)
-    # pseudo axes
+    stg = make_fake(STG_pseudo, name="stage")
     for ax in ("x", "y", "z", "theta", "chi", "phi"):
         assert hasattr(stg, ax)
     # backwards-compatible aliases added in Phase 0 must point at the rotation pseudo-axes
@@ -31,85 +37,88 @@ def test_stg_pseudo_builds_and_has_backcompat_aliases():
     assert "theta" in stg.component_names
 
 
-def test_smaract_and_bdm_build():
+def test_smaract_and_bdm_build(make_fake):
     from smiclasses.manipulators import SMARACT, BDMStage
 
-    piezo = _fake(SMARACT)
+    piezo = make_fake(SMARACT, name="piezo")
     for ax in ("x", "y", "z", "th", "ch"):
         assert hasattr(piezo, ax)
 
-    bdm = _fake(BDMStage)
+    bdm = make_fake(BDMStage, name="bdm")
     for ax in ("x", "y", "th"):
         assert hasattr(bdm, ax)
 
 
-def test_saxs_beamstops_build_and_describe():
+def test_saxs_beamstops_build_and_describe(make_fake):
     from smiclasses.beamstop import SAXSBeamStops
 
-    bs = _fake(SAXSBeamStops)
+    bs = make_fake(SAXSBeamStops, name="bs")
     for ax in ("x_rod", "y_rod", "x_pin", "y_pin"):
         assert hasattr(bs, ax)
     # describe() should work against fake signals (no CA)
     assert isinstance(bs.describe(), dict)
 
 
-def test_pilatus_saxs_detector_class_builds_fake_type():
-    """The SAXS Pilatus class can be imported and a fake *type* built with mock PVs.
-
-    NOTE: ``SAXS_Detector.__init__`` reads ``self.beamstop.x_pin.position`` (etc.) at
-    construction time to infer the initial active-beamstop state.  On a freshly-made *fake*
-    device those positions are ``None``, so full ``make_fake_device(...)()`` instantiation
-    raises ``TypeError``.  That init-time hardware read is a separate device-cleanup item
-    (tracked for a later phase, alongside the bdm/positioner fixes); it is NOT introduced by the
-    Phase-1 decoupling.  Here we assert the class imports and the fake type is constructible, and
-    that the Phase-1 deferrals hold (energyset no longer reads EPICS at class-definition).
-    """
-    from smiclasses.pilatus import SAXS_Detector
+def test_pilatus_cam_builds_without_class_definition_epics_read(make_fake):
+    """Phase-1 deferral: the cam's energyset default is a plain 0.0 (no class-definition EPICS read)."""
     from smiclasses.pilatus import PilatusDetectorCamV33
 
-    FakeSAXS = make_fake_device(SAXS_Detector)
-    assert FakeSAXS is not None
-    # Phase-1 deferral: the cam's energyset default is a plain 0.0 (no class-definition EPICS
-    # read).  Build the cam alone (it has no init-time .position read) to confirm.
-    cam = make_fake_device(PilatusDetectorCamV33)(prefix="FAKE:cam1:", name="cam")
+    cam = make_fake(PilatusDetectorCamV33, name="cam", prefix="FAKE:cam1:")
     assert cam.energyset.get() == 0.0
 
 
-@pytest.mark.xfail(reason="SAXS_Detector.__init__ reads beamstop .position (None on a fresh "
-                          "fake device); init-time hardware read is a later-phase device fix.",
-                   raises=TypeError, strict=True)
-def test_pilatus_saxs_detector_full_instantiation_xfail():
-    """Documents the known init-time .position read; will pass once that is fixed (later phase)."""
+def test_saxs_detector_full_instantiation(make_fake):
+    """SAXS_Detector now builds fully as a fake.
+
+    Its ``__init__`` and the immediate ``update_beam_center`` subscription read
+    ``.position`` on the beamstop/detector motors.  Those reads are now guarded
+    against unconnected (``None``) positioners, so a fresh fake builds cleanly
+    and leaves ``active_beamstop`` at its 'none' default.  (Previously xfail.)
+    """
     from smiclasses.pilatus import SAXS_Detector
 
-    det = _fake(SAXS_Detector, asset_path="pilatus2m-test")
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
     assert hasattr(det, "beamstop")
+    assert det.active_beamstop.get() == "none"
 
 
-def test_waxs_detector_builds_without_hardware():
+def test_factory_seed_sets_fake_signal_values(make_fake):
+    """The factory ``seed=`` applies values *after* construction (e.g. to put a
+    device in a known state before a plan).  Verify a seeded readback reads back.
+
+    (Note: seed runs post-__init__, so it cannot influence init-time inference
+    such as SAXS_Detector.active_beamstop; use ``force``/component defaults for that.)
+    """
+    from smiclasses.beamstop import SAXSBeamStops
+
+    bs = make_fake(SAXSBeamStops, name="bs", seed={"x_rod.user_readback": 6.8})
+    assert bs.x_rod.position == pytest.approx(6.8)
+
+
+def test_waxs_detector_builds_without_hardware(make_fake):
     from smiclasses.pilatus import WAXS_Detector
 
-    det = _fake(WAXS_Detector, asset_path="pilatus900kw-test")
+    det = make_fake(WAXS_Detector, name="pil900KW", asset_path="pilatus900kw-test")
     assert hasattr(det, "motors")
     assert hasattr(det.motors, "arc")  # the WAXS arc (arc-block readback)
 
 
-def test_energy_pseudopositioner_builds_without_hardware():
+def test_energy_pseudopositioner_builds_without_hardware(make_fake):
     from smiclasses.energy import Energy
 
-    en = _fake(Energy)
+    en = make_fake(Energy, name="energy")
     assert hasattr(en, "energy")
     assert hasattr(en, "bragg")
     assert hasattr(en, "ivugap")
 
 
-def test_lakeshore_and_linkam_build():
+def test_lakeshore_and_linkam_build(make_fake):
     from smiclasses.electrometers import new_LakeShore
     from smiclasses.linkam import LinkamThermal
 
-    ls = _fake(new_LakeShore)
+    ls = make_fake(new_LakeShore, name="lakeshore")
     assert hasattr(ls, "input_A_celsius")
 
-    lk = _fake(LinkamThermal)
+    lk = make_fake(LinkamThermal, name="linkam")
     # the readback Signal the Phase-2 Linkam-Heater fix will use
     assert hasattr(lk, "temperature_current")

@@ -27,4 +27,13 @@ test = ["pytest>=7", "ophyd", "numpy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Test tiers (see docs/TESTING.md and tests/conftest.py):
+#   unit     -- pure code, no devices
+#   sim      -- fake, non-broadcasting ophyd.sim devices (no hardware)
+#   hardware -- real EPICS PVs; DESELECTED unless `pytest --run-hardware`
+markers = [
+    "unit: pure-code test; constructs no devices",
+    "sim: builds fake (non-broadcasting) devices; no hardware",
+    "hardware: connects to REAL hardware; opt-in via --run-hardware",
+]
 # The device-class tests must run with no hardware; they rely on ophyd.sim.make_fake_device.

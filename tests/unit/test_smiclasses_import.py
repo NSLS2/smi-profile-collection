@@ -47,7 +47,7 @@ def test_smiclasses_does_not_import_smibase():
     import os
 
     here = os.path.dirname(__file__)
-    smiclasses_dir = os.path.abspath(os.path.join(here, "..", "startup", "smiclasses"))
+    smiclasses_dir = os.path.abspath(os.path.join(here, "..", "..", "startup", "smiclasses"))
     offenders = []
     for fn in os.listdir(smiclasses_dir):
         if not fn.endswith(".py"):
