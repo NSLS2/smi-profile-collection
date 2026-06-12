@@ -65,6 +65,14 @@ bec = get_ipython().user_ns['bec']
 RE.unsubscribe(0)
 RE.subscribe(tiled_inserter.insert)
 
+# Wire the device-class dependency seam (smiclasses._context) so the ophyd classes can reach
+# RE.md (proposal metadata / raw-data dir / data-security tags) and the Redis persistent-config
+# dict (mdsave) WITHOUT importing smibase.base at module load.  Must run before the smiclasses
+# device modules (pilatus, prosilica, ...) are imported by startup.py.  The energy source is
+# added later in smibase/energy.py once the `energy` positioner exists.
+from smiclasses import _context as _smiclasses_context
+_smiclasses_context.configure(run_engine=RE, config_dict=mdsave)
+
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
 tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
 

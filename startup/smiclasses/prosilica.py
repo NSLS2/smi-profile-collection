@@ -14,7 +14,6 @@ from ophyd import (
 from .pilatus import TIFFPluginWithFileStore
 from ophyd import Component as Cpt
 from nslsii.ad33 import SingleTriggerV33, StatsPluginV33
-from smibase.base import RE
 
 class ProsilicaDetectorCamV33(ProsilicaDetectorCam):
     """This is used to update the Standard Prosilica to AD33. It adds the
@@ -77,7 +76,6 @@ class StandardProsilicaV33(SingleTriggerV33, ProsilicaDetector):
 class StandardProsilicaWithTIFFV33(StandardProsilicaV33):
     tiff = Cpt(TIFFPluginWithFileStore,
                suffix='TIFF1:',
-               md = RE.md,
                write_path_template='',
                root='/nsls2/data/smi/proposals')
 

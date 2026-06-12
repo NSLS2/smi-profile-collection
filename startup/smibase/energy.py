@@ -10,6 +10,14 @@ energy = Energy(
     configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic"],
 )
 energy.settle_time = 1
+
+# Provide the live beamline energy to the device-class seam (used by e.g. the Pilatus
+# ``energyset`` so it can remember the energy for camserver-restart threshold resets) without
+# the device classes importing smibase.energy.  Runs after `energy` exists and before the
+# detector modules are imported by startup.py.
+from smiclasses import _context as _smiclasses_context
+_smiclasses_context.configure(energy_source=energy)
+
 dcm = energy
 ivugap = energy.ivugap
 dcm_gap = dcm.dcmgap  # Height in CSS # EpicsMotor('XF:12ID:m66', name='p2h')

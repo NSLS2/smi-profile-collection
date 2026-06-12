@@ -31,9 +31,13 @@ import numpy as np
 import time as ttime
 from warnings import warn
 
-from smibase.energy import energy
-from smibase.base import RE,mdsave
-from smibase.beamstop import SAXSBeamStops
+from smiclasses.beamstop import SAXSBeamStops
+from smiclasses import _context
+
+# Persistent-config dict (Redis ``mdsave`` on the live beamline; ``{}`` fallback under bare
+# import / tests so the class-body ``Cpt(Signal, value=mdsave.get(...))`` seeding still works
+# with no hardware).  The profile bootstrap configures the seam before this module is imported.
+mdsave = _context.get_config()
 
 
 class StatsWCentroid(StatsPluginV33):
@@ -50,7 +54,10 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
     file_number = Cpt(SignalWithRBV, "FileNumber")
     auto_increment = Cpt(SignalWithRBV, "AutoIncrement")
     cam_energy = Cpt(SignalWithRBV, "Energy")
-    energyset = Cpt(Signal, name="Beamline Energy", value=energy.energy.readback.get()) # remember the energy of the beamline
+    # Remembers the beamline energy (used to reset the camera threshold after a camserver
+    # restart).  Seeded in __init__ from the live energy via the context seam -- NOT read from
+    # EPICS at class-definition time (which would break off-beamline import / unit tests).
+    energyset = Cpt(Signal, name="Beamline Energy", value=0.0)
 
 
     def __init__(self, *args, **kwargs):
@@ -59,6 +66,11 @@ class PilatusDetectorCamV33(PilatusDetectorCam):
         self.stage_sigs["file_template"] = "%s%s_%6.6d_SAXS.tif"
         self.stage_sigs["auto_increment"] = 1
         self.stage_sigs["file_number"] = 0
+        # Seed the remembered beamline energy from the live source if available (no-op when
+        # the seam is unconfigured, e.g. under test).
+        _e = _context.current_energy_eV()
+        if _e is not None:
+            self.energyset.put(_e)
 
 
     def ensure_nonblocking(self):
@@ -86,7 +98,11 @@ class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
     # def __init__(self, *args, md=None, root_path="/nsls2/data/smi/proposals", **kwargs):
     def __init__(self, *args, root_str="/nsls2/data/smi/proposals", md=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._md = md
+        # ``md`` carries proposal/data-session info (RE.md) used to build the raw-data path at
+        # stage() time.  Resolve it lazily from the context seam when not explicitly given, so
+        # the class can be defined/imported with no live RE (off-beamline / unit tests).  On the
+        # beamline the seam is configured before staging, so RE.md is used exactly as before.
+        self._md = md if md is not None else _context.get_md()
         self.__stage_cache = {}
         self._asset_path = ''
         self.root_str = root_str
@@ -140,7 +156,6 @@ class Pilatus(SingleTriggerV33, PilatusDetector):
     tiff = Cpt(
         TIFFPluginWithFileStore,
         suffix="TIFF1:",
-        md=RE.md,
         write_path_template="/ramdisk/PLACEHOLDER",
         root_str="/nsls2/data/smi/proposals",
         root="/nsls2/data/smi/proposals",
