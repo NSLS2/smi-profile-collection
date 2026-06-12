@@ -1,0 +1,30 @@
+# Phase 1 (packaging shell): test configuration for the SMI profile-collection device classes.
+#
+# This is intentionally minimal. The startup code is not yet a conventional importable package
+# (it lives under startup/smibase + startup/smiclasses and is loaded by IPython/QS via
+# startup/startup.py). The decoupling done in Phase 1 (the smiclasses._context seam) makes the
+# device CLASSES importable with no hardware; this file wires up pytest so they can be
+# unit-tested off the beamline (tests/conftest.py puts startup/ on sys.path).
+#
+# A later step may introduce a real src/smi_beamline/ package (see
+# smi-plans/docs/STARTUP_RESTRUCTURE_PLAN.md, Phase 1/3); this config will move with it.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smi-profile-collection"
+version = "2026.2.0"
+description = "NSLS-II SMI beamline Bluesky profile collection (device classes + startup)."
+requires-python = ">=3.12"
+# Runtime deps (bluesky/ophyd/nslsii/...) are provided by the pixi environment, not pip.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7", "ophyd", "numpy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+# The device-class tests must run with no hardware; they rely on ophyd.sim.make_fake_device.

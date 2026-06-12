@@ -65,8 +65,19 @@ numpy = ">2"
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 
+
+[feature.test.dependencies]
+pytest = ">=7"
+
+[feature.test.tasks]
+# Hardware-free unit tests of the ophyd device classes (uses ophyd.sim.make_fake_device).
+# Disable EPICS CA auto-addressing so no real channel access is attempted from the test env
+# (the device classes are faked via make_fake_device; this just keeps pyepics quiet at teardown).
+test = { cmd = "pytest", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}
+test = {features=["profile", "test"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
 
 
