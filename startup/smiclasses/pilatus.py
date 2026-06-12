@@ -498,13 +498,13 @@ class SAXS_Detector(Pilatus):
         elif self.active_beamstop.get() == 'pin':
             yield from self.remove_pin()
         else:
-            Exception(ValueError('beamstop is not in place'))
+            raise ValueError('beamstop is not in place')
 
     def remove_rod(self):
         # remove the rod beamstop by 5 mm, only if it is the active beamstop, if not error
         warn('beamstop will be removed, run restore_beamstop to put it back')
         if abs(self.beamstop.x_pin.position - self.pd_safe_pos.get())>1 and 'rod' not in self.active_beamstop.get():
-            Exception(ValueError('Beamstop is not in'))
+            raise ValueError('Beamstop is not in')
         else:
             yield from bps.mv(self.beamstop.x_rod,self.rod_offset_x_mm.get()+5)
             yield from bps.mv(self.active_beamstop,'rod_removed')
@@ -514,7 +514,7 @@ class SAXS_Detector(Pilatus):
         
         warn('beamstop will be removed, run restore_beamstop to put it back')
         if abs(self.beamstop.x_rod.position - self.rod_safe_pos.get())>1 and 'pin' not in self.active_beamstop.get():
-            Exception(ValueError('Beamstop is not in'))
+            raise ValueError('Beamstop is not in')
         else:
             yield from bps.mv(self.beamstop.x_pin,self.pd_offset_x_mm.get() + 5)
             yield from bps.mv(self.active_beamstop,'pin_removed')
@@ -532,12 +532,12 @@ class SAXS_Detector(Pilatus):
         elif self.active_beamstop.get() == 'pin_removed':
             yield from self.restore_pin()
         else:
-            Exception(ValueError('Beamstop is not removed - please check system manually before continuing'))
+            raise ValueError('Beamstop is not removed - please check system manually before continuing')
     
     def save_beamstop(self):
-        if self.active_beamstop == 'rod':
+        if self.active_beamstop.get() == 'rod':
             self.save_rod_position()
-        elif self.active_beamstop == 'pin':
+        elif self.active_beamstop.get() == 'pin':
             self.save_pd_position()
         else:
             warn('beamstop is not in position, please run restore_beamstop (i.e. smi.modeMeasurement()) and try again')
@@ -717,7 +717,7 @@ class SAXS_Detector(Pilatus):
 def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
      
     en = en_ev / 1000 # change to kev
-    thresh = thresh_ev / 1000 # change to kev
+    thresh = thresh_ev / 1000 if thresh_ev is not None else None # change to kev
 
     if not thresh:
         if en<2 : # invalid energy
@@ -736,9 +736,9 @@ def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
         elif en < 3.5:
             thresh = 1.7
         elif en < 4:
-            en_ev = 1.8
+            thresh = 1.8
         elif en < 5:
-            en_ev = 2
+            thresh = 2
 
         elif 13 < en < 22 and 'pil900KW' in cam.name: ## avoid the fluoresence from the waxs beamstop
             thresh = 11.0

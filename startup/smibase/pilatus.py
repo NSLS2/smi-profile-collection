@@ -78,9 +78,9 @@ pil900KW = WAXS_Detector("XF:12IDC-ES:2{Det:900KW}", name="pil900KW", asset_path
 pil900KW.set_primary_roi(1)
 
 pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats1:Total_RBV", name="pil900kwroi1")
-pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats2:Total_RBV", name="pil900kwroi2")
-pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats3:Total_RBV", name="pil900kwroi3")
-pil900kwroi1 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats4:Total_RBV", name="pil900kwroi4")
+pil900kwroi2 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats2:Total_RBV", name="pil900kwroi2")
+pil900kwroi3 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats3:Total_RBV", name="pil900kwroi3")
+pil900kwroi4 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats4:Total_RBV", name="pil900kwroi4")
 
 pil900KW.stats1.kind = "hinted"
 pil900KW.stats1.total.kind = "hinted"
