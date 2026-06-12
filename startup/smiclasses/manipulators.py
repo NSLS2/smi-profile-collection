@@ -249,6 +249,27 @@ class STG_pseudo(PseudoPositioner):
     cz_phi = Cpt(Signal, value=-1.38, kind="config")
 
     # ------------------------------------------------------------------
+    # BACKWARDS-COMPATIBLE AXIS ALIASES
+    # ------------------------------------------------------------------
+    # The legacy STG (hexapod) Device exposed the rotation axes as
+    # .th / .ph / .ch.  STG_pseudo names the corresponding pseudo axes
+    # .theta / .phi / .chi.  Expose the old names as properties returning
+    # the same PseudoSingle components so existing user/plan code
+    # (e.g. bps.mv(stage.th, ...), stage.th.position) keeps working
+    # unchanged.  (.x/.y/.z already match the legacy names.)
+    @property
+    def th(self):
+        return self.theta
+
+    @property
+    def ph(self):
+        return self.phi
+
+    @property
+    def ch(self):
+        return self.chi
+
+    # ------------------------------------------------------------------
     # ROTATION MATRICES
     # ------------------------------------------------------------------
 
