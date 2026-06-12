@@ -1,5 +1,6 @@
 print(f"Loading {__file__}")
 
+import warnings
 from time import ctime
 from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
 from smibase.waxschamber import chamber_pressure
@@ -21,38 +22,63 @@ sd = get_ipython().user_ns['sd']
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     """
-    exp_t: one image exposure time
-    meas_t: Total measurment time
-    Set the exposure ti;e for the Pil900KW and Pil2M detectors.
-    Waits broke pilatus exposure set when setting burst mode and hitting ctrl+c
+    Set the exposure time / image count on the Pilatus 2M and 900KW
+    (and the Amptek, when present) as a Bluesky **plan**.
+
+    exp_t: single-image exposure time (s)
+    meas_t: total measurement time (s); ``num_images = int(meas_t / exp_t)``
+    period_delay: added to ``exp_t`` to form the acquire period (s)
+
+    This is a plan (Tenet 5: plans contain only messages). Use it as
+    ``yield from det_exposure_time(...)`` inside another plan, or
+    ``RE(det_exposure_time(...))`` at the prompt. The two-pass set is preserved
+    from the original implementation: the Pilatus occasionally drops the first
+    acquire-time write when switching burst mode, so we set everything twice.
     """
-    try:
-        for j in range(2):
-            waits = []
-            waits.append(pil2M.cam.acquire_time.set(exp_t))
-            waits.append(pil2M.cam.acquire_period.set(exp_t + period_delay))
-            waits.append(pil2M.cam.num_images.set(int(meas_t / exp_t)))
+    num_images = int(meas_t / exp_t)
+    for _ in range(2):
+        args = [
+            pil2M.cam.acquire_time, exp_t,
+            pil2M.cam.acquire_period, exp_t + period_delay,
+            pil2M.cam.num_images, num_images,
+            pil900KW.cam.acquire_time, exp_t,
+            pil900KW.cam.acquire_period, exp_t + period_delay,
+            pil900KW.cam.num_images, num_images,
+        ]
+        if amptek_det is not None:
+            args += [amptek.mca.preset_real_time, exp_t]
+        yield from bps.mv(*args)
 
-            #Keep this commented for now but should be removed
-            # waits.append(pil300KW.cam.acquire_time.set(exp_t))
-            # waits.append(pil300KW.cam.acquire_period.set(exp_t + period_delay))
-            # waits.append(pil300KW.cam.num_images.set(int(meas_t / exp_t)))
 
-            if amptek_det is not None:
-                waits.append(amptek.mca.preset_real_time.put(exp_t))
-            waits.append(pil900KW.cam.acquire_time.set(exp_t))
-            waits.append(pil900KW.cam.acquire_period.set(exp_t + period_delay))
-            waits.append(pil900KW.cam.num_images.set(int(meas_t / exp_t)))
-            for w in waits:
-                w.wait()
-    except:
-        print('Problem with new exposure set, using old method')
-        pil2M.cam.acquire_time.put(exp_t)
-        pil2M.cam.acquire_period.put(exp_t + period_delay)
-        pil2M.cam.num_images.put(int(meas_t / exp_t))
-        pil900KW.cam.acquire_time.put(exp_t)
-        pil900KW.cam.acquire_period.put(exp_t + period_delay)
-        pil900KW.cam.num_images.put(int(meas_t / exp_t))
+def det_exposure_time_sync(exp_t, meas_t=1, period_delay=0.001):
+    """DEPRECATED blocking version of :func:`det_exposure_time`.
+
+    ``det_exposure_time`` is now a Bluesky plan (Tenet 5); call it via
+    ``RE(det_exposure_time(...))`` or ``yield from det_exposure_time(...)``.
+    This thin shim preserves the old synchronous ``.set()`` behaviour for any
+    out-of-tree caller that cannot run a plan. It will be removed.
+    """
+    warnings.warn(
+        "det_exposure_time is now a Bluesky plan; use "
+        "RE(det_exposure_time(...)) or `yield from det_exposure_time(...)`. "
+        "det_exposure_time_sync is a deprecated blocking shim and will be removed.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    num_images = int(meas_t / exp_t)
+    for _ in range(2):
+        waits = [
+            pil2M.cam.acquire_time.set(exp_t),
+            pil2M.cam.acquire_period.set(exp_t + period_delay),
+            pil2M.cam.num_images.set(num_images),
+            pil900KW.cam.acquire_time.set(exp_t),
+            pil900KW.cam.acquire_period.set(exp_t + period_delay),
+            pil900KW.cam.num_images.set(num_images),
+        ]
+        if amptek_det is not None:
+            waits.append(amptek.mca.preset_real_time.set(exp_t))
+        for w in waits:
+            w.wait()
 
 def det_next_file(n):
     pil2M.cam.file_number.put(n)
@@ -221,7 +247,7 @@ def startWAXS():
     yield from restartWAXS()
 
     #Reset exposure time and acquire period qdter tyurning on the detector
-    det_exposure_time(0.5, 0.5)
+    yield from det_exposure_time(0.5, 0.5)
 
     #set the energy and threshold
     pil900KW.cam.threshold_apply.put(1)

@@ -194,7 +194,7 @@ def alignment_gisaxs(angle=0.15):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
@@ -237,7 +237,7 @@ def alignement_gisaxs_doblestack(angle=0.15):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
@@ -286,7 +286,7 @@ def alignement_gisaxs_rough(angle=0.15):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
@@ -319,7 +319,7 @@ def alignement_gisaxs_multisample(angle=0.15):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
+    yield from det_exposure_time(0.5, 0.5)
 
     # yield from smi.modeAlignment(technique='gisaxs')
 
@@ -369,7 +369,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
+    yield from det_exposure_time(0.5, 0.5)
 
     yield from smi.modeAlignment()
 
@@ -416,7 +416,7 @@ def alignement_gisaxs_hex_roughsample(angle=0.1):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
+    yield from det_exposure_time(0.5, 0.5)
 
     yield from smi.modeAlignment()
 
@@ -448,7 +448,7 @@ def alignement_gisaxs_hex_short(angle=0.12):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment()
 
@@ -489,7 +489,7 @@ def quickalign_gisaxs(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment()
 
@@ -636,7 +636,7 @@ def alignement_gisaxs_short(angle=0.15):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
@@ -938,7 +938,7 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
@@ -992,7 +992,7 @@ def alignment_gisaxs_finer_for_bdm(angle=0.1):
     bec._calc_derivative_and_stats = True
 
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.3, 0.3)
+    yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
 
