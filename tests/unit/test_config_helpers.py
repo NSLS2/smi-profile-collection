@@ -78,3 +78,35 @@ def test_every_registry_default_is_json_safe():
         assert isinstance(desc, str) and desc
         # json.dumps raises on numpy; this guarantees the registered defaults are list/scalar.
         json.dumps(default)
+
+
+def test_saxs_pilatus_keys_are_registered():
+    """The Pilatus persist refactor relies on its saxs_* keys being registered."""
+    for key in (
+        "saxs_beam_offset_x_mm", "saxs_beam_offset_y_mm", "saxs_sample_offset_z_mm",
+        "saxs_rod_offset_x_mm", "saxs_rod_offset_y_mm", "saxs_rod_safe_pos",
+        "saxs_pd_offset_x_mm", "saxs_pd_offset_y_mm", "saxs_pd_safe_pos",
+    ):
+        assert key in _config.CONFIG_KEYS
+
+
+def test_persist_from_signals_writes_multiple_saxs_keys():
+    """persist_from_signals replaces the Pilatus hand-written mdsave[k]=sig.get() walls."""
+    from ophyd import Signal
+
+    cfg = {}
+    _context.configure(config_dict=cfg)
+
+    class _Dev:
+        pass
+
+    d = _Dev()
+    d.rod_offset_x_mm = Signal(value=6.8, name="rod_x")
+    d.pd_offset_x_mm = Signal(value=-227.0, name="pd_x")
+    n = _config.persist_from_signals(d, {
+        "saxs_rod_offset_x_mm": "rod_offset_x_mm",
+        "saxs_pd_offset_x_mm": "pd_offset_x_mm",
+    })
+    assert n == 2
+    assert cfg["saxs_rod_offset_x_mm"] == 6.8
+    assert cfg["saxs_pd_offset_x_mm"] == -227.0

@@ -33,6 +33,7 @@ from warnings import warn
 
 from smiclasses.beamstop import SAXSBeamStops
 from smiclasses import _context
+from smiclasses import _config
 
 # Persistent-config dict (Redis ``mdsave`` on the live beamline; ``{}`` fallback under bare
 # import / tests so the class-body ``Cpt(Signal, value=mdsave.get(...))`` seeding still works
@@ -573,23 +574,27 @@ class SAXS_Detector(Pilatus):
             warn('beamstop is not in position, please run restore_beamstop (i.e. smi.modeMeasurement()) and try again')
 
     def save_all_offsets(self):
-        mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
-        mdsave['saxs_rod_safe_pos']=self.rod_safe_pos.get()
-        mdsave['saxs_pd_offset_x_mm']=self.pd_offset_x_mm.get()
-        mdsave['saxs_pd_offset_y_mm']=self.pd_offset_y_mm.get()
-        mdsave['saxs_pd_safe_pos']=self.pd_safe_pos.get()
+        _config.persist_from_signals(self, {
+            'saxs_rod_offset_x_mm': 'rod_offset_x_mm',
+            'saxs_rod_safe_pos': 'rod_safe_pos',
+            'saxs_pd_offset_x_mm': 'pd_offset_x_mm',
+            'saxs_pd_offset_y_mm': 'pd_offset_y_mm',
+            'saxs_pd_safe_pos': 'pd_safe_pos',
+        })
 
     def save_rod_position(self):
         self.rod_offset_x_mm.set(self.beamstop.x_rod.position)
-        mdsave['saxs_rod_offset_x_mm']=self.rod_offset_x_mm.get()
+        _config.persist_from_signals(self, {'saxs_rod_offset_x_mm': 'rod_offset_x_mm'})
         self.add_calibration_point(self.motor.z.position, self.get_current_offset_dict())
 
 
     def save_pd_position(self):
         self.pd_offset_x_mm.set(self.beamstop.x_pin.position)
         self.pd_offset_y_mm.set(self.beamstop.y_pin.position)
-        mdsave['saxs_pd_offset_x_mm']=self.pd_offset_x_mm.get()
-        mdsave['saxs_pd_offset_y_mm']=self.pd_offset_y_mm.get()
+        _config.persist_from_signals(self, {
+            'saxs_pd_offset_x_mm': 'pd_offset_x_mm',
+            'saxs_pd_offset_y_mm': 'pd_offset_y_mm',
+        })
         self.add_calibration_point(self.motor.z.position, self.get_current_offset_dict())
 
     

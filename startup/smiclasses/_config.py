@@ -75,6 +75,18 @@ CONFIG_KEYS = {
         "Named bimorph configurations: {state_name: {'hfm': [16 V], 'vfm': [16 V]}}. "
         "Saved from live GET-VOUT; staged/applied by load_bimorph.",
     ),
+    # --- SAXS Pilatus beam-center / beamstop offsets (smiclasses/pilatus.py) ---
+    # (already migrated to mdsave by hand; registered here so persist_from_signals can write them
+    #  and the keys are documented in one place.  Defaults match the class-body seeds.)
+    "saxs_beam_offset_x_mm": (128.398, "SAXS: beam-center x offset (mm) at saxs x=0."),
+    "saxs_beam_offset_y_mm": (190.404, "SAXS: beam-center y offset (mm) at saxs y=0."),
+    "saxs_sample_offset_z_mm": (0.0, "SAXS: position.z -> sample-detector distance offset (mm)."),
+    "saxs_rod_offset_x_mm": (6.8, "SAXS rod beamstop: in-beam x position (mm)."),
+    "saxs_rod_offset_y_mm": (0.0, "SAXS rod beamstop: in-beam y position (mm)."),
+    "saxs_rod_safe_pos": (-200, "SAXS rod beamstop: out-of-beam (safe) x position (mm)."),
+    "saxs_pd_offset_x_mm": (-227, "SAXS pin-diode beamstop: in-beam x position (mm)."),
+    "saxs_pd_offset_y_mm": (6.8, "SAXS pin-diode beamstop: in-beam y position (mm)."),
+    "saxs_pd_safe_pos": (0.0, "SAXS pin-diode beamstop: out-of-beam (safe) x position (mm)."),
 }
 
 
