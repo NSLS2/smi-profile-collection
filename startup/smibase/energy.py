@@ -29,10 +29,6 @@ dcm_config = DCMInternals("", name="dcm_config")
 bragg.read_attrs = ["user_readback"]
 
 
-dcm_theta = EpicsMotor("XF:12ID:m65", name="dcm_theta")
-
-
-
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
