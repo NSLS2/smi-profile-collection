@@ -55,3 +55,29 @@ def feedback(action=None):
     elif action == "on":
         manual_PID_disable_pitch.set("0")
         manual_PID_disable_roll.set("0")
+
+
+import bluesky.plan_stubs as bps
+
+
+def move_energy(target_energy):
+    """Plan: move the DCM energy to ``target_energy`` (eV) -- the message-pure path.
+
+    Use this inside a Bluesky plan instead of ``energy.move(target_energy)``.
+
+    Background
+    ----------
+    * ``energy.move(target_energy)`` is the **blocking convenience** for the console / scripts:
+      it sets the energy and *waits* for the move to finish before returning.  It still works
+      and is fine to type interactively, but it must NOT be used inside a plan (a blocking call
+      in a plan stalls the RunEngine).
+    * ``yield from move_energy(target_energy)`` (equivalently ``yield from bps.mv(energy,
+      target_energy)``) is the message form for plans.  The DCM pitch/roll feedback is disabled
+      for the move and re-enabled afterwards automatically -- that choreography now lives in the
+      ``Energy.set`` ophyd device (wired with Status callbacks, non-blocking), so the plan needs
+      to do nothing special.
+
+    Migrating a script: replace ``energy.move(E)`` with ``yield from move_energy(E)`` (and make
+    the enclosing function a generator / run it under ``RE``).
+    """
+    yield from bps.mv(energy, target_energy)

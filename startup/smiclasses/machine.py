@@ -39,6 +39,17 @@ class InsertionDevice(EpicsMotor):
         add_prefix = (),
     )
 
-    def move(self, *args, **kwargs):
-        self.brake.set(1).wait() # changed from set_and_wait Oct 2024 - Eliot
-        return super().move(*args, **kwargs)
+    def move(self, position, wait=True, **kwargs):
+        """Disengage the IVU brake, then move the gap.
+
+        The brake **must** be disengaged before the gap can move.  The brake is written with a
+        non-blocking ``put`` (a single CA put) immediately before delegating to the normal
+        ``EpicsMotor.move``; the returned Status is the gap-move status, so ``wait``/timeout
+        semantics are unchanged from a plain motor move and this composes correctly with the
+        ``Energy`` pseudo-positioner.
+        """
+        # Disengage the brake (1 = disengaged) and wait for the put to complete so the brake is
+        # provably released before motion starts.  A single quick CA put; put(wait=True) (not
+        # set().wait()) avoids spawning a worker thread and works on the main or a worker thread.
+        self.brake.put(1, wait=True)
+        return super().move(position, wait=wait, **kwargs)

@@ -21,6 +21,7 @@ from ophyd.pseudopos import pseudo_position_argument, real_position_argument
 from ophyd import Component as Cpt
 import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
+import epics.ca as ca
 from .machine import InsertionDevice
 
 logger = logging.getLogger("bluesky")
@@ -226,39 +227,50 @@ class Energy(PseudoPositioner):
 
     @pseudo_position_argument
     def set(self, position):
-        """
-        Set the energy position.
+        """Move the energy, disabling DCM pitch/roll feedback for the duration of the move.
 
-        Parameters:
-            position (PseudoPosition): Desired energy position.
+        Feedback is disabled up front (a couple of quick CA puts), the move is started, and the
+        feedback is re-enabled from the move's completion callback.  The returned ``Status``
+        completes when the move finishes; the re-enable is wired to that same completion so it is
+        **guaranteed** to run on success or failure (unlike the previous version, which used an
+        accumulating ``_SUB_REQ_DONE`` subscription and swallowed errors).
 
-        Returns:
-            MoveStatus: Status of the move.
+        This keeps the public behavior identical for ``energy.move(E)`` (blocking convenience)
+        and ``bps.mv(energy, E)`` (RunEngine message).  The feedback writes use ``put`` (not
+        ``set``) so they are robust when the completion callback runs on a pyepics worker thread.
         """
         (energy,) = position
         if np.abs(energy - self.position[0]) < 0.01:
             return MoveStatus(self, energy, success=True, done=True)
 
+        # Disable feedback up front and WAIT for the puts to complete (on the calling thread,
+        # where a CA context exists) so feedback is provably off before the move begins -- a
+        # fire-and-forget put could otherwise land after a fast move already re-enabled it.
+        self.pitch_feedback_disabled.put("1", wait=True)
+        self.roll_feedback_disabled.put("1", wait=True)
 
+        try:
+            move_status = super().set([float(_) for _ in position])
+        except Exception:
+            # Move failed to even start -> re-enable feedback and re-raise.
+            self._reenable_feedback()
+            raise
 
-# TODO change self.settle_time here based on energy we are moving to 
-        # if False:
-        #     self.settle_time = per_energy(energy)
-        def turn_on_feedback(*arg, **kwargs):
-            try:
-                self.pitch_feedback_disabled.set("0").wait()
-                self.roll_feedback_disabled.set("0").wait()
-            except Exception as e:
-                print(e, type(e))
+        # Re-enable feedback when the move finishes (success OR failure), via the move's Status.
+        move_status.add_callback(self._reenable_feedback)
+        return move_status
 
-        # Disable feedback during the move
-        self.pitch_feedback_disabled.set("1").wait()
-        self.roll_feedback_disabled.set("1").wait()
-
-        # Perform the move
-        sts = super().set([float(_) for _ in position])
-        self.subscribe(turn_on_feedback, event_type=self._SUB_REQ_DONE, run=False)
-        return sts
+    def _reenable_feedback(self, *args, **kwargs):
+        """Re-enable DCM pitch/roll feedback (``put`` so it is safe on a worker thread)."""
+        try:
+            ca.use_initial_context()
+        except Exception:
+            pass
+        try:
+            self.pitch_feedback_disabled.put("0")
+            self.roll_feedback_disabled.put("0")
+        except Exception as exc:
+            logger.warning("energy: failed to re-enable DCM feedback: %r", exc)
 
 
     def small_move(self, target_energy, *, min_move_time=1.0, min_velocity=1e-4,
@@ -330,14 +342,16 @@ class Energy(PseudoPositioner):
         new_ivu_gap_speed = max(abs(delta_ivu) / move_time, min_gap_speed)
 
         def _restore():
-            yield from bps.abs_set(self.bragg.velocity, orig_bragg_velocity)
-            yield from bps.abs_set(self.ivugap.gap_speed, orig_ivu_gap_speed)
+            # wait=True so the speeds are actually back to their originals before the plan ends.
+            yield from bps.abs_set(self.bragg.velocity, orig_bragg_velocity, wait=True)
+            yield from bps.abs_set(self.ivugap.gap_speed, orig_ivu_gap_speed, wait=True)
             logger.debug("small_move: restored bragg velocity=%.4f, IVU gap speed=%.4f",
                          orig_bragg_velocity, orig_ivu_gap_speed)
 
         def _do_move():
-            # Set the matched speeds, then move both axes together.
-            yield from bps.abs_set(self.bragg.velocity, new_bragg_velocity)
+            # Set the matched speeds (wait so they take effect before the move), then move both
+            # axes together.
+            yield from bps.abs_set(self.bragg.velocity, new_bragg_velocity, wait=True)
             yield from bps.abs_set(self.ivugap.gap_speed, new_ivu_gap_speed, wait=True)
             yield from bps.mv(self.bragg, target_bragg, self.ivugap, target_ivu)
 
