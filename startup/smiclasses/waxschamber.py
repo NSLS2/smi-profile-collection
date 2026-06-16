@@ -1,8 +1,11 @@
 
 from ophyd import Device, EpicsSignal, Component as Cpt
 import bluesky.plan_stubs as bps
-#from .shutter import TwoButtonShutter
-from nslsii.devices import TwoButtonShutter
+# Use the unified, polarity-aware TwoButtonShutter (a thin SMI subclass of the maintained
+# nslsii one) so every valve shares one implementation and can declare per-valve actuation
+# polarity if needed.  (Previously this imported nslsii's directly while shutter.py had its own
+# divergent copy.)
+from .shutter import TwoButtonShutter
 
 class Valve(TwoButtonShutter):
     def stop(self,*,success=False):

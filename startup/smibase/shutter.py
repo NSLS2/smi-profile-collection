@@ -46,11 +46,18 @@ fs = SMIFastShutter("", name="fs")
 fs_motor = EpicsMotor("XF:12IDC:2{Sh:E-Ax:Y}Mtr", name="fshutter_motor")
 
 
-GV7 = TwoButtonShutter("XF:12IDC-VA:2{Det:1M-GV:7}", name="GV7")
+# GV7 (the SAXS<->WAXS gate valve, XF:12IDC-VA:2{Det:1M-GV:7}) is the SAME physical valve as the
+# Sample_Chamber child `waxs_saxs_valve`.  It used to be a SECOND, standalone ophyd object on the
+# same PV; now it is defined ONCE (as the chamber component) and exposed here under the historical
+# `GV7` name for backwards compatibility.  It is still recorded in the baseline via `chamber`
+# (Sample_Chamber is on sd.baseline), so dropping the duplicate standalone does not lose the
+# baseline reading.
+from .waxschamber import chamber_pressure
+GV7 = chamber_pressure.waxs_saxs_valve
 
 
 
 from IPython import get_ipython
 sd = get_ipython().user_ns['sd']
 
-sd.baseline.extend([ GV7, ph_shutter])
+sd.baseline.extend([ph_shutter])

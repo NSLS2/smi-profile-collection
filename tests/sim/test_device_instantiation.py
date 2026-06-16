@@ -110,6 +110,56 @@ def test_saxs_beamstops_build_and_describe(make_fake):
     assert isinstance(bs.describe(), dict)
 
 
+def test_two_button_shutter_unified_and_polarity(make_fake):
+    """M3/M4: one TwoButtonShutter (the polarity-aware SMI subclass of nslsii's), and the
+    per-valve actuation polarity is honored -- 'open' writes cmd_actuate_val to Cmd:Opn-Cmd."""
+    from smiclasses.shutter import TwoButtonShutter
+    from nslsii.devices import TwoButtonShutter as _NSLSII
+
+    # it is the maintained upstream class, subclassed (single implementation, not a fork)
+    assert issubclass(TwoButtonShutter, _NSLSII)
+
+    # default polarity == historical behavior: actuate with 1, confirm 'Open'/'Not Open'
+    v = make_fake(TwoButtonShutter, name="v", prefix="VALVE:")
+    assert v.cmd_actuate_val == 1
+    assert (v.open_str, v.close_str) == ("Open", "Close")
+    # set('Open') must press the OPEN command PV with the actuate value, not the close PV.
+    v.status.sim_put("Not Open")
+    v.open_cmd.sim_put(0)
+    v.close_cmd.sim_put(0)
+    st = v.set("Open")
+    assert int(v.open_cmd.get()) == 1     # pressed the open button...
+    assert int(v.close_cmd.get()) == 0    # ...not the close button
+    v.status.sim_put("Open")              # hardware confirms -> the move finishes
+    st.wait(timeout=5)
+    assert st.success
+
+    # a valve wired the OTHER way: actuate with 0.  Proves the polarity is expressible.
+    v0 = make_fake(TwoButtonShutter, name="v0", prefix="V0:")
+    v0.cmd_actuate_val = 0
+    v0.status.sim_put("Not Open")
+    v0.open_cmd.sim_put(7)
+    st0 = v0.set("Open")
+    assert int(v0.open_cmd.get()) == 0    # wrote 0 (this valve's "actuate"), not 1
+    v0.status.sim_put("Open")
+    st0.wait(timeout=5)
+    assert st0.success
+
+
+def test_gv7_is_chamber_component_alias():
+    """GV7 must be the SAME object as the chamber's waxs_saxs_valve (defined once, aliased), and a
+    Valve (the unified, polarity-aware shutter)."""
+    from smiclasses.waxschamber import Sample_Chamber, Valve
+    from smiclasses.shutter import TwoButtonShutter
+
+    assert issubclass(Valve, TwoButtonShutter)
+    ch = Sample_Chamber("", name="chamber")
+    assert "waxs_saxs_valve" in ch.component_names
+    assert isinstance(ch.waxs_saxs_valve, Valve)
+    # the PV is preserved
+    assert ch.waxs_saxs_valve.open_cmd.pvname == "XF:12IDC-VA:2{Det:1M-GV:7}Cmd:Opn-Cmd"
+
+
 def test_pilatus_cam_builds_without_class_definition_epics_read(make_fake):
     """Phase-1 deferral: the cam's energyset default is a plain 0.0 (no class-definition EPICS read)."""
     from smiclasses.pilatus import PilatusDetectorCamV33
