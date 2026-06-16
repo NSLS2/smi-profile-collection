@@ -302,3 +302,54 @@ def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
     hfm.lowdiv_offset_v.put(0)
     sent2 = _drain_set_targets(hfm.set_target("SWAXS"))
     assert sent2["hfm_ch0_trg"] == -151           # now 0 + (-151)
+
+
+def test_bimorph_stage_then_apply_mechanism(make_fake):
+    """Verify the two-step stage/apply: set_targets writes SET-VTRGT (no apply), apply() triggers
+    SET-ALLTRGT, and apply_and_wait blocks until all GET-STATUS channels leave 'Busy'."""
+    import threading
+    from bluesky import RunEngine
+    from smiclasses.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    # has the new per-channel readbacks
+    assert hasattr(hfm, "ch0_trg_rb") and hasattr(hfm, "ch0_status")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_status".format(i)).sim_put("On")
+
+    RE = RunEngine({})
+
+    # staging must NOT touch the apply signal
+    hfm.apply_sig.sim_put(0)
+    RE(hfm.set_targets([float(i) for i in range(N_BIMORPH_CH)]))
+    assert int(hfm.apply_sig.get()) == 0          # not applied yet
+    assert int(hfm.ch5_trg.get()) == 5            # staged
+
+    # apply() writes 1 to SET-ALLTRGT
+    RE(hfm.apply())
+    assert int(hfm.apply_sig.get()) == 1
+
+    # apply_and_wait returns once nothing is busy; simulate a channel busy then settling
+    getattr(hfm, "ch3_status").sim_put("Busy")
+
+    def _settle():
+        getattr(hfm, "ch3_status").sim_put("On")
+
+    threading.Timer(0.4, _settle).start()
+    RE(hfm.apply_and_wait(settle=0.1, timeout=5))
+    assert not hfm.is_busy()
+
+
+def test_bimorph_apply_and_wait_times_out_if_stuck_busy(make_fake):
+    import pytest as _pytest
+    from bluesky import RunEngine
+    from smiclasses.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_status".format(i)).sim_put("On")
+    getattr(hfm, "ch7_status").sim_put("Busy")    # stuck busy forever
+
+    RE = RunEngine({})
+    with _pytest.raises(TimeoutError):
+        RE(hfm.apply_and_wait(settle=0.1, timeout=1.0))

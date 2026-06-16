@@ -69,6 +69,12 @@ CONFIG_KEYS = {
         -80,
         "Additive offset applied to the HFM defaults to reach the low-divergence configuration.",
     ),
+    # --- named bimorph states (save_bimorph/load_bimorph) ---
+    "bimorph_states": (
+        {},
+        "Named bimorph configurations: {state_name: {'hfm': [16 V], 'vfm': [16 V]}}. "
+        "Saved from live GET-VOUT; staged/applied by load_bimorph.",
+    ),
 }
 
 
