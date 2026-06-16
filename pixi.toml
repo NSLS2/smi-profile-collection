@@ -68,6 +68,7 @@ pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 
 [feature.test.dependencies]
 pytest = ">=7"
+caproto = "*"
 
 [feature.test.tasks]
 # Hardware-free tiers (unit + sim). Uses ophyd.sim.make_fake_device; EPICS CA is
@@ -77,6 +78,10 @@ test = { cmd = "pytest -m 'not hardware'", env = { EPICS_CA_AUTO_ADDR_LIST = "NO
 test-unit = { cmd = "pytest -m unit", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
 # Just the fake-device tier.
 test-sim = { cmd = "pytest -m sim", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1" } }
+# Integration tier: spin up LOCAL, loopback-only fake caproto IOCs and drive the real
+# device logic against motors that move at finite speed. CA is pinned to loopback so it
+# only ever talks to the local IOC (never the beamline).
+test-iocs = { cmd = "pytest -m integration --run-iocs", env = { EPICS_CA_AUTO_ADDR_LIST = "NO", EPICS_CA_ADDR_LIST = "127.0.0.1", EPICS_CAS_INTF_ADDR_LIST = "127.0.0.1", EPICS_CAS_BEACON_ADDR_LIST = "127.0.0.1" } }
 # HARDWARE tier -- connects to REAL PVs. Only run this ON the beamline.
 # Note: no CA lock-down here on purpose; opt-in via --run-hardware.
 test-hardware = "pytest --run-hardware -m hardware"
