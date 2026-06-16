@@ -1,4 +1,5 @@
 import re
+import contextlib
 import numpy as np
 from ophyd import (
     EpicsSignal,
@@ -14,6 +15,36 @@ from . import _config
 
 #: number of bimorph channels
 N_BIMORPH_CH = 16
+
+
+@contextlib.contextmanager
+def _quiet_ca_messages():
+    """Silence the EPICS CA library's stderr "Channel write request failed" warnings.
+
+    The bimorph controller's write records do not support CA put-completion: the put SUCCEEDS
+    (the value lands) but the put-callback returns failure, and the CA C-library prints a
+    ``CA.Client.Exception`` straight to stderr (not via Python logging, so it can't be filtered
+    there).  This context manager turns that handler off for the duration of the bimorph writes
+    and restores it on exit -- scoped narrowly so genuine CA errors from other devices still show.
+    """
+    try:
+        from epics import ca
+    except Exception:
+        # off-beamline / no pyepics: nothing to silence
+        yield
+        return
+    try:
+        ca.disable_ca_messages()
+    except Exception:
+        yield
+        return
+    try:
+        yield
+    finally:
+        try:
+            ca.enable_ca_messages()   # restore the default stderr writer
+        except Exception:
+            pass
 
 
 class _BimorphChannels:
@@ -72,7 +103,11 @@ class _BimorphChannels:
         args = []
         for i, v in enumerate(voltages):
             args += [getattr(self, "ch{}_trg".format(i)), float(v)]
-        yield from bps.mv(*args)
+        # suppress the controller's spurious "Channel write request failed" CA warnings (the put
+        # lands; only the put-callback fails).  The toggle is process-global and the RunEngine
+        # runs in this process, so it stays in effect while the RE executes the yielded mv.
+        with _quiet_ca_messages():
+            yield from bps.mv(*args)
 
     def sync_targets_to_outputs(self):
         """PLAN: copy each live OUTPUT into its TARGET (targets only -- never moves the mirror).
@@ -88,7 +123,8 @@ class _BimorphChannels:
         Does NOT wait -- use :meth:`apply_and_wait` to block until the channels settle.  Written
         without put-completion (this controller's put-callback always fails though the put lands).
         """
-        self.apply_sig.put(1)
+        with _quiet_ca_messages():
+            self.apply_sig.put(1)
         yield from bps.null()
 
     def apply_and_wait(self, settle=1.0, timeout=120.0, poll=0.5):
