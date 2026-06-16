@@ -44,3 +44,74 @@ def test_run_engine_counts_a_fake_device(make_fake):
     assert docs["start"] == 1
     assert docs["event"] == 3
     assert docs["stop"] == 1
+
+
+def _seed(sig, value):
+    (sig.sim_put if hasattr(sig, "sim_put") else sig.put)(value)
+
+
+def _make_energy(make_fake):
+    """A fake Energy with seeded readbacks/speeds suitable for a small move."""
+    from smiclasses.energy import Energy
+
+    en = make_fake(Energy, name="energy", prefix="")
+    _seed(en.bragg.user_readback, 12.7)      # ~8980 eV
+    _seed(en.bragg.velocity, 0.5)            # deg/s
+    _seed(en.ivugap.user_readback, 7400)     # gap units
+    _seed(en.ivugap.gap_speed, 50.0)
+    _seed(en.harmonic, 7)
+    return en
+
+
+def test_small_move_message_stream(make_fake):
+    """small_move sets matched speeds, moves both axes together, and restores speeds."""
+    en = _make_energy(make_fake)
+    msgs = list(en.small_move(8985.0))
+    cmds = [m.command for m in msgs]
+
+    # speeds are set before and restored after the move
+    assert cmds.count("set") >= 4
+    # the bragg + ivu move share one group (moved together)
+    move_groups = {m.kwargs.get("group") for m in msgs
+                   if m.command == "set" and getattr(m.obj, "name", "") in
+                   ("energy_bragg", "energy_ivugap")}
+    assert len(move_groups) == 1 and None not in move_groups
+
+    # the last two sets restore the ORIGINAL speeds
+    set_speed = [m for m in msgs if m.command == "set" and getattr(m.obj, "name", "")
+                 in ("energy_bragg_velocity", "energy_ivugap_gap_speed")]
+    restored = {getattr(m.obj, "name"): m.args[0] for m in set_speed[-2:]}
+    assert restored["energy_bragg_velocity"] == pytest.approx(0.5)
+    assert restored["energy_ivugap_gap_speed"] == pytest.approx(50.0)
+
+
+def test_small_move_restores_speed_on_abort(make_fake):
+    """If the move is interrupted, the finalize still restores the original speeds."""
+    en = _make_energy(make_fake)
+    gen = en.small_move(8985.0)
+    seen = []
+    try:
+        m = next(gen)
+        while True:
+            seen.append((m.command, getattr(m.obj, "name", None)))
+            if m.command == "set" and getattr(m.obj, "name", "") == "energy_bragg":
+                m = gen.throw(RuntimeError("simulated abort during move"))
+            else:
+                m = gen.send(None)
+    except StopIteration:
+        pass
+    except RuntimeError:
+        pass  # expected to propagate after cleanup
+
+    # restore of both speeds must appear AFTER the aborted move
+    tail = seen[seen.index(("set", "energy_bragg")):]
+    restored = {n for c, n in tail if c == "set"
+                and n in ("energy_bragg_velocity", "energy_ivugap_gap_speed")}
+    assert restored == {"energy_bragg_velocity", "energy_ivugap_gap_speed"}
+
+
+def test_small_move_out_of_range_raises(make_fake):
+    """A target whose IVU gap is out of range refuses (use the normal move path)."""
+    en = _make_energy(make_fake)
+    with pytest.raises(RuntimeError):
+        list(en.small_move(2100.0))  # far from the seeded harmonic -> gap out of range

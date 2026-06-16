@@ -2,6 +2,7 @@ import warnings
 import time as ttime
 import os
 import math
+import logging
 import numpy as np
 from ophyd import (
     PVPositioner,
@@ -19,7 +20,10 @@ from ophyd.status import StatusBase, MoveStatus
 from ophyd.pseudopos import pseudo_position_argument, real_position_argument
 from ophyd import Component as Cpt
 import bluesky.plan_stubs as bps
+import bluesky.preprocessors as bpp
 from .machine import InsertionDevice
+
+logger = logging.getLogger("bluesky")
 
 
 class DCMInternals(Device):
@@ -257,57 +261,87 @@ class Energy(PseudoPositioner):
         return sts
 
 
-    def small_move(self, target_energy):
+    def small_move(self, target_energy, *, min_move_time=1.0, min_velocity=1e-4,
+                   min_gap_speed=1e-3):
+        """Plan: smoothly move to ``target_energy`` for a SMALL energy step.
+
+        Moves the Bragg angle and the IVU gap **together**, temporarily matching the speed of
+        the faster axis to the slower one so both arrive simultaneously.  Keeping the two in
+        lock-step means the photon energy stays near the undulator flux peak throughout the
+        move, so the beam is not lost (the motivation for this method vs. a normal
+        ``bps.mv(energy, E)``, which moves the axes independently).
+
+        Notes
+        -----
+        * This is a **small-move** helper: it moves only ``bragg`` and ``ivugap`` (not the DCM
+          gap).  The DCM-gap change over a small energy step is negligible, so the beam offset
+          drift is ignored here; use the normal ``set``/``move`` path for large moves where the
+          gap (and harmonic) must change.
+        * The DCM pitch/roll BPM feedback is left **ON** during this move so it keeps the beam
+          centred while the optics move slowly together (unlike the large-move ``set`` path,
+          which disables feedback).
+        * The harmonic is taken as-is from ``self.harmonic``; the target IVU gap must fall in
+          the valid range for that harmonic or a ``RuntimeError`` is raised (small moves should
+          not cross a harmonic boundary -- use the normal move path if they do).
+        * The temporary speed changes are restored on success **and on error/abort** (via a
+          ``finalize``), so an interrupted small move never leaves the axes at a wrong speed.
+
+        Parameters
+        ----------
+        target_energy : float
+            Target photon energy in eV.
+        min_move_time : float
+            Floor on the synchronised move duration (s), to avoid commanding very fast moves.
+        min_velocity, min_gap_speed : float
+            Floors for the Bragg velocity (deg/s) and IVU gap speed (mm/s); a computed speed
+            below the floor is clamped to it (the move then takes a little less than
+            ``move_time`` for that axis, which is the safe direction).
         """
-        Perform a small move to the target energy while keeping DCM gap constant.
-
-        Parameters:
-            target_energy (float): Target energy in eV.
-
-        Returns:
-            StatusBase: Status of the move.
-        """
-
         current_bragg = self.bragg.position
         current_ivu = self.ivugap.position
-        print(f"Current bragg: {current_bragg}, Current IVU gap: {current_ivu}")
-        # calculate the target bragg angle and IVU gap for the target energy
+
         target_bragg = self.energy_to_bragg(target_energy)
         target_ivu = self.energy_to_gap(target_energy, self.harmonic.get())
-        print(f"Target bragg: {target_bragg}, Target IVU gap: {target_ivu}")
+        logger.debug("small_move -> E=%.3f eV: bragg %.5f->%.5f deg, IVU %.3f->%.3f um",
+                     target_energy, current_bragg, target_bragg, current_ivu, target_ivu)
+
         if not (6200 <= target_ivu < 15100):
-            raise RuntimeError("Target IVU gap out of range for small move.")
-        # calculate the distance to move each axis
+            raise RuntimeError(
+                "Target IVU gap {:.1f} um out of range for a small move (harmonic={}); "
+                "use the normal energy move.".format(target_ivu, int(self.harmonic.get())))
+
         delta_bragg = target_bragg - current_bragg
         delta_ivu = target_ivu - current_ivu
-        # determine the time to move based on the bragg.velocity and ivugap.gap_speed
-        bragg_time = abs(delta_bragg) / self.bragg.velocity.get()
-        ivu_time = abs(delta_ivu) / self.ivugap.gap_speed.get()
-        move_time = max(bragg_time, ivu_time)
-        print(f"Estimated move time: {move_time} seconds. changing to a minimum of 1 second.")
-        # move_time = max(move_time, 1)
-        # temporarilly set the speed of the faster axis to complete in the same move_time
-        # set the minimum time to 1 second to avoid too fast moves
-        move_time = max(move_time, 1)
-        # change both speeds to match move_time
-        if bragg_time != move_time:
-            original_ivu_gapspeed = self.ivugap.gap_speed.get()
-            yield from bps.abs_set(self.ivugap.gap_speed,
-                              abs(delta_ivu) / move_time)
-            print(f"changed the IVU gap speed from {original_ivu_gapspeed} to {self.ivugap.gapspeed.get()} for small move.")
-        if ivu_time != move_time:
-            original_bragg_velocity = self.bragg.velocity.get()
-            yield from bps.abs_set(self.bragg.velocity, abs(delta_bragg) / move_time)
-            print(f"changed the Bragg velocity from {original_bragg_velocity} to {self.bragg.velocity.get()} for small move.")
 
-        # Perform the move now (no status tracking for a small move)
-        yield from bps.mv(self.bragg, target_bragg, self.ivugap, target_ivu)
-        # Restore the original velocity
-        if bragg_time != move_time:
-            yield from bps.abs_set(self.ivugap.gap_speed, original_ivu_gapspeed)
-            print(f"restored the IVU gap speed to {original_ivu_gapspeed}.")
-        if ivu_time != move_time:
-            yield from bps.abs_set(self.bragg.velocity, original_bragg_velocity)
-            print(f"restored the Bragg velocity to {original_bragg_velocity}.")
+        # Current (to-be-restored) axis speeds.
+        orig_bragg_velocity = self.bragg.velocity.get()
+        orig_ivu_gap_speed = self.ivugap.gap_speed.get()
+
+        # Time each axis would take at its current speed; the slower one sets the pace.
+        bragg_time = abs(delta_bragg) / orig_bragg_velocity if orig_bragg_velocity else 0.0
+        ivu_time = abs(delta_ivu) / orig_ivu_gap_speed if orig_ivu_gap_speed else 0.0
+        move_time = max(bragg_time, ivu_time, min_move_time)
+        logger.debug("small_move: bragg_time=%.3fs ivu_time=%.3fs -> move_time=%.3fs",
+                     bragg_time, ivu_time, move_time)
+
+        # Slow the FASTER axis (and the floored case: both) so each finishes in ~move_time.
+        # Clamp to a minimum speed so we never command a sub-minimum (stalling) speed.
+        new_bragg_velocity = max(abs(delta_bragg) / move_time, min_velocity)
+        new_ivu_gap_speed = max(abs(delta_ivu) / move_time, min_gap_speed)
+
+        def _restore():
+            yield from bps.abs_set(self.bragg.velocity, orig_bragg_velocity)
+            yield from bps.abs_set(self.ivugap.gap_speed, orig_ivu_gap_speed)
+            logger.debug("small_move: restored bragg velocity=%.4f, IVU gap speed=%.4f",
+                         orig_bragg_velocity, orig_ivu_gap_speed)
+
+        def _do_move():
+            # Set the matched speeds, then move both axes together.
+            yield from bps.abs_set(self.bragg.velocity, new_bragg_velocity)
+            yield from bps.abs_set(self.ivugap.gap_speed, new_ivu_gap_speed, wait=True)
+            yield from bps.mv(self.bragg, target_bragg, self.ivugap, target_ivu)
+
+        # Restore speeds whether the move succeeds, errors, or is aborted.
+        yield from bpp.finalize_wrapper(_do_move(), _restore())
 
 
