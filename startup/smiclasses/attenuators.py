@@ -74,7 +74,7 @@ class Attenuator(Device):
     #: the read-back must stay at the target for this long (s) before the foil is considered "in
     #: position".  This DEBOUNCES the hardware's bounce-back: a foil can momentarily read the
     #: target and then fall back, so a single transient reading must NOT latch success.
-    settle_time = 0.6
+    settle_time = 2
 
     _OPEN_ALIASES = ("Open", "Insert", "open", "insert", "in", 1, "1")
     _CLOSE_ALIASES = ("Close", "Retract", "close", "retract", "out", 0, "0", "Not Open")
@@ -221,8 +221,11 @@ class Attenuator(Device):
                 t.start()
 
         # Hard wall-clock cap: fail if not confirmed in time (covers a foil that accepts the
-        # command but whose read-back is stuck).
-        watchdog = threading.Timer(self.timeout, _fail)
+        # command but whose read-back is stuck).  Ensure the cap is comfortably larger than the
+        # settle window, otherwise the watchdog could fire before a (settling) success can
+        # confirm and EVERY move would spuriously fail.
+        effective_timeout = max(self.timeout, self.settle_time + 2.0 * self.retry_delay + 1.0)
+        watchdog = threading.Timer(effective_timeout, _fail)
         watchdog.daemon = True
         state["watchdog"] = watchdog
         watchdog.start()

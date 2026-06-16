@@ -14,9 +14,11 @@ from smiclasses.attenuators import Attenuator, make_attenuator_bank
 
 def _fast_fake_attenuator(name="att"):
     att = make_fake_device(Attenuator)("FAKE:", name=name)
-    # short timings so the give-up path is quick
+    # short timings so the give-up path is quick (set settle_time explicitly so the test does
+    # not depend on the class default, which is tuned for real hardware).
+    att.settle_time = 0.3
     att.max_retries = 3
-    att.timeout = 2.0
+    att.timeout = 3.0
     att.retry_delay = 0.2
     att.cmd_timeout = 0.3
     return att
