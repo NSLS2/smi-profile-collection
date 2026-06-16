@@ -57,6 +57,25 @@ def _import(path):
     return getattr(mod, cls_name)
 
 
+def _assert_connected(dev, name, prefix):
+    """Assert the device is usable.
+
+    Area detectors (devices with a ``cam``) are checked via their *essential* acquisition path
+    (``cam`` + ``tiff``), because ``dev.connected`` on the full AD component tree is too strict
+    -- one disabled plugin or a powered-off detector-position/beamstop motor makes it ``False``
+    even though imaging works.  Everything else is checked as a whole device.
+    """
+    if hasattr(dev, "cam"):
+        essentials = [getattr(dev, n) for n in ("cam", "tiff") if hasattr(dev, n)]
+        for cpt in essentials:
+            cpt.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert essentials and all(c.connected for c in essentials), (
+            "{} ({}): essential acquisition path (cam/tiff) not connected".format(name, prefix))
+    else:
+        dev.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert dev.connected, "{} ({}) failed to connect".format(name, prefix)
+
+
 @pytest.mark.parametrize("name,cls_path,prefix,kwargs",
                          DEVICES, ids=[d[0] for d in DEVICES])
 def test_device_connects(name, cls_path, prefix, kwargs):
@@ -64,8 +83,7 @@ def test_device_connects(name, cls_path, prefix, kwargs):
     cls = _import(cls_path)
     dev = df.make_device(cls, prefix, name=name, force=df.REAL,
                          register=False, **kwargs)
-    dev.wait_for_connection(timeout=_CONNECT_TIMEOUT)
-    assert dev.connected, "{} ({}) failed to connect".format(name, prefix)
+    _assert_connected(dev, name, prefix)
 
 
 def test_waxs_arc_readback_present():

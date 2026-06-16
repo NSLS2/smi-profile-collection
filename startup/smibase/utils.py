@@ -480,20 +480,16 @@ def hardware_check(devices=None, *, timeout=5.0, read=True, verbose=True):
         print("-" * 60)
 
     for nm in names:
-        info = {"ok": False, "connected": False, "value": None, "error": None}
+        info = {"ok": False, "connected": False, "value": None, "error": None,
+                "detail": None}
         dev = ns.get(nm)
         t0 = _time.time()
         try:
             if dev is None:
                 raise KeyError(f"'{nm}' not in namespace")
-            # wait for connection if the device supports it
-            if hasattr(dev, "wait_for_connection"):
-                try:
-                    dev.wait_for_connection(timeout=timeout)
-                except Exception:
-                    pass  # fall through to the .connected check for a clean status
-            connected = getattr(dev, "connected", True)
+            connected, detail = _device_connectivity(dev, timeout)
             info["connected"] = bool(connected)
+            info["detail"] = detail
             if connected and read:
                 info["value"] = _safe_read_device(dev)
             info["ok"] = bool(connected)
@@ -507,11 +503,15 @@ def hardware_check(devices=None, *, timeout=5.0, read=True, verbose=True):
                 status = "MISSING" if dev is None else "ERROR"
                 val = info["error"]
             elif info["connected"]:
-                status = "OK"
+                # "OK" if the whole device is connected; "OK*" if only the essential
+                # acquisition path is (e.g. an area detector with a disabled plugin/motor).
+                status = "OK*" if info["detail"] else "OK"
                 val = "" if info["value"] is None else info["value"]
+                if info["detail"]:
+                    val = f"{val}   [{info['detail']}]" if val else f"[{info['detail']}]"
             else:
                 status = "NO CONN"
-                val = ""
+                val = info["detail"] or ""
             print(f"{nm:14s} {status:10s} {dt:6.2f}  {val}")
 
     n_ok = sum(1 for r in results.values() if r["ok"])
@@ -520,11 +520,92 @@ def hardware_check(devices=None, *, timeout=5.0, read=True, verbose=True):
         print("-" * 60)
         print(f"{n_ok}/{n_tot} connected"
               + ("" if n_ok == n_tot else "  -- see NO CONN / MISSING / ERROR above"))
+        if any(r["ok"] and r["detail"] for r in results.values()):
+            print("  (OK* = essential acquisition path connected; some non-essential "
+                  "components/plugins are not connected)")
     return results
+
+
+#: Components that constitute the "is it usable?" path for an area detector.  A Pilatus can
+#: acquire and write a frame with just the camera (and file plugin) connected; the many other
+#: plugins (extra ROIs, overlays, transforms) and the detector-position / beamstop motors may
+#: legitimately be disconnected (disabled plugin, powered-off motor) without affecting imaging.
+_AREADET_ESSENTIAL = ("cam", "tiff")
+
+
+def _device_connectivity(dev, timeout):
+    """Return (connected: bool, detail: str|None) for a device, read-only.
+
+    For an **area detector** (a device with a ``cam`` component), "connected" means the
+    *essential acquisition path* (``cam``/``tiff``) is connected -- NOT that every plugin and
+    motor in the (large) component tree is.  ``dev.connected`` is too strict for area detectors:
+    one disabled plugin or a powered-off detector-position motor makes it ``False`` even though
+    imaging works fine.  ``detail`` lists the non-essential components that are not connected
+    (informational), or names the missing essential component when it really can't acquire.
+    """
+    is_areadet = hasattr(dev, "cam")
+
+    if is_areadet:
+        # Wait for connection on just the essential sub-devices (bounded, no whole-tree wait).
+        essentials = [getattr(dev, nm) for nm in _AREADET_ESSENTIAL if hasattr(dev, nm)]
+        for cpt in essentials:
+            if hasattr(cpt, "wait_for_connection"):
+                try:
+                    cpt.wait_for_connection(timeout=timeout)
+                except Exception:
+                    pass
+        ess_ok = all(getattr(c, "connected", False) for c in essentials) and bool(essentials)
+        # which top-level components are NOT connected (informational)?
+        not_conn = []
+        for cn in getattr(dev, "component_names", ()):
+            try:
+                cpt = getattr(dev, cn)
+            except Exception:
+                continue
+            if getattr(cpt, "connected", True) is False:
+                not_conn.append(cn)
+        if ess_ok:
+            detail = ("not connected: " + ", ".join(not_conn)) if not_conn else None
+            return True, detail
+        # essential path down -> genuinely not usable
+        missing_ess = [nm for nm, c in zip(_AREADET_ESSENTIAL, essentials)
+                       if getattr(c, "connected", False) is False]
+        return False, ("essential not connected: " + ", ".join(missing_ess or not_conn))
+
+    # non-area-detector: whole-device connection is the right check
+    if hasattr(dev, "wait_for_connection"):
+        try:
+            dev.wait_for_connection(timeout=timeout)
+        except Exception:
+            pass
+    connected = getattr(dev, "connected", True)
+    detail = None
+    if not connected:
+        not_conn = []
+        for cn in getattr(dev, "component_names", ()):
+            try:
+                cpt = getattr(dev, cn)
+            except Exception:
+                continue
+            if getattr(cpt, "connected", True) is False:
+                not_conn.append(cn)
+        if not_conn:
+            detail = "not connected: " + ", ".join(not_conn)
+    return bool(connected), detail
 
 
 def _safe_read_device(dev):
     """Return a short, representative read of a device without moving/triggering it."""
+    # area detector: report the camera's acquire state (proves the cam path is alive)
+    if hasattr(dev, "cam"):
+        try:
+            adstate = dev.cam.detector_state.get(as_string=True)
+            return f"cam={adstate}"
+        except Exception:
+            try:
+                return f"acquire={dev.cam.acquire.get()}"
+            except Exception:
+                return "cam connected"
     # positioners: report position
     try:
         pos = getattr(dev, "position", None)
