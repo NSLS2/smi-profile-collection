@@ -193,3 +193,64 @@ def test_aggregate_unknown_foil_raises():
     bank = _fake_bank(indices=(5, 6))
     with pytest.raises(ValueError):
         bank.set(["f99"])
+
+
+# ---------------------------------------------------------------------------
+# The OLD idiom: several INDIVIDUAL foils driven in one go, e.g.
+#     RE(bps.mv(att1_6, 0, att1_8, 0, att1_9, 0))
+# bluesky calls each foil's set() independently and waits for ALL the
+# returned Status objects.  Each Attenuator.set() already has the
+# settle-debounce + retry + safe-fail, and it drives ONLY its own foil --
+# so this works simultaneously, is bounce-back-safe, and leaves the foils
+# you did NOT mention untouched (no surprise retract-the-rest).
+# ---------------------------------------------------------------------------
+def test_individual_foils_simultaneous_set_is_safe_and_leaves_others_alone():
+    # six independent foils (as att1_* are independent Attenuator instances)
+    foils = {i: _fast_fake_attenuator(name="att1_%d" % i) for i in (6, 7, 8, 9, 10)}
+    for f in foils.values():
+        _reliable_foil(f)
+    # f7 and f10 are NOT in the move -- pre-set them so we can prove they stay put.
+    foils[7].status.sim_put("Open")        # stays inserted
+    foils[10].status.sim_put("Not Open")   # stays retracted
+
+    # mimic `bps.mv(att1_6, 0, att1_8, 0, att1_9, 0)`: each .set() returns a Status,
+    # bluesky waits for all of them.
+    statuses = [foils[i].set(0) for i in (6, 8, 9)]   # 0 == Retract alias
+    combined = statuses[0]
+    for s in statuses[1:]:
+        combined = combined & s
+    combined.wait(timeout=8)
+
+    assert combined.success
+    # the three named foils retracted...
+    for i in (6, 8, 9):
+        assert foils[i].status.get() == "Not Open"
+    # ...and the two unmentioned foils are EXACTLY as they were (no retract-the-rest).
+    assert foils[7].status.get() == "Open"
+    assert foils[10].status.get() == "Not Open"
+
+
+def test_individual_foils_simultaneous_set_debounces_bounce_back():
+    """The old multi-foil idiom is bounce-back-safe: a foil that flickers is re-actuated."""
+    a, b = _fast_fake_attenuator(name="att1_6"), _fast_fake_attenuator(name="att1_8")
+    _reliable_open(b)
+
+    # `a` reads Open then bounces back once, then stays Open from the 2nd actuation.
+    n = {"a": 0}
+
+    def _a_open(value, **kwargs):
+        n["a"] += 1
+        a.status.sim_put("Open")
+        if n["a"] < 2:
+            threading.Timer(0.1, lambda: a.status.sim_put("Not Open")).start()
+
+    a.open_cmd.subscribe(_a_open, run=False)
+
+    statuses = [a.set("Insert"), b.set("Insert")]
+    combined = statuses[0] & statuses[1]
+    combined.wait(timeout=10)
+
+    assert combined.success
+    assert a.status.get() == "Open"
+    assert b.status.get() == "Open"
+    assert n["a"] >= 2          # the transient correct reading did NOT latch success
