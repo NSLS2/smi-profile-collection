@@ -1,4 +1,4 @@
-"""Unit tests for the Redis-backed-config helpers (smiclasses._config).
+"""Unit tests for the Redis-backed-config helpers (smi_beamline.devices._config).
 
 These never touch a real Redis: the _context seam returns {} when unconfigured (so reads fall
 back to the registered defaults), and a test can inject a plain dict to stand in for ``mdsave``.
@@ -6,7 +6,7 @@ back to the registered defaults), and a test can inject a plain dict to stand in
 import numpy as np
 import pytest
 
-from smiclasses import _config, _context
+from smi_beamline.devices import _config, _context
 
 
 def test_load_returns_registered_default_when_unconfigured():

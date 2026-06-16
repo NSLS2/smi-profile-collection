@@ -7,7 +7,7 @@ from smibase.manipulators import piezo, stage
 from .pilatus import pil2M
 from .pilatus import det_exposure_time
 from .utils import ps
-from smiclasses import _context
+from smi_beamline.devices import _context
 from .beam import SMI as smi
 
 # Get the bluesky callback
@@ -15,7 +15,7 @@ bec = _context.get_bec()
 
 from bluesky.callbacks.mpl_plotting import QtAwareCallback
 
-from smiclasses._plan_helpers import sample_name_decorator
+from smi_beamline.devices._plan_helpers import sample_name_decorator
 
 
 class close_plots(QtAwareCallback):

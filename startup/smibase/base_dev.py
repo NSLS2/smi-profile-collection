@@ -6,7 +6,7 @@ from bluesky_tiled_plugins import TiledWriter
 from bluesky.callbacks.buffer import BufferingWrapper
 import copy
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 RE = _context.get_re()
 RE.md["tiled_access_tags"] = [RE.md['data_session']]
 

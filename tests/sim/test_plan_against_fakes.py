@@ -20,7 +20,7 @@ def test_run_engine_sets_a_fake_signal(make_fake):
     status does not auto-complete, so ``bps.mv`` on one would hang under the RE.
     Signals complete immediately, which is what plans like det_exposure_time do.)
     """
-    from smiclasses.pilatus import PilatusDetectorCamV33
+    from smi_beamline.devices.pilatus import PilatusDetectorCamV33
 
     cam = make_fake(PilatusDetectorCamV33, name="cam", prefix="FAKE:cam1:")
     RE = RunEngine({})
@@ -30,7 +30,7 @@ def test_run_engine_sets_a_fake_signal(make_fake):
 
 
 def test_run_engine_counts_a_fake_device(make_fake):
-    from smiclasses.beamstop import SAXSBeamStops
+    from smi_beamline.devices.beamstop import SAXSBeamStops
 
     bs = make_fake(SAXSBeamStops, name="bs")
     docs = {"start": 0, "event": 0, "stop": 0}
@@ -52,7 +52,7 @@ def _seed(sig, value):
 
 def _make_energy(make_fake):
     """A fake Energy with seeded readbacks/speeds suitable for a small move."""
-    from smiclasses.energy import Energy
+    from smi_beamline.devices.energy import Energy
 
     en = make_fake(Energy, name="energy", prefix="")
     _seed(en.bragg.user_readback, 12.7)      # ~8980 eV
@@ -119,8 +119,8 @@ def test_small_move_out_of_range_raises(make_fake):
 
 def test_sample_name_decorator_injects_run_scoped_name(make_fake):
     """sample_name_decorator tags every nested run, without touching RE.md (replaces sample_id)."""
-    from smiclasses._plan_helpers import sample_name_decorator
-    from smiclasses.beamstop import SAXSBeamStops
+    from smi_beamline.devices._plan_helpers import sample_name_decorator
+    from smi_beamline.devices.beamstop import SAXSBeamStops
 
     bs = make_fake(SAXSBeamStops, name="bs")
 
@@ -139,8 +139,8 @@ def test_sample_name_decorator_injects_run_scoped_name(make_fake):
 
 def test_sample_name_decorator_sanitizes_and_respects_explicit(make_fake):
     """Human labels are sanitized; an inner explicit sample_name is not overridden."""
-    from smiclasses._plan_helpers import sample_name_decorator, sanitize_name
-    from smiclasses.beamstop import SAXSBeamStops
+    from smi_beamline.devices._plan_helpers import sample_name_decorator, sanitize_name
+    from smi_beamline.devices.beamstop import SAXSBeamStops
 
     assert sanitize_name("alignment height scan") == "alignment_height_scan"
 

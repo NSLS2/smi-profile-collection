@@ -1,5 +1,5 @@
 
-from smiclasses.shutter import TwoButtonShutter, SMIFastShutter
+from smi_beamline.devices.shutter import TwoButtonShutter, SMIFastShutter
 from ophyd import EpicsMotor
 from .energy import energy
 import bluesky.plan_stubs as bps
@@ -56,6 +56,6 @@ GV7 = chamber_pressure.waxs_saxs_valve
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 _context.baseline_register([ph_shutter])

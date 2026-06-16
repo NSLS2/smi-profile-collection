@@ -14,7 +14,7 @@ from .pilatus import pil2m_pos, waxs
 from .electrometers import xbpm2
 
 from IPython import get_ipython  # still used by hardware_check() for the live user namespace
-from smiclasses import _context
+from smi_beamline.devices import _context
 db = _context.get_db()
 
 

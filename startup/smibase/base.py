@@ -66,15 +66,15 @@ bec = get_ipython().user_ns['bec']
 RE.unsubscribe(0)
 RE.subscribe(tiled_inserter.insert)
 
-# Wire the device-class dependency seam (smiclasses._context) so the ophyd classes can reach
+# Wire the device-class dependency seam (smi_beamline.devices._context) so the ophyd classes can reach
 # RE.md (proposal metadata / raw-data dir / data-security tags) and the Redis persistent-config
-# dict (mdsave) WITHOUT importing smibase.base at module load.  Must run before the smiclasses
+# dict (mdsave) WITHOUT importing smibase.base at module load.  Must run before the smi_beamline.devices
 # device modules (pilatus, prosilica, ...) are imported by startup.py.  The energy source is
 # added later in smibase/energy.py once the `energy` positioner exists.
 #
 # Also inject sd/bec/db so the instance modules register baselines via
 # _context.baseline_register(...) instead of grabbing `sd` from get_ipython().user_ns (Phase 4).
-from smiclasses import _context as _smiclasses_context
+from smi_beamline.devices import _context as _smiclasses_context
 _sd = get_ipython().user_ns['sd']
 _smiclasses_context.configure(run_engine=RE, config_dict=mdsave, sd=_sd, bec=bec)
 

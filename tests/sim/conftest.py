@@ -1,13 +1,13 @@
 """Fixtures for the ``sim`` tier: build fake, non-broadcasting devices.
 
-Every device here is built through :func:`smiclasses.device_factory.make_device`
+Every device here is built through :func:`smi_beamline.devices.device_factory.make_device`
 with ``force="fake"``, so the construction path is identical to what the live
 profile would use with ``SMI_FAKE_DEVICES=all`` -- but no Channel Access
 connection is ever opened.
 """
 import pytest
 
-from smiclasses import device_factory as df
+from smi_beamline.devices import device_factory as df
 
 
 @pytest.fixture

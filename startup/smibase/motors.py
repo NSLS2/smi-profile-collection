@@ -1,6 +1,6 @@
 
 
-from smiclasses.motors import MDriveMotor, SAXSBeamStop, DetMotor, ThorlabsMotor
+from smi_beamline.devices.motors import MDriveMotor, SAXSBeamStop, DetMotor, ThorlabsMotor
 from ophyd import EpicsMotor
 
 ## for MDrive, YZhang

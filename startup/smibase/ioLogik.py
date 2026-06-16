@@ -1,6 +1,6 @@
 
 
-from smiclasses.ioLogik import ioLogik1240, ioLogik1241, Diag_Module
+from smi_beamline.devices.ioLogik import ioLogik1240, ioLogik1241, Diag_Module
 
 
 moxa_in = ioLogik1241("XF:12IDC-ES:2{IO}AO:", name="moxa_in")

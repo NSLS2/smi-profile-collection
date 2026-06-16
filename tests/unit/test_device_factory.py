@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`smiclasses.device_factory` mode resolution.
+"""Unit tests for :mod:`smi_beamline.devices.device_factory` mode resolution.
 
 Pure logic only -- no devices are constructed here (that is exercised in the
 ``sim`` tier).  Covers the documented priority order:
@@ -6,7 +6,7 @@ force > SMI_REAL_DEVICES > SMI_FAKE_DEVICES > in-process overrides > file > defa
 """
 import pytest
 
-from smiclasses import device_factory as df
+from smi_beamline.devices import device_factory as df
 
 
 @pytest.fixture(autouse=True)

@@ -1,6 +1,6 @@
 
 
-from smiclasses.waxschamber import Sample_Chamber
+from smi_beamline.devices.waxschamber import Sample_Chamber
 
 def get_chamber_pressure(signal):
     value = signal.get()
@@ -22,6 +22,6 @@ chamber_pressure.maxs.kind = "hinted"
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 _context.baseline_register([ chamber_pressure])

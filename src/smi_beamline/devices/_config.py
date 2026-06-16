@@ -95,7 +95,7 @@ def _default(key):
         return CONFIG_KEYS[key][0]
     except KeyError:
         raise KeyError(
-            "unknown config key {!r}; register it in smiclasses._config.CONFIG_KEYS".format(key))
+            "unknown config key {!r}; register it in smi_beamline.devices._config.CONFIG_KEYS".format(key))
 
 
 def load(key, default=None):
@@ -136,7 +136,7 @@ def persist(mapping):
         if key not in CONFIG_KEYS:
             raise KeyError(
                 "refusing to persist unregistered config key {!r}; add it to "
-                "smiclasses._config.CONFIG_KEYS".format(key))
+                "smi_beamline.devices._config.CONFIG_KEYS".format(key))
         if isinstance(value, np.ndarray):
             value = value.tolist()
         cfg[key] = value

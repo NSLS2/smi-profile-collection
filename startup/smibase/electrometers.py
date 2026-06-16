@@ -1,5 +1,5 @@
 
-from smiclasses.electrometers import XBPM, new_LakeShore, Keithly2450
+from smi_beamline.devices.electrometers import XBPM, new_LakeShore, Keithly2450
 from ophyd import EpicsSignal
 from nslsii.ad33 import QuadEMV33
 
@@ -46,6 +46,6 @@ pin_diode.current2.mean_value.kind = "hinted"
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 _context.baseline_register([xbpm2, xbpm3,ls])

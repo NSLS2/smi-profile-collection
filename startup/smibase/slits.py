@@ -1,5 +1,5 @@
 
-from smiclasses.slits import SLIT, SLTH, SLTV, APER
+from smi_beamline.devices.slits import SLIT, SLTH, SLTV, APER
 
 # white beam slits
 wbs = SLIT("XF:12IDA-OP:2{Slt:WB-Ax:", name="wbs")
@@ -23,7 +23,7 @@ dsa = APER("XF:12IDC-OP:2{Lens:CRL-Ax:", name="dsa")
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 #ToDO put back wbs when bach
 # _context.baseline_register([wbs, ssa, eslit, cslit, dsa])

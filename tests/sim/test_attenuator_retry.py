@@ -2,14 +2,14 @@
 
 The real attenuator foils need the actuation command re-issued before they confirm; a foil that
 never confirms must FAIL the set (so a run halts rather than continue with the foil in the wrong
-position).  We exercise :meth:`smiclasses.attenuators.Attenuator.set` against a fake device,
+position).  We exercise :meth:`smi_beamline.devices.attenuators.Attenuator.set` against a fake device,
 driving the (fake) ``status`` signal to simulate the hardware confirming -- or never confirming.
 """
 import pytest
 
 from ophyd.sim import make_fake_device
 
-from smiclasses.attenuators import Attenuator, make_attenuator_bank
+from smi_beamline.devices.attenuators import Attenuator, make_attenuator_bank
 
 
 def _fast_fake_attenuator(name="att"):

@@ -1,4 +1,4 @@
-from smiclasses.machine import Ring
+from smi_beamline.devices.machine import Ring
 from ophyd import EpicsSignalRO
 
 ring = Ring(name="ring")
@@ -14,6 +14,6 @@ smi_shutter_enable = EpicsSignalRO(
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 _context.baseline_register([ring.current])

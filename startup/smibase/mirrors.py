@@ -1,7 +1,7 @@
 
-from smiclasses.mirrors import MIR
-from smiclasses.bimorph import VFM_voltage, HFM_voltage
-from smiclasses import _config
+from smi_beamline.devices.mirrors import MIR
+from smi_beamline.devices.bimorph import VFM_voltage, HFM_voltage
+from smi_beamline.devices import _config
 import bluesky.plan_stubs as bps
 
 
@@ -103,6 +103,6 @@ def load_bimorph(name, settle=1.0, timeout=120.0):
 
 
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 _context.baseline_register([ vfm_voltage, hfm_voltage, hfm, vdm, vfm,])

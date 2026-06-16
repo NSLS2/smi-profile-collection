@@ -1,10 +1,10 @@
-"""Unit tests for the ``smiclasses._context`` dependency seam.
+"""Unit tests for the ``smi_beamline.devices._context`` dependency seam.
 
 The seam lets device classes reach ``RE.md`` / ``mdsave`` / current-energy without importing
 ``smibase``.  It must degrade gracefully when unconfigured (so tests / off-beamline import work)
 and read injected objects by reference when configured (so live ``RE.md`` mutations are seen).
 """
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 
 def test_unconfigured_defaults_are_safe():

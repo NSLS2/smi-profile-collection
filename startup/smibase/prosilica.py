@@ -1,6 +1,6 @@
 
 from ophyd import EpicsSignal
-from smiclasses.prosilica import StandardProsilicaV33, StandardProsilicaWithTIFFV33
+from smi_beamline.devices.prosilica import StandardProsilicaV33, StandardProsilicaWithTIFFV33
 
 # White Beam Stop camera ROI detectors
 WBScamroi1 = EpicsSignal("XF:12IDA-BI{Cam:WBStop}Stats1:Total_RBV", name="WBScamroi1")

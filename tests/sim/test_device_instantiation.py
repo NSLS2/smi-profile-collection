@@ -1,18 +1,18 @@
-"""Build the device classes as FAKE devices through :mod:`smiclasses.device_factory`.
+"""Build the device classes as FAKE devices through :mod:`smi_beamline.devices.device_factory`.
 
-This proves the ``smiclasses`` device classes are fully constructible off the
+This proves the ``smi_beamline.devices`` device classes are fully constructible off the
 beamline via the same factory the live profile uses (``force="fake"`` here;
 ``SMI_FAKE_DEVICES=all`` in production).  ``make_fake_device`` swaps every
 ``EpicsSignal``/``EpicsMotor`` for an in-memory fake, so no CA connection is
 attempted.  We assert each device builds, exposes the expected components, and
 (where applicable) ``describe()``/``read()`` succeed.
 """
-from smiclasses import device_factory as df
+from smi_beamline.devices import device_factory as df
 import pytest
 
 
 def test_factory_records_mode_and_registry(make_fake):
-    from smiclasses.manipulators import SMARACT
+    from smi_beamline.devices.manipulators import SMARACT
 
     piezo = make_fake(SMARACT, name="piezo")
     assert ("piezo") in df.registered()
@@ -23,7 +23,7 @@ def test_factory_records_mode_and_registry(make_fake):
 
 def test_stg_pseudo_builds_and_has_backcompat_aliases(make_fake):
     """STG_pseudo (the Huber stack) builds, and the legacy .th/.ph/.ch aliases resolve."""
-    from smiclasses.manipulators import STG_pseudo
+    from smi_beamline.devices.manipulators import STG_pseudo
 
     stg = make_fake(STG_pseudo, name="stage")
     for ax in ("x", "y", "z", "theta", "chi", "phi"):
@@ -38,7 +38,7 @@ def test_stg_pseudo_builds_and_has_backcompat_aliases(make_fake):
 
 
 def test_smaract_and_bdm_build(make_fake):
-    from smiclasses.manipulators import SMARACT, BDMStage
+    from smi_beamline.devices.manipulators import SMARACT, BDMStage
 
     piezo = make_fake(SMARACT, name="piezo")
     for ax in ("x", "y", "z", "th", "ch"):
@@ -59,7 +59,7 @@ def test_bdm_move_completes_on_readback_not_moving_flag(make_fake):
     BDM are stuck (RD_MOVING==1 always, RD_INRANGE==0 always).  We pin RD_MOVING high the whole
     time and assert the move still completes purely from the readback closing on the setpoint.
     """
-    from smiclasses.manipulators import BDMStage
+    from smi_beamline.devices.manipulators import BDMStage
 
     bdm = make_fake(BDMStage, name="bdm")
     ax = bdm.y
@@ -83,7 +83,7 @@ def test_bdm_move_completes_on_readback_not_moving_flag(make_fake):
 def test_bdm_move_does_not_complete_while_readback_far(make_fake):
     """If the readback stays far from the setpoint, the move must NOT report done (no false early
     completion -- the bug the old bare-EpicsSignal version had)."""
-    from smiclasses.manipulators import BDMStage
+    from smi_beamline.devices.manipulators import BDMStage
 
     bdm = make_fake(BDMStage, name="bdm")
     ax = bdm.y
@@ -101,7 +101,7 @@ def test_bdm_move_does_not_complete_while_readback_far(make_fake):
 
 
 def test_saxs_beamstops_build_and_describe(make_fake):
-    from smiclasses.beamstop import SAXSBeamStops
+    from smi_beamline.devices.beamstop import SAXSBeamStops
 
     bs = make_fake(SAXSBeamStops, name="bs")
     for ax in ("x_rod", "y_rod", "x_pin", "y_pin"):
@@ -124,7 +124,7 @@ def _wait_until(predicate, timeout=3.0, poll=0.02):
 def test_two_button_shutter_unified_and_polarity(make_fake):
     """M3/M4: one TwoButtonShutter (the polarity-aware SMI subclass of nslsii's), and the
     per-valve actuation polarity is honored -- 'open' writes cmd_actuate_val to Cmd:Opn-Cmd."""
-    from smiclasses.shutter import TwoButtonShutter
+    from smi_beamline.devices.shutter import TwoButtonShutter
     from nslsii.devices import TwoButtonShutter as _NSLSII
 
     # it is the maintained upstream class, subclassed (single implementation, not a fork)
@@ -161,8 +161,8 @@ def test_two_button_shutter_unified_and_polarity(make_fake):
 def test_gv7_is_chamber_component_alias():
     """GV7 must be the SAME object as the chamber's waxs_saxs_valve (defined once, aliased), and a
     Valve (the unified, polarity-aware shutter)."""
-    from smiclasses.waxschamber import Sample_Chamber, Valve
-    from smiclasses.shutter import TwoButtonShutter
+    from smi_beamline.devices.waxschamber import Sample_Chamber, Valve
+    from smi_beamline.devices.shutter import TwoButtonShutter
 
     assert issubclass(Valve, TwoButtonShutter)
     ch = Sample_Chamber("", name="chamber")
@@ -174,7 +174,7 @@ def test_gv7_is_chamber_component_alias():
 
 def test_pilatus_cam_builds_without_class_definition_epics_read(make_fake):
     """Phase-1 deferral: the cam's energyset default is a plain 0.0 (no class-definition EPICS read)."""
-    from smiclasses.pilatus import PilatusDetectorCamV33
+    from smi_beamline.devices.pilatus import PilatusDetectorCamV33
 
     cam = make_fake(PilatusDetectorCamV33, name="cam", prefix="FAKE:cam1:")
     assert cam.energyset.get() == 0.0
@@ -188,7 +188,7 @@ def test_saxs_detector_full_instantiation(make_fake):
     against unconnected (``None``) positioners, so a fresh fake builds cleanly
     and leaves ``active_beamstop`` at its 'none' default.  (Previously xfail.)
     """
-    from smiclasses.pilatus import SAXS_Detector
+    from smi_beamline.devices.pilatus import SAXS_Detector
 
     det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
     assert hasattr(det, "beamstop")
@@ -202,14 +202,14 @@ def test_factory_seed_sets_fake_signal_values(make_fake):
     (Note: seed runs post-__init__, so it cannot influence init-time inference
     such as SAXS_Detector.active_beamstop; use ``force``/component defaults for that.)
     """
-    from smiclasses.beamstop import SAXSBeamStops
+    from smi_beamline.devices.beamstop import SAXSBeamStops
 
     bs = make_fake(SAXSBeamStops, name="bs", seed={"x_rod.user_readback": 6.8})
     assert bs.x_rod.position == pytest.approx(6.8)
 
 
 def test_waxs_detector_builds_without_hardware(make_fake):
-    from smiclasses.pilatus import WAXS_Detector
+    from smi_beamline.devices.pilatus import WAXS_Detector
 
     det = make_fake(WAXS_Detector, name="pil900KW", asset_path="pilatus900kw-test")
     assert hasattr(det, "motors")
@@ -217,7 +217,7 @@ def test_waxs_detector_builds_without_hardware(make_fake):
 
 
 def test_energy_pseudopositioner_builds_without_hardware(make_fake):
-    from smiclasses.energy import Energy
+    from smi_beamline.devices.energy import Energy
 
     en = make_fake(Energy, name="energy")
     assert hasattr(en, "energy")
@@ -229,7 +229,7 @@ def test_energy_ivu_offset_table_is_config_and_drives_energy_to_gap(make_fake):
     """The IVU-gap offset table is now kind='config' Signals (seeded from mdsave defaults), and
     energy_to_gap reads them -- changing the signal changes the computed gap, proving the
     calibration is data, not hardcoded."""
-    from smiclasses.energy import Energy
+    from smi_beamline.devices.energy import Energy
 
     en = make_fake(Energy, name="energy")
     assert en.ivu_gap_offset_energies_eV.kind.name == "config"
@@ -245,8 +245,8 @@ def test_energy_ivu_offset_table_is_config_and_drives_energy_to_gap(make_fake):
 
 
 def test_lakeshore_and_linkam_build(make_fake):
-    from smiclasses.electrometers import new_LakeShore
-    from smiclasses.linkam import LinkamThermal
+    from smi_beamline.devices.electrometers import new_LakeShore
+    from smi_beamline.devices.linkam import LinkamThermal
 
     ls = make_fake(new_LakeShore, name="lakeshore")
     assert hasattr(ls, "input_A_celsius")
@@ -269,7 +269,7 @@ def test_lakeshore_and_linkam_build(make_fake):
 
 def test_lakeshore_d_gain_points_at_d_pv():
     """The D (derivative) gain must address Gain:D-SP, not Gain:I-SP (a 2022 copy-paste bug)."""
-    from smiclasses.electrometers import output_lakeshore
+    from smi_beamline.devices.electrometers import output_lakeshore
 
     # Inspect the Component suffixes directly -- no instantiation, so no CA contact.
     assert output_lakeshore.I.suffix == "Gain:I-SP"
@@ -292,7 +292,7 @@ def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
     """Bimorph default-voltage tables + the -80 offset are now kind='config' Signals (seeded from
     mdsave defaults), and set_target reads them -- so the commanded voltages are data, not
     hardcoded.  Verify the commanded values match the historical behavior."""
-    from smiclasses.bimorph import HFM_voltage, VFM_voltage
+    from smi_beamline.devices.bimorph import HFM_voltage, VFM_voltage
 
     hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
     assert hfm.default_hfm_v.kind.name == "config"
@@ -321,7 +321,7 @@ def test_bimorph_stage_then_apply_mechanism(make_fake):
     SET-ALLTRGT, and apply_and_wait blocks until all GET-STATUS channels leave 'Busy'."""
     import threading
     from bluesky import RunEngine
-    from smiclasses.bimorph import HFM_voltage, N_BIMORPH_CH
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
 
     hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
     # has the new per-channel readbacks
@@ -355,7 +355,7 @@ def test_bimorph_stage_then_apply_mechanism(make_fake):
 def test_bimorph_apply_and_wait_times_out_if_stuck_busy(make_fake):
     import pytest as _pytest
     from bluesky import RunEngine
-    from smiclasses.bimorph import HFM_voltage, N_BIMORPH_CH
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
 
     hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
     for i in range(N_BIMORPH_CH):

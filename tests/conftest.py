@@ -4,7 +4,7 @@ Three test tiers (see ``docs/TESTING.md``):
 
 * ``tests/unit``     -- ``@pytest.mark.unit``: pure code, constructs **no** devices.
 * ``tests/sim``      -- ``@pytest.mark.sim``: builds **fake**, non-broadcasting
-  ``ophyd.sim`` devices via :mod:`smiclasses.device_factory`; no hardware.
+  ``ophyd.sim`` devices via :mod:`smi_beamline.devices.device_factory`; no hardware.
 * ``tests/hardware`` -- ``@pytest.mark.hardware``: connects to **real** EPICS PVs.
   **Deselected by default**; opt in with ``pytest --run-hardware``.
 
@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-# Make ``import smiclasses.<module>`` work without installing the profile as a package.
+# Make ``import smi_beamline.devices.<module>`` work without installing the profile as a package.
 _STARTUP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "startup"))
 if _STARTUP_DIR not in sys.path:
     sys.path.insert(0, _STARTUP_DIR)
@@ -100,13 +100,13 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(autouse=True)
 def _unconfigured_context():
-    """Keep the ``smiclasses._context`` seam in its unconfigured (test) state.
+    """Keep the ``smi_beamline.devices._context`` seam in its unconfigured (test) state.
 
     The seam degrades gracefully when not configured (``get_md() -> {}``,
     ``get_config() -> {}``, ``current_energy_eV() -> None``).  Reset it between
     tests in case one configures it.
     """
-    from smiclasses import _context
+    from smi_beamline.devices import _context
 
     saved = (_context._run_engine, _context._config_dict, _context._energy_source,
              _context._sd, _context._bec, _context._db)
@@ -124,7 +124,7 @@ def _unconfigured_context():
 @pytest.fixture(autouse=True)
 def _clean_device_factory():
     """Reset device_factory in-process overrides + registry between tests."""
-    from smiclasses import device_factory
+    from smi_beamline.devices import device_factory
 
     device_factory.clear_overrides()
     saved = dict(device_factory._REGISTRY)

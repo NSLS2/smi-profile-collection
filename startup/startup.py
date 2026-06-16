@@ -32,7 +32,7 @@ from smibase.base_dev import *
 # make_devices imports the device modules in dependency order, times each, reports ok/fail, and
 # returns the namespace they export.  We merge that into globals() so all the device instances and
 # plans land in the IPython user namespace exactly as the old flat ``from smibase.X import *`` did.
-from smiclasses import _context as _seam
+from smi_beamline.devices import _context as _seam
 from smi_beamline.instances import make_devices as _make_devices
 
 _ctx = {"RE": _seam.get_re(), "sd": _seam.get_sd(),

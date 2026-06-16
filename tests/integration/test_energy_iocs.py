@@ -2,8 +2,8 @@
 
 These spin up the local caproto ``tests/iocs/sim_energy_ioc.py`` (sandbox prefix ``SMIsim:``,
 loopback only) which serves DCM + undulator motors that **move at finite, configurable speeds**.
-We then point lightweight subclasses of the real :class:`smiclasses.energy.Energy` /
-:class:`smiclasses.machine.InsertionDevice` at that IOC and exercise the actual move
+We then point lightweight subclasses of the real :class:`smi_beamline.devices.energy.Energy` /
+:class:`smi_beamline.devices.machine.InsertionDevice` at that IOC and exercise the actual move
 choreography that ``ophyd.sim`` cannot (instantaneous fakes have no readback ramp):
 
 * ``set`` / ``move`` -- DCM feedback is disabled during the move and re-enabled after (Status
@@ -30,8 +30,8 @@ pytestmark = pytest.mark.integration
 from ophyd import Component as Cpt, EpicsSignal, EpicsMotor
 
 # Import the real classes under test.
-from smiclasses.energy import Energy
-from smiclasses.machine import InsertionDevice
+from smi_beamline.devices.energy import Energy
+from smi_beamline.devices.machine import InsertionDevice
 
 PREFIX = "SMIsim:"
 _IOC_PATH = os.path.join(os.path.dirname(__file__), "..", "iocs", "sim_energy_ioc.py")

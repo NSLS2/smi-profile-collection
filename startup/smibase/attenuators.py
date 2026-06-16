@@ -1,6 +1,6 @@
 
-from smiclasses.attenuators import Attenuator, make_attenuator_bank
-from smiclasses import _context
+from smi_beamline.devices.attenuators import Attenuator, make_attenuator_bank
+from smi_beamline.devices import _context
 
 
 att1_1 = Attenuator("XF:12IDC-OP:2{Fltr:1-1}", name="att1_1")

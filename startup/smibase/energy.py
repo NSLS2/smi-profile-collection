@@ -1,5 +1,5 @@
 
-from smiclasses.energy import Energy, DCMInternals
+from smi_beamline.devices.energy import Energy, DCMInternals
 from ophyd import EpicsMotor
 
 energy = Energy(
@@ -14,7 +14,7 @@ energy.settle_time = 1
 # ``energyset`` so it can remember the energy for camserver-restart threshold resets) without
 # the device classes importing smibase.energy.  Runs after `energy` exists and before the
 # detector modules are imported by startup.py.
-from smiclasses import _context as _smiclasses_context
+from smi_beamline.devices import _context as _smiclasses_context
 _smiclasses_context.configure(energy_source=energy)
 
 dcm = energy

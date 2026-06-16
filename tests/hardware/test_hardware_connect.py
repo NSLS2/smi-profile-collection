@@ -18,7 +18,7 @@ whether or not the shutter is open.
 """
 import pytest
 
-from smiclasses import device_factory as df
+from smi_beamline.devices import device_factory as df
 
 _CONNECT_TIMEOUT = 5.0
 
@@ -27,27 +27,27 @@ _CONNECT_TIMEOUT = 5.0
 # name is used only for the factory registry / test id.
 DEVICES = [
     # detectors
-    ("pil2M", "smiclasses.pilatus:SAXS_Detector", "XF:12ID2-ES{Pilatus:Det-2M}",
+    ("pil2M", "smi_beamline.devices.pilatus:SAXS_Detector", "XF:12ID2-ES{Pilatus:Det-2M}",
      {"asset_path": "pilatus2m-1"}),
-    ("pil900KW", "smiclasses.pilatus:WAXS_Detector", "XF:12IDC-ES:2{Det:900KW}",
+    ("pil900KW", "smi_beamline.devices.pilatus:WAXS_Detector", "XF:12IDC-ES:2{Det:900KW}",
      {"asset_path": "pilatus900kw-1"}),
     # sample stack (Huber coarse + SmarAct fine)
-    ("stage", "smiclasses.manipulators:STG_pseudo", "XF:12IDC-OP:2{HUB:Stg-Ax:", {}),
-    ("piezo", "smiclasses.manipulators:SMARACT", "", {}),
-    ("bdm", "smiclasses.manipulators:BDMStage", "XF:12IDC-ES:2:", {}),
+    ("stage", "smi_beamline.devices.manipulators:STG_pseudo", "XF:12IDC-OP:2{HUB:Stg-Ax:", {}),
+    ("piezo", "smi_beamline.devices.manipulators:SMARACT", "", {}),
+    ("bdm", "smi_beamline.devices.manipulators:BDMStage", "XF:12IDC-ES:2:", {}),
     # energy (DCM pseudo-positioner)
-    ("energy", "smiclasses.energy:Energy", "", {}),
+    ("energy", "smi_beamline.devices.energy:Energy", "", {}),
     # flux / I0 / transmitted
-    ("xbpm2", "smiclasses.electrometers:XBPM", "XF:12IDA-BI:2{EM:BPM2}", {}),
-    ("xbpm3", "smiclasses.electrometers:XBPM", "XF:12IDB-BI:2{EM:BPM3}", {}),
+    ("xbpm2", "smi_beamline.devices.electrometers:XBPM", "XF:12IDA-BI:2{EM:BPM2}", {}),
+    ("xbpm3", "smi_beamline.devices.electrometers:XBPM", "XF:12IDB-BI:2{EM:BPM3}", {}),
     ("pin_diode", "nslsii.ad33:QuadEMV33", "XF:12ID:2{EM:Tetr1}", {}),
     # temperature
-    ("ls", "smiclasses.electrometers:new_LakeShore", "XF:12ID-ES", {}),
+    ("ls", "smi_beamline.devices.electrometers:new_LakeShore", "XF:12ID-ES", {}),
     # shutters / gate valve
-    ("ph_shutter", "smiclasses.shutter:TwoButtonShutter", "XF:12IDA-PPS:2{PSh}", {}),
-    ("GV7", "smiclasses.shutter:TwoButtonShutter", "XF:12IDC-VA:2{Det:1M-GV:7}", {}),
+    ("ph_shutter", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDA-PPS:2{PSh}", {}),
+    ("GV7", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDC-VA:2{Det:1M-GV:7}", {}),
     # a representative attenuator foil (the one smi-plans uses)
-    ("att2_9", "smiclasses.attenuators:Attenuator", "XF:12IDC-OP:2{Fltr:2-9}", {}),
+    ("att2_9", "smi_beamline.devices.attenuators:Attenuator", "XF:12IDC-OP:2{Fltr:2-9}", {}),
 ]
 
 
@@ -88,7 +88,7 @@ def test_device_connects(name, cls_path, prefix, kwargs):
 
 def test_waxs_arc_readback_present():
     """The WAXS arc readback (used by the arc-block detector logic) is reachable."""
-    cls = _import("smiclasses.pilatus:WAXS_Detector")
+    cls = _import("smi_beamline.devices.pilatus:WAXS_Detector")
     waxs = df.make_device(cls, "XF:12IDC-ES:2{Det:900KW}", name="pil900KW",
                           force=df.REAL, register=False, asset_path="pilatus900kw-1")
     waxs.wait_for_connection(timeout=_CONNECT_TIMEOUT)
@@ -99,7 +99,7 @@ def test_waxs_arc_readback_present():
 
 def test_stage_backcompat_aliases_connect():
     """The Huber stage's legacy .th/.ph/.ch aliases resolve to connected axes."""
-    cls = _import("smiclasses.manipulators:STG_pseudo")
+    cls = _import("smi_beamline.devices.manipulators:STG_pseudo")
     stage = df.make_device(cls, "XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage",
                            force=df.REAL, register=False)
     stage.wait_for_connection(timeout=_CONNECT_TIMEOUT)

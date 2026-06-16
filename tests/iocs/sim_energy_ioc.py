@@ -2,8 +2,8 @@
 """A self-contained caproto IOC that serves fake DCM + undulator motors for tests.
 
 It provides, under a **sandbox prefix** (default ``SMIsim:``), the records/signals that the
-real :class:`smiclasses.energy.Energy` pseudo-positioner and
-:class:`smiclasses.machine.InsertionDevice` drive, but as *simulated motors that move at finite,
+real :class:`smi_beamline.devices.energy.Energy` pseudo-positioner and
+:class:`smi_beamline.devices.machine.InsertionDevice` drive, but as *simulated motors that move at finite,
 configurable speeds* (via caproto's ``record='motor'`` simulator).  This lets the energy move
 choreography -- feedback disable/enable, IVU-brake-then-move, and ``small_move`` speed-matching
 -- be tested against real Channel Access with motion that actually takes time, which

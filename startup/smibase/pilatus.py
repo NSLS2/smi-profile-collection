@@ -1,12 +1,12 @@
 
 import warnings
 from time import ctime
-from smiclasses.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
+from smi_beamline.devices.pilatus import SAXSPositions, FakeDetector, SAXS_Detector, WAXS_Detector, set_energy_cam
 from smibase.waxschamber import chamber_pressure
 from smibase.shutter import shopen, shclose
 from .amptek import amptek
 from .energy import energy
-from smiclasses.waxschamber import Sample_Chamber
+from smi_beamline.devices.waxschamber import Sample_Chamber
 import bluesky.plans as bp
 import bluesky.plan_stubs as bps
 from ophyd import EpicsSignal, Device, Component
@@ -16,7 +16,7 @@ import telnetlib
 import paramiko
 import time
 
-from smiclasses import _context
+from smi_beamline.devices import _context
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     """

@@ -1,5 +1,5 @@
 
-from smiclasses.amptek import SMIAmptek, AmptekPositions
+from smi_beamline.devices.amptek import SMIAmptek, AmptekPositions
 
 # Initialize the Amptek detector
 amptek = SMIAmptek("XF:12IDC-ES:2{Det-Amptek:1}", name="amptek")
