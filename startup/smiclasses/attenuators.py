@@ -71,6 +71,10 @@ class Attenuator(Device):
     #: per-attempt command-put timeout (s); a single attempt timing out is EXPECTED (the first
     #: few often do) and is swallowed -- only repeated failure (max_retries / `timeout`) raises.
     cmd_timeout = 1.0
+    #: the read-back must stay at the target for this long (s) before the foil is considered "in
+    #: position".  This DEBOUNCES the hardware's bounce-back: a foil can momentarily read the
+    #: target and then fall back, so a single transient reading must NOT latch success.
+    settle_time = 0.6
 
     _OPEN_ALIASES = ("Open", "Insert", "open", "insert", "in", 1, "1")
     _CLOSE_ALIASES = ("Close", "Retract", "close", "retract", "out", 0, "0", "Not Open")
@@ -102,10 +106,21 @@ class Attenuator(Device):
                     self.name, val))
 
         st = self._set_st = DeviceStatus(self)
-        state = {"attempts": 0, "done": False, "timer": None, "watchdog": None}
+        state = {"attempts": 0, "done": False, "timer": None, "watchdog": None,
+                 "settle": None}
+
+        def _cancel_settle():
+            t = state.get("settle")
+            if t is not None:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+            state["settle"] = None
 
         def _cleanup():
             state["done"] = True
+            _cancel_settle()
             for key in ("timer", "watchdog"):
                 t = state.get(key)
                 if t is not None:
@@ -138,18 +153,49 @@ class Attenuator(Device):
                 TimeoutError("{}: attenuator did not reach {!r} (last status={!r})".format(
                     self.name, target, cur)))
 
-        def _status_cb(value, **kwargs):
-            # status reads the target (whenever the device finally reports it) -> success.
-            if str(value) == target:
-                _succeed()
-
-        def _retry():
-            # Runs on a timer thread; re-actuate, then schedule the next check until confirmed,
-            # retries exhausted, or the watchdog fails us.  No blocking of the RunEngine loop.
+        def _settle_confirm():
+            # Fired settle_time after the status reached target; succeed only if it is STILL at
+            # target (it did not bounce back).
             if state["done"]:
                 return
             if str(self._safe_status()) == target:
                 _succeed()
+            else:
+                _cancel_settle()   # bounced away; the retry loop will re-actuate
+
+        def _status_cb(value, **kwargs):
+            # status changed.  If it is at target, ARM the settle timer (don't succeed yet -- it
+            # may bounce back).  If it moved away from target, cancel any pending settle.
+            if state["done"]:
+                return
+            if str(value) == target:
+                if state["settle"] is None:
+                    t = threading.Timer(self.settle_time, _settle_confirm)
+                    t.daemon = True
+                    state["settle"] = t
+                    t.start()
+            else:
+                _cancel_settle()
+
+        def _retry():
+            # Runs on a timer thread; re-actuate, then schedule the next check until confirmed
+            # (settled), retries exhausted, or the watchdog fails us.  No blocking of the RE loop.
+            if state["done"]:
+                return
+            # If we're currently at target, let the settle timer confirm it -- do NOT re-actuate
+            # (and do not succeed here, since a momentary reading may bounce back).
+            if str(self._safe_status()) == target:
+                if state["settle"] is None:
+                    t = threading.Timer(self.settle_time, _settle_confirm)
+                    t.daemon = True
+                    state["settle"] = t
+                    t.start()
+                # keep a (slow) heartbeat so we re-check if the settle timer was cancelled
+                if not state["done"]:
+                    hb = threading.Timer(self.settle_time + self.retry_delay, _retry)
+                    hb.daemon = True
+                    state["timer"] = hb
+                    hb.start()
                 return
             if state["attempts"] >= self.max_retries:
                 _fail()
@@ -192,6 +238,110 @@ class Attenuator(Device):
             return self.status.get()
         except Exception:
             return None
+
+
+class Attenuators(Device):
+    """An aggregate over a bank of :class:`Attenuator` foils that moves them **as one unit**.
+
+    Why this exists
+    ---------------
+    Moving several foils with one ``bps.mv(att2_5, 'Insert', att2_6, 'Insert', ...)`` was
+    observed to misbehave on the real hardware: the foils all actuate, but one or more *bounce
+    back* out of position while the overall move still reports success.  Driving them through a
+    single device fixes this because:
+
+    * the per-foil :class:`Attenuator` now requires the read-back to be **stable** (settled) for
+      ``Attenuator.settle_time`` before it counts as in-position, so a transient correct reading
+      that bounces back no longer latches success; and
+    * this aggregate's ``set`` does not finish until **every** foil's settled-confirmation has
+      completed (and re-actuates any that fall back), so the combined move is only "done" when
+      the whole requested combination is genuinely in place.
+
+    Usage
+    -----
+    ``set`` takes the foils that should be **inserted**; every other foil in the bank is
+    **retracted**.  Accepts foil child-attribute names or the foil objects themselves::
+
+        yield from bps.mv(attenuators, ['f5', 'f6'])         # insert f5,f6; retract the rest
+        yield from bps.mv(attenuators, [attenuators.f5])     # by object
+        yield from bps.mv(attenuators, [])                   # retract all (no attenuation)
+
+    The returned Status finishes only when all 12 foils confirm; if any foil cannot reach
+    position it FAILS (the foil's own safe-fail), halting the run rather than running with the
+    wrong attenuation.
+    """
+
+    def set(self, inserted):
+        """Insert the foils in ``inserted`` and retract all others; finish when all confirm.
+
+        Parameters
+        ----------
+        inserted : iterable
+            Foil child-attribute names (e.g. ``'f5'``) and/or foil objects that should end up
+            INSERTED.  Everything else in the bank is RETRACTED.
+        """
+        want_in = self._resolve_foils(inserted)
+
+        statuses = []
+        for name in self.component_names:
+            foil = getattr(self, name)
+            if not isinstance(foil, Attenuator):
+                continue
+            target = "Insert" if foil in want_in else "Retract"
+            statuses.append(foil.set(target))
+
+        if not statuses:
+            # nothing to do -> an already-finished status
+            st = DeviceStatus(self)
+            st.set_finished()
+            return st
+
+        # Combine: the aggregate is done only when EVERY foil's (settled) status is done; it
+        # fails if any foil fails.
+        combined = statuses[0]
+        for s in statuses[1:]:
+            combined = combined & s
+        return combined
+
+    def _resolve_foils(self, inserted):
+        """Return the set of foil objects requested to be inserted (from names or objects)."""
+        foils_by_name = {name: getattr(self, name) for name in self.component_names
+                         if isinstance(getattr(self, name), Attenuator)}
+        by_obj = set(foils_by_name.values())
+        want = set()
+        for item in (inserted or []):
+            if isinstance(item, Attenuator):
+                if item not in by_obj:
+                    raise ValueError(
+                        "{}: {!r} is not a foil of this bank".format(self.name, item))
+                want.add(item)
+            elif item in foils_by_name:
+                want.add(foils_by_name[item])
+            else:
+                raise ValueError(
+                    "{}: unknown foil {!r}; expected one of {}".format(
+                        self.name, item, sorted(foils_by_name)))
+        return want
+
+    def inserted_foils(self):
+        """Return the child-attribute names of the foils currently reading 'Open'."""
+        out = []
+        for name in self.component_names:
+            foil = getattr(self, name)
+            if isinstance(foil, Attenuator) and foil._safe_status() == foil.open_val:
+                out.append(name)
+        return out
+
+
+def make_attenuator_bank(class_name, prefix_fmt, foil_indices):
+    """Build an :class:`Attenuators` subclass with foils ``f<i>`` for ``i`` in ``foil_indices``.
+
+    ``prefix_fmt`` is a format string taking the foil index, e.g.
+    ``"XF:12IDC-OP:2{{Fltr:2-{}}}"``.  Returns the new class (instantiate with ``name=...``).
+    """
+    body = {"f{}".format(i): Cpt(Attenuator, prefix_fmt.format(i), add_prefix=("suffix",))
+            for i in foil_indices}
+    return type(class_name, (Attenuators,), body)
 
 
 # Uncomment and complete the following class if needed
