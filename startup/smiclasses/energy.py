@@ -23,6 +23,7 @@ import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
 import epics.ca as ca
 from .machine import InsertionDevice
+from . import _config
 
 logger = logging.getLogger("bluesky")
 
@@ -96,6 +97,15 @@ class Energy(PseudoPositioner):
     enableivu = Cpt(Signal, value=True)
     enabledcmgap = Cpt(Signal, value=True)
 
+    # IVU-gap experimental offset table (energy -> gap offset), seeded from the persistent Redis
+    # config (mdsave) so it survives restarts and is recorded in every run as device config.  The
+    # registered defaults equal the values that were previously hardcoded here, so behavior is
+    # unchanged until re-calibrated + persisted.  Stored/read as plain lists (see _config).
+    ivu_gap_offset_energies_eV = Cpt(
+        Signal, value=_config.load("energy_ivu_gap_offset_energies_eV"), kind="config")
+    ivu_gap_offset_values_um = Cpt(
+        Signal, value=_config.load("energy_ivu_gap_offset_values_um"), kind="config")
+
     # Harmonic signals
     target_harmonic = Cpt(Signal, value=21)
     harmonic = Cpt(Signal, kind="hinted", value=21)
@@ -145,9 +155,10 @@ class Energy(PseudoPositioner):
             + (1 - 0.28544) / (1 + 10 ** ((7180.06758 - f) * 6.34167e-4))
         )
 
-        # Experimental offsets for specific energies
-        e_exp = np.array([2450, 2470, 3600, 4050, 6400, 6510, 6550, 7700, 8980, 9700, 12000, 12620, 14000, 14400, 16100, 18000])
-        off_exp = np.array([-20, -35, 29, 30, 25, 25, 25, 35, 19, 50, 35, 45, 45, 45, 35, 25])
+        # Experimental offsets for specific energies (seeded from persistent config; defaults
+        # match the values previously hardcoded here).  Read back as lists -> np.asarray.
+        e_exp = np.asarray(self.ivu_gap_offset_energies_eV.get(), dtype=float)
+        off_exp = np.asarray(self.ivu_gap_offset_values_um.get(), dtype=float)
 
         # Interpolate the offset for the target energy
         auto_offset = np.interp(target_energy, e_exp, off_exp, left=min(off_exp), right=max(off_exp))

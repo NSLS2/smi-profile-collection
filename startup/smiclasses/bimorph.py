@@ -2,10 +2,13 @@ import re
 import numpy as np
 from ophyd import (
     EpicsSignal,
+    Signal,
     Device,
     Component as Cpt,
 )
 import bluesky.plan_stubs as bps
+
+from . import _config
 
 
 class HFM_voltage(Device):
@@ -44,20 +47,24 @@ class HFM_voltage(Device):
     shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT")
     set_tar = Cpt(EpicsSignal, "SET-ALLTRGT")
 
-    # This is the default hfm mirror voltage for smi swaxs hutch
-    default_hfm_v2 = np.asarray(
-        [-151, 261, 250, 293, 175, 236, 168, 231, 242, 200, 291, 222, 215, 157, 311, 36]
-    )
+    # Default HFM bimorph voltages for the SMI SWAXS hutch, plus the additive low-divergence
+    # offset.  Seeded from the persistent Redis config (mdsave); the registered defaults equal the
+    # values that were previously hardcoded here, so behavior is unchanged until re-calibrated +
+    # persisted.  kind="config" so they are recorded in every run.  Tables read back as lists.
+    default_hfm_v = Cpt(Signal, value=_config.load("bimorph_hfm_default_v"), kind="config")
+    lowdiv_offset_v = Cpt(Signal, value=_config.load("bimorph_hfm_lowdiv_offset_v"), kind="config")
 
     def set_target(self, mode="SWAXS"):
         ch_pattern = re.compile(r"ch(?P<number>\d{1,2})")
+        defaults = np.asarray(self.default_hfm_v.get())
+        offset = self.lowdiv_offset_v.get()
         for att_an in dir(self):
             ch_pattern_match = ch_pattern.match(att_an)
             if ch_pattern_match and "trg" in att_an:
-                # -80 to move directly to teh good voltag for lowdiv configuration
+                # offset (default -80) moves directly to the good voltage for the lowdiv config
                 yield from bps.mv(
                     getattr(self, att_an),
-                    -80 + self.default_hfm_v2[int(ch_pattern_match[1])],
+                    offset + defaults[int(ch_pattern_match[1])],
                 )
                 yield from bps.sleep(5)
 
@@ -111,47 +118,32 @@ class VFM_voltage(Device):
     shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT")
     set_tar = Cpt(EpicsSignal, "SET-ALLTRGT")
 
-    # This is the default vfm mirror voltage for smi swaxs hutch
-    default_vfm_v2 = [
-        39,
-        -102,
-        277,
-        234,
-        325,
-        163,
-        392,
-        280,
-        365,
-        273,
-        196,
-        400,
-        219,
-        304,
-        51,
-        -327,
-    ]
-    # default_vfm_v2 = -430 + np.asarray([  39,   85, 311, 310,  -15, 485,   68, 447, 291,  130, 606,  170, 272, 437,  192, -308]) #Ca edge
-
-    # default_vfm_v2 =  [-281, -235,  -9, -10, -335, 165, -252, 127, -29, -190, 286, -150, -48, 117, -128, -628] #S edge
-
-    # This is the default vfm mirror voltage for opls hutch
-    default_vfm_opls = [ -206, -191, 6, 71, -316, 184, -223, 120, 45, -130, 202, -111, 17, 62, -75, -553]
+    # Default VFM bimorph voltages (SWAXS hutch and OPLS hutch), seeded from the persistent Redis
+    # config (mdsave).  Registered defaults equal the values previously hardcoded here, so behavior
+    # is unchanged until re-calibrated + persisted.  kind="config"; tables read back as lists.
+    # Alternate edge tables kept for reference:
+    #   Ca edge: -430 + [ 39,  85, 311, 310,  -15, 485,  68, 447, 291, 130, 606, 170, 272, 437, 192, -308]
+    #   S  edge: [-281, -235, -9, -10, -335, 165, -252, 127, -29, -190, 286, -150, -48, 117, -128, -628]
+    default_vfm_v = Cpt(Signal, value=_config.load("bimorph_vfm_default_v"), kind="config")
+    default_vfm_opls_v = Cpt(Signal, value=_config.load("bimorph_vfm_opls_default_v"), kind="config")
 
     def set_target(self, mode="SWAXS"):
         ch_pattern = re.compile(r"ch(?P<number>\d{1,2})")
+        swaxs = np.asarray(self.default_vfm_v.get())
+        opls = np.asarray(self.default_vfm_opls_v.get())
         for att_an in dir(self):
             ch_pattern_match = ch_pattern.match(att_an)
             if ch_pattern_match and "trg" in att_an:
                 if mode == "SWAXS":
                     yield from bps.mv(
                         getattr(self, att_an),
-                        self.default_vfm_v2[int(ch_pattern_match[1])],
+                        swaxs[int(ch_pattern_match[1])],
                     )
                     yield from bps.sleep(5)
                 elif mode == "OPLS":
                     yield from bps.mv(
                         getattr(self, att_an),
-                        self.default_vfm_opls[int(ch_pattern_match[1])],
+                        opls[int(ch_pattern_match[1])],
                     )
                     yield from bps.sleep(5)
                 else:

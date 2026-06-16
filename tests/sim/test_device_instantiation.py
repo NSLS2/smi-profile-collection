@@ -213,6 +213,25 @@ def test_energy_pseudopositioner_builds_without_hardware(make_fake):
     assert hasattr(en, "ivugap")
 
 
+def test_energy_ivu_offset_table_is_config_and_drives_energy_to_gap(make_fake):
+    """The IVU-gap offset table is now kind='config' Signals (seeded from mdsave defaults), and
+    energy_to_gap reads them -- changing the signal changes the computed gap, proving the
+    calibration is data, not hardcoded."""
+    from smiclasses.energy import Energy
+
+    en = make_fake(Energy, name="energy")
+    assert en.ivu_gap_offset_energies_eV.kind.name == "config"
+    assert en.ivu_gap_offset_values_um.kind.name == "config"
+    assert list(en.ivu_gap_offset_energies_eV.get())[:2] == [2450, 2470]
+
+    g_default = en.energy_to_gap(8980, undulator_harmonic=1, man_offset=0)
+    # bump every offset by +100 um -> the auto_offset at 8980 rises by 100 -> gap drops by 100
+    bumped = [v + 100 for v in en.ivu_gap_offset_values_um.get()]
+    en.ivu_gap_offset_values_um.put(bumped)
+    g_bumped = en.energy_to_gap(8980, undulator_harmonic=1, man_offset=0)
+    assert abs((g_default - g_bumped) - 100) < 1e-6
+
+
 def test_lakeshore_and_linkam_build(make_fake):
     from smiclasses.electrometers import new_LakeShore
     from smiclasses.linkam import LinkamThermal
@@ -244,3 +263,42 @@ def test_lakeshore_d_gain_points_at_d_pv():
     assert output_lakeshore.I.suffix == "Gain:I-SP"
     assert output_lakeshore.D.suffix == "Gain:D-SP"
     assert output_lakeshore.D.suffix != output_lakeshore.I.suffix
+
+
+def _drain_set_targets(gen):
+    """Walk a (RunEngine-free) plan, applying 'set' messages to the fake signals; return what was
+    sent keyed by signal name."""
+    sent = {}
+    for msg in gen:
+        if msg.command == "set":
+            msg.obj.put(msg.args[0])
+            sent[msg.obj.name] = msg.args[0]
+    return sent
+
+
+def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
+    """Bimorph default-voltage tables + the -80 offset are now kind='config' Signals (seeded from
+    mdsave defaults), and set_target reads them -- so the commanded voltages are data, not
+    hardcoded.  Verify the commanded values match the historical behavior."""
+    from smiclasses.bimorph import HFM_voltage, VFM_voltage
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    assert hfm.default_hfm_v.kind.name == "config"
+    assert hfm.lowdiv_offset_v.kind.name == "config"
+    sent = _drain_set_targets(hfm.set_target("SWAXS"))
+    # ch0 = offset + default[0] = -80 + (-151) = -231 ; ch15 = -80 + 36 = -44
+    assert sent["hfm_ch0_trg"] == -231
+    assert sent["hfm_ch15_trg"] == -44
+
+    vfm = make_fake(VFM_voltage, name="vfm", prefix="VFM:")
+    assert vfm.default_vfm_v.kind.name == "config"
+    assert vfm.default_vfm_opls_v.kind.name == "config"
+    sent_swaxs = _drain_set_targets(vfm.set_target("SWAXS"))
+    assert sent_swaxs["vfm_ch0_trg"] == 39        # default_vfm_v[0]
+    sent_opls = _drain_set_targets(vfm.set_target("OPLS"))
+    assert sent_opls["vfm_ch0_trg"] == -206       # default_vfm_opls_v[0]
+
+    # the table really drives it: change the offset, the commanded voltage follows
+    hfm.lowdiv_offset_v.put(0)
+    sent2 = _drain_set_targets(hfm.set_target("SWAXS"))
+    assert sent2["hfm_ch0_trg"] == -151           # now 0 + (-151)
