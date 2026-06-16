@@ -25,6 +25,11 @@ _STARTUP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "st
 if _STARTUP_DIR not in sys.path:
     sys.path.insert(0, _STARTUP_DIR)
 
+# Make ``import smi_beamline`` (the Phase-4 package under src/) importable off-beamline.
+_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 _TIERS = ("unit", "sim", "hardware", "integration")
 
 

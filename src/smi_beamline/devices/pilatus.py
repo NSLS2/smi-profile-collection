@@ -31,9 +31,9 @@ import numpy as np
 import time as ttime
 from warnings import warn
 
-from smiclasses.beamstop import SAXSBeamStops
-from smiclasses import _context
-from smiclasses import _config
+from .beamstop import SAXSBeamStops
+from . import _context
+from . import _config
 
 # Persistent-config dict (Redis ``mdsave`` on the live beamline; ``{}`` fallback under bare
 # import / tests so the class-body ``Cpt(Signal, value=mdsave.get(...))`` seeding still works
