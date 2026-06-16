@@ -969,9 +969,9 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     # plt.close("all")
 
     # Return angle
-    yield from bps.mv(bdm.th, bdm.th.get() - angle)
-    print(f'Aligned position of bdm.y {bdm.y.get(): .2f}')
-    print(f'Aligned position of bdm.th {bdm.th.get(): .2f}')
+    yield from bps.mv(bdm.th, bdm.th.position - angle)
+    print(f'Aligned position of bdm.y {bdm.y.position: .2f}')
+    print(f'Aligned position of bdm.th {bdm.th.position: .2f}')
     # yield from smi.modeMeasurement()
 
     # Deactivate the automated derivative calculation

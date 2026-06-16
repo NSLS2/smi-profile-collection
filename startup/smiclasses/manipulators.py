@@ -3,6 +3,8 @@
 from ophyd import (
     EpicsMotor,
     EpicsSignal,
+    EpicsSignalRO,
+    PVPositionerIsClose,
     Device,
     Component as Cpt,
 )
@@ -27,10 +29,65 @@ class SMARACT(Device):
 
 
 
+class SmarActAxis(PVPositionerIsClose):
+    """One axis of a SmarAct open-loop piezo stepper exposed through its raw controller PVs.
+
+    The BDM stage is a SmarAct controller whose channels are published as
+    ``XF:12IDC-ES:2:ACT<n>:*`` (no EPICS motor record).  Previously each axis was a bare
+    ``EpicsSignal`` (read ``ACT<n>:POSITION``, write ``ACT<n>:CMD:TARGET``), so a ``set``/``mv``
+    completed the instant the CA put was acknowledged -- **not** when the stage had physically
+    finished moving.  In a plan like ``bp.rel_scan([pil2M], bdm.y, ...)`` that meant the detector
+    could read before the BDM had settled.
+
+    Done-detection (why ``PVPositionerIsClose`` and not the controller's flags)
+    --------------------------------------------------------------------------
+    This controller's status flags are **unreliable**: on the SMI BDM, ``RD_MOVING`` reads ``1``
+    permanently (even at rest, and long after the stage has demonstrably reached target) and
+    ``RD_INRANGE`` reads ``0`` permanently.  A ``done``-flag-based ``PVPositioner`` would therefore
+    hang forever.  The ``POSITION`` readback, however, IS live and reliable (it ramps to the
+    target and settles).  So the move is considered complete when the **readback is close to the
+    setpoint** (``np.isclose`` with :attr:`atol`), which depends only on the trustworthy readback.
+
+    The controller's in-range / moving / error / EOT / connection flags are still exposed as
+    readable signals (``kind="config"``) for monitoring/diagnostics; they do **not** gate the
+    move (and given their unreliability here, should not be relied upon).
+    """
+
+    # --- the PVPositioner contract; completion is |readback - setpoint| <= atol ---
+    setpoint = Cpt(EpicsSignal, "CMD:TARGET")
+    readback = Cpt(EpicsSignalRO, "POSITION", kind="hinted")
+    #: absolute settle tolerance (controller units).  The BDM settles to within ~1e-5 of target;
+    #: 0.01 is comfortably loose enough never to hang yet tight enough to mean "arrived".
+    atol = 0.01
+
+    stop_signal = Cpt(EpicsSignal, "CMD:STOP")
+    stop_value = 1
+
+    # --- diagnostics (do NOT gate the move; unreliable on this controller -- see class docstring) ---
+    moving_flag = Cpt(EpicsSignalRO, "RD_MOVING", kind="config")
+    in_range = Cpt(EpicsSignalRO, "RD_INRANGE", kind="config")
+    st_in_range = Cpt(EpicsSignalRO, "ST_INRANGE", kind="config")
+    st_error = Cpt(EpicsSignalRO, "ST_ERROR", kind="config")
+    st_connect = Cpt(EpicsSignalRO, "ST_CONNECT", kind="config")
+    st_enabled = Cpt(EpicsSignalRO, "ST_ENABLED", kind="config")
+    st_eot_fwd = Cpt(EpicsSignalRO, "ST_EOT_FWD", kind="config")
+    st_eot_bwd = Cpt(EpicsSignalRO, "ST_EOT_BWD", kind="config")
+    ref_position = Cpt(EpicsSignalRO, "REF_POSITION", kind="config")
+
+
 class BDMStage(Device):
-    x = Cpt(EpicsSignal, "ACT2:POSITION", write_pv="ACT2:CMD:TARGET", kind="hinted")
-    y = Cpt(EpicsSignal, "ACT1:POSITION", write_pv="ACT1:CMD:TARGET", kind="hinted")
-    th = Cpt(EpicsSignal, "ACT0:POSITION", write_pv="ACT0:CMD:TARGET", kind="hinted")
+    """Beam-diagnostic-module stage: three SmarAct axes with real move-completion.
+
+    Each axis (``x``/``y``/``th``) keeps its previous PV mapping and its mover interface --
+    ``bps.mv(bdm.x, val)`` and ``bp.rel_scan([pil2M], bdm.x, ...)`` work as before -- but now via
+    :class:`SmarActAxis`, so a move waits until the readback reaches the target instead of
+    returning on the CA put-ack.  Read the current value with ``bdm.x.position`` (the positioner
+    readback); the former bare-signal ``bdm.x.get()`` returned a scalar, whereas a positioner's
+    ``.get()`` returns a namedtuple, so the call sites that read the value now use ``.position``.
+    """
+    x = Cpt(SmarActAxis, "ACT2:", kind="hinted")
+    y = Cpt(SmarActAxis, "ACT1:", kind="hinted")
+    th = Cpt(SmarActAxis, "ACT0:", kind="hinted")
 
 
 from ophyd import Component as Cpt

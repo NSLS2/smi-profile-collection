@@ -47,6 +47,57 @@ def test_smaract_and_bdm_build(make_fake):
     bdm = make_fake(BDMStage, name="bdm")
     for ax in ("x", "y", "th"):
         assert hasattr(bdm, ax)
+        # H4: each axis is now a positioner (has move-completion), not a bare signal.
+        assert hasattr(getattr(bdm, ax), "move")
+        assert hasattr(getattr(bdm, ax), "position")
+
+
+def test_bdm_move_completes_on_readback_not_moving_flag(make_fake):
+    """The BDM axis completes a move when the READBACK reaches the setpoint.
+
+    Crucially it must NOT depend on the controller's RD_MOVING/RD_INRANGE flags, which on the SMI
+    BDM are stuck (RD_MOVING==1 always, RD_INRANGE==0 always).  We pin RD_MOVING high the whole
+    time and assert the move still completes purely from the readback closing on the setpoint.
+    """
+    from smiclasses.manipulators import BDMStage
+
+    bdm = make_fake(BDMStage, name="bdm")
+    ax = bdm.y
+    # reflect the broken hardware: moving flag stuck high, in-range stuck low.
+    ax.moving_flag.sim_put(1)
+    ax.in_range.sim_put(0)
+    ax.readback.sim_put(0.60)
+
+    # a move whose readback does NOT update would never finish -> mirror the readback onto the
+    # setpoint to simulate the live POSITION ramping to target.
+    ax.setpoint.subscribe(lambda value, **k: ax.readback.sim_put(value), run=False)
+
+    st = ax.move(0.80, wait=False)
+    st.wait(timeout=5)
+    assert st.success
+    assert abs(ax.position - 0.80) <= ax.atol
+    # done despite the moving flag never clearing:
+    assert ax.moving_flag.get() == 1
+
+
+def test_bdm_move_does_not_complete_while_readback_far(make_fake):
+    """If the readback stays far from the setpoint, the move must NOT report done (no false early
+    completion -- the bug the old bare-EpicsSignal version had)."""
+    from smiclasses.manipulators import BDMStage
+
+    bdm = make_fake(BDMStage, name="bdm")
+    ax = bdm.y
+    ax.readback.sim_put(0.60)
+    # setpoint moves but readback is stuck far away (stalled stage)
+    st = ax.move(5.00, wait=False)
+    try:
+        # should still be moving shortly after issuing (readback far from setpoint)
+        import time as _t
+        _t.sleep(0.3)
+        assert not st.done
+    finally:
+        ax.readback.sim_put(5.00)   # let it finish so we don't leak the move
+        st.wait(timeout=5)
 
 
 def test_saxs_beamstops_build_and_describe(make_fake):
