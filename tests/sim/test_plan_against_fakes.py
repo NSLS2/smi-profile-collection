@@ -115,3 +115,52 @@ def test_small_move_out_of_range_raises(make_fake):
     en = _make_energy(make_fake)
     with pytest.raises(RuntimeError):
         list(en.small_move(2100.0))  # far from the seeded harmonic -> gap out of range
+
+
+def test_sample_name_decorator_injects_run_scoped_name(make_fake):
+    """sample_name_decorator tags every nested run, without touching RE.md (replaces sample_id)."""
+    from smiclasses._plan_helpers import sample_name_decorator
+    from smiclasses.beamstop import SAXSBeamStops
+
+    bs = make_fake(SAXSBeamStops, name="bs")
+
+    @sample_name_decorator("alignment_gisaxs")
+    def two_runs():
+        yield from bp.count([bs], num=1)
+        yield from bp.count([bs], num=1)
+
+    names = []
+    RE = RunEngine({})
+    RE(two_runs(), {"start": lambda n, d: names.append(d.get("sample_name"))})
+
+    assert names == ["alignment_gisaxs", "alignment_gisaxs"]
+    assert "sample_name" not in RE.md  # no global mutation
+
+
+def test_sample_name_decorator_sanitizes_and_respects_explicit(make_fake):
+    """Human labels are sanitized; an inner explicit sample_name is not overridden."""
+    from smiclasses._plan_helpers import sample_name_decorator, sanitize_name
+    from smiclasses.beamstop import SAXSBeamStops
+
+    assert sanitize_name("alignment height scan") == "alignment_height_scan"
+
+    bs = make_fake(SAXSBeamStops, name="bs")
+    names = []
+    RE = RunEngine({})
+
+    # 1) a human label is sanitized into the run's sample_name
+    @sample_name_decorator("my label here")
+    def plain():
+        yield from bp.count([bs], num=1)
+
+    RE(plain(), {"start": lambda n, d: names.append(d.get("sample_name"))})
+    assert names == ["my_label_here"]
+
+    # 2) an inner scan's explicit sample_name wins (set-default semantics)
+    @sample_name_decorator("outer")
+    def inner_explicit():
+        yield from bp.count([bs], num=1, md={"sample_name": "inner_wins"})
+
+    names.clear()
+    RE(inner_explicit(), {"start": lambda n, d: names.append(d.get("sample_name"))})
+    assert names == ["inner_wins"]

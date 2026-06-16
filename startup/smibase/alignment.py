@@ -6,7 +6,6 @@ import bluesky.preprocessors as bpp
 import bluesky.plans as bp
 from smibase.manipulators import piezo, stage
 from .pilatus import pil2M
-from .config import sample_id
 from .pilatus import det_exposure_time
 from .utils import ps
 from IPython import get_ipython
@@ -16,6 +15,10 @@ from .beam import SMI as smi
 bec = get_ipython().user_ns['bec']
 
 from bluesky.callbacks.mpl_plotting import QtAwareCallback
+
+from smiclasses._plan_helpers import sample_name_decorator
+
+
 class close_plots(QtAwareCallback):
     def stop(self,doc):
         uid = doc['run_start']
@@ -180,6 +183,7 @@ def align_gisaxs_th_hex(rang=0.3, point=31):
     yield from bps.mv(stage.th, ps.peak)
 
 
+@sample_name_decorator("alignment_gisaxs")
 def alignment_gisaxs(angle=0.15):
     """
     Regular alignment routine for GISAXS and GIWAXS. First, scan the sample height and incident angle on the direct beam.
@@ -193,7 +197,6 @@ def alignment_gisaxs(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
@@ -224,6 +227,7 @@ def alignment_gisaxs(angle=0.15):
     # Deactivate the automated derivative calculation
     bec._calc_derivative_and_stats = False
 
+@sample_name_decorator("alignment_gisaxs_doublestack")
 def alignement_gisaxs_doblestack(angle=0.15):
     """
     Modification of teh regular alignement routine for the doble-stack. Since top row is out of the center of rotation of of theta, the alignement on teh direc does not work.
@@ -236,7 +240,6 @@ def alignement_gisaxs_doblestack(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
@@ -273,6 +276,7 @@ def alignement_gisaxs_doblestack(angle=0.15):
     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_rough")
 def alignement_gisaxs_rough(angle=0.15):
     """
     Modification of teh regular alignement routine for the doble-stack. Since top row is out of the center of rotation of of theta, the alignement on teh direc does not work.
@@ -285,7 +289,6 @@ def alignement_gisaxs_rough(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
@@ -307,6 +310,7 @@ def alignement_gisaxs_rough(angle=0.15):
 
 
 
+@sample_name_decorator("alignment_gisaxs_multisample")
 def alignement_gisaxs_multisample(angle=0.15):
     """
     This is design to align several samples at the same time. The attenuators, bs motion, ... needs to be done outside of this maccro, so there is no back and forth in term
@@ -318,7 +322,6 @@ def alignement_gisaxs_multisample(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.5, 0.5)
 
     # yield from smi.modeAlignment(technique='gisaxs')
@@ -353,6 +356,7 @@ def alignement_gisaxs_multisample(angle=0.15):
     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_hexapod")
 def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     """
     Regular alignement routine for gisaxs and giwaxs using the hexapod. First, scan of the sample height
@@ -368,7 +372,6 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.5, 0.5)
 
     yield from smi.modeAlignment()
@@ -402,6 +405,7 @@ def alignement_gisaxs_hex(angle=0.1, rough_y=0.5):
     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_hexapod_rough")
 def alignement_gisaxs_hex_roughsample(angle=0.1):
     """
     Regular alignement routine for gisaalign_xrr_prsxs and giwaxs using the hexapod. First,
@@ -415,7 +419,6 @@ def alignement_gisaxs_hex_roughsample(angle=0.1):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.5, 0.5)
 
     yield from smi.modeAlignment()
@@ -436,6 +439,7 @@ def alignement_gisaxs_hex_roughsample(angle=0.1):
     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_hexapod_short")
 def alignement_gisaxs_hex_short(angle=0.12):
     """
     Short alignement routine for gisaxs and giwaxs using the hexapod. First, scan of the sample height and incident angle on the direct beam.
@@ -447,7 +451,6 @@ def alignement_gisaxs_hex_short(angle=0.12):
 
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment()
@@ -478,6 +481,7 @@ def alignement_gisaxs_hex_short(angle=0.12):
     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_quick_reflectedonly")
 def quickalign_gisaxs(angle=0.15):
     """
     Short alignement with only alignement on the reflected beam.
@@ -488,7 +492,6 @@ def quickalign_gisaxs(angle=0.15):
 
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment()
@@ -523,8 +526,7 @@ def quickalign_gisaxs(angle=0.15):
 #     # Activate the automated derivative calculation
 #     bec._calc_derivative_and_stats = True
 
-#     sample_id(user_name="test", sample_name="test")
-#     det_exposure_time(0.5, 0.5)
+# #     det_exposure_time(0.5, 0.5)
 
 #     yield from smi.modeAlignment(technique="xrr")
 
@@ -579,8 +581,7 @@ def quickalign_gisaxs(angle=0.15):
 #     # Activate the automated derivative calculation
 #     bec._calc_derivative_and_stats = True
 
-#     sample_id(user_name="test", sample_name="test")
-#     det_exposure_time(0.5, 0.5)
+# #     det_exposure_time(0.5, 0.5)
 
 #     yield from smi.modeAlignment(technique="xrr")
 
@@ -623,6 +624,7 @@ def quickalign_gisaxs(angle=0.15):
 #     bec._calc_derivative_and_stats = False
 
 
+@sample_name_decorator("alignment_gisaxs_short")
 def alignement_gisaxs_short(angle=0.15):
     """
     Regular alignement routine for gisaxs and giwaxs. First, scan of the sample height and incident angle on the direct beam.
@@ -635,7 +637,6 @@ def alignement_gisaxs_short(angle=0.15):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
@@ -915,6 +916,7 @@ def bisection_search_plan(motor=piezo.y, step_size=1.0, min_step=0.05, intensity
 from .manipulators import bdm
 
 
+@sample_name_decorator("alignment_bdm")
 def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     """
     Regular alignment routine for the bounce down mirror. 
@@ -937,7 +939,6 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")
@@ -978,6 +979,7 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
 
 
 
+@sample_name_decorator("alignment_gisaxs_finer_for_bdm")
 def alignment_gisaxs_finer_for_bdm(angle=0.1):
     """
     Regular alignment routine for GISAXS and GIWAXS. First, scan the sample height and incident angle on the direct beam.
@@ -991,7 +993,6 @@ def alignment_gisaxs_finer_for_bdm(angle=0.1):
     # Activate the automated derivative calculation
     bec._calc_derivative_and_stats = True
 
-    sample_id(user_name="test", sample_name="test")
     yield from det_exposure_time(0.3, 0.3)
 
     yield from smi.modeAlignment(technique="gisaxs")

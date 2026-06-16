@@ -12,6 +12,7 @@ import pytest
 # Every module under startup/smiclasses that defines device classes.
 SMICLASSES_MODULES = [
     "_context",
+    "_plan_helpers",
     "amptek",
     "attenuators",
     "beamstop",
