@@ -19,31 +19,23 @@ ipython = get_ipython()
 if '__IPYTHON__' in globals():
     ipython.magic('load_ext autoreload')
     ipython.magic('autoreload 2')
-    
+
+# --- Bootstrap: create the session (RE/sd/bec/db/mdsave) and wire the device-class seam. ---
+# These two modules ARE the bootstrap: importing them creates RE/db/bec/sd via
+# nslsii.configure_base, opens Tiled/Redis, sets the prompt, and configures
+# smi_beamline.devices._context with RE/sd/bec/db.  They run first (before the factory) and expose
+# the session objects (RE, sd, bec, db, mdsave, ...) into this namespace via ``import *``.
 from smibase.base import *
 from smibase.base_dev import *
-from smibase.waxschamber import *
-from smibase.shutter import *
-from smibase.beamstop import *
-from smibase.machine import *
-from smibase.attenuators import *
-from smibase.crls import *
-from smibase.manipulators import *
-from smibase.mirrors import *
-from smibase.motors import *
-from smibase.slits import *
-from smibase.energy import *
-from smibase.xbpms import *
-from smibase.ioLogik import *
-from smibase.electrometers import *
-from smibase.amptek import *
-from smibase.pilatus import *
-from smibase.prosilica import *
-from smibase.beam import *
-from smibase.alignment import *
-from smibase.config import *
-from smibase.bladecoater import *
-from smibase.humidity_cell import *
-from smibase.linkam import *
-from smibase.suspenders import *
-from smibase.utils import *
+
+# --- Factory: build the beamline devices, with a timed per-module load report (Option C). ---
+# make_devices imports the device modules in dependency order, times each, reports ok/fail, and
+# returns the namespace they export.  We merge that into globals() so all the device instances and
+# plans land in the IPython user namespace exactly as the old flat ``from smibase.X import *`` did.
+from smiclasses import _context as _seam
+from smi_beamline.instances import make_devices as _make_devices
+
+_ctx = {"RE": _seam.get_re(), "sd": _seam.get_sd(),
+        "bec": _seam.get_bec(), "db": _seam.get_db(), "mdsave": mdsave}
+_devices_ns = _make_devices(_ctx, verbose=True)
+globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith("_")})
