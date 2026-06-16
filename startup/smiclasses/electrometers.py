@@ -8,7 +8,7 @@ class output_lakeshore(Device):
     status = Cpt(EpicsSignal, "Val:Range-Sel")
     P = Cpt(EpicsSignal, "Gain:P-SP")
     I = Cpt(EpicsSignal, "Gain:I-SP")
-    D = Cpt(EpicsSignal, "Gain:I-SP")
+    D = Cpt(EpicsSignal, "Gain:D-SP")
     temp_set_point = Cpt(EpicsSignal, "T-SP")
 
     def turn_on(self):
@@ -35,10 +35,16 @@ class new_LakeShore(Device):
     input_C = Cpt(EpicsSignal, "{Env:01-Chan:C}T-I")
     input_D = Cpt(EpicsSignal, "{Env:01-Chan:D}T-I")
 
-    output1 = output_lakeshore("XF:12ID-ES{Env:01-Out:1}", name="ls_outpu1")
-    output2 = output_lakeshore("XF:12ID-ES{Env:01-Out:2}", name="ls_outpu2")
-    output3 = output_lakeshore("XF:12ID-ES{Env:01-Out:3}", name="ls_outpu3")
-    output4 = output_lakeshore("XF:12ID-ES{Env:01-Out:4}", name="ls_outpu4")
+    # The four control-loop outputs as PROPER Components (relative suffix composes with the parent
+    # prefix, e.g. "XF:12ID-ES" + "{Env:01-Out:1}").  Previously these were eagerly-instantiated
+    # plain output_lakeshore() instances with hard-coded ABSOLUTE prefixes: that made them invisible
+    # to ophyd (absent from component_names / read() / describe()) and -- worse -- meant
+    # make_fake_device(new_LakeShore) left them holding REAL EpicsSignals.  As Cpt they join the
+    # device tree and fake correctly.
+    output1 = Cpt(output_lakeshore, "{Env:01-Out:1}")
+    output2 = Cpt(output_lakeshore, "{Env:01-Out:2}")
+    output3 = Cpt(output_lakeshore, "{Env:01-Out:3}")
+    output4 = Cpt(output_lakeshore, "{Env:01-Out:4}")
 
 class XBPM(Device):
     """

@@ -119,6 +119,27 @@ def test_lakeshore_and_linkam_build(make_fake):
     ls = make_fake(new_LakeShore, name="lakeshore")
     assert hasattr(ls, "input_A_celsius")
 
+    # output1..4 are now PROPER Components (M6): they appear in the device tree and were faked
+    # (not left holding real EpicsSignals).
+    for n in ("output1", "output2", "output3", "output4"):
+        assert n in ls.component_names
+        out = getattr(ls, n)
+        for sig in ("P", "I", "D", "temp_set_point", "status"):
+            assert hasattr(out, sig)
+        # the fake makes signals settable in memory; if they were real EpicsSignals this would
+        # try to hit CA.
+        out.P.set(1.0).wait(timeout=1)
+
     lk = make_fake(LinkamThermal, name="linkam")
     # the readback Signal the Phase-2 Linkam-Heater fix will use
     assert hasattr(lk, "temperature_current")
+
+
+def test_lakeshore_d_gain_points_at_d_pv():
+    """The D (derivative) gain must address Gain:D-SP, not Gain:I-SP (a 2022 copy-paste bug)."""
+    from smiclasses.electrometers import output_lakeshore
+
+    # Inspect the Component suffixes directly -- no instantiation, so no CA contact.
+    assert output_lakeshore.I.suffix == "Gain:I-SP"
+    assert output_lakeshore.D.suffix == "Gain:D-SP"
+    assert output_lakeshore.D.suffix != output_lakeshore.I.suffix
