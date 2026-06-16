@@ -423,3 +423,130 @@ def get_more_md(tender=True, bpm=True):
 
     return more_md
 
+
+# ---------------------------------------------------------------------------
+# Live hardware connectivity check (run from the Bluesky IPython terminal)
+# ---------------------------------------------------------------------------
+#: Default set of key devices to check (names resolved from the IPython namespace).
+HARDWARE_CHECK_DEVICES = [
+    "pil2M", "pil900KW", "stage", "piezo", "bdm", "energy",
+    "xbpm2", "xbpm3", "pin_diode", "ls",
+    "ph_shutter", "GV7", "fs", "att2_9", "waxs",
+]
+
+
+def hardware_check(devices=None, *, timeout=5.0, read=True, verbose=True):
+    """Connectivity smoke-test of the LIVE device objects (read-only, no motion).
+
+    Looks up each device by name in the running IPython namespace and reports
+    whether it is connected (and, if ``read``, a representative current value).
+    **Nothing is moved, opened, closed, or triggered** -- safe to run with no beam.
+
+    This is the interactive companion to the ``tests/hardware`` pytest tier; it
+    checks the *instantiated* beamline objects (so anything pinned ``fake`` via the
+    device_factory shows up as such), whereas the pytest tier rebuilds classes from
+    their prefixes.
+
+    Parameters
+    ----------
+    devices : list of str, optional
+        Device names to check (default :data:`HARDWARE_CHECK_DEVICES`).  You can pass
+        your own, e.g. ``hardware_check(["pil2M", "energy"])``.
+    timeout : float
+        Per-device connection timeout in seconds.
+    read : bool
+        Also read a representative value from each connected device.
+    verbose : bool
+        Print a per-device line as it goes.
+
+    Returns
+    -------
+    dict
+        ``{name: {"ok": bool, "connected": bool, "value": ..., "error": str|None}}``.
+
+    Examples
+    --------
+    >>> hardware_check()                       # check the default device set
+    >>> hardware_check(["pil2M", "pil900KW"])  # just the detectors
+    """
+    import time as _time
+
+    ns = get_ipython().user_ns
+    names = list(devices) if devices is not None else list(HARDWARE_CHECK_DEVICES)
+
+    results = {}
+    if verbose:
+        print(f"{'device':14s} {'status':10s} {'t(s)':>6s}  value")
+        print("-" * 60)
+
+    for nm in names:
+        info = {"ok": False, "connected": False, "value": None, "error": None}
+        dev = ns.get(nm)
+        t0 = _time.time()
+        try:
+            if dev is None:
+                raise KeyError(f"'{nm}' not in namespace")
+            # wait for connection if the device supports it
+            if hasattr(dev, "wait_for_connection"):
+                try:
+                    dev.wait_for_connection(timeout=timeout)
+                except Exception:
+                    pass  # fall through to the .connected check for a clean status
+            connected = getattr(dev, "connected", True)
+            info["connected"] = bool(connected)
+            if connected and read:
+                info["value"] = _safe_read_device(dev)
+            info["ok"] = bool(connected)
+        except Exception as exc:
+            info["error"] = repr(exc)
+        dt = _time.time() - t0
+
+        results[nm] = info
+        if verbose:
+            if info["error"] is not None:
+                status = "MISSING" if dev is None else "ERROR"
+                val = info["error"]
+            elif info["connected"]:
+                status = "OK"
+                val = "" if info["value"] is None else info["value"]
+            else:
+                status = "NO CONN"
+                val = ""
+            print(f"{nm:14s} {status:10s} {dt:6.2f}  {val}")
+
+    n_ok = sum(1 for r in results.values() if r["ok"])
+    n_tot = len(results)
+    if verbose:
+        print("-" * 60)
+        print(f"{n_ok}/{n_tot} connected"
+              + ("" if n_ok == n_tot else "  -- see NO CONN / MISSING / ERROR above"))
+    return results
+
+
+def _safe_read_device(dev):
+    """Return a short, representative read of a device without moving/triggering it."""
+    # positioners: report position
+    try:
+        pos = getattr(dev, "position", None)
+        if pos is not None:
+            return f"pos={pos}"
+    except Exception:
+        pass
+    # flux/electrometer style: report I0 if present
+    for attr in ("sumX", "energy"):
+        sub = getattr(dev, attr, None)
+        if sub is not None and hasattr(sub, "get"):
+            try:
+                return f"{attr}={sub.get()}"
+            except Exception:
+                pass
+    # generic readable: a compact read() of the first key
+    try:
+        rd = dev.read()
+        if rd:
+            k = next(iter(rd))
+            return f"{k}={rd[k].get('value')}"
+    except Exception:
+        pass
+    return "connected"
+

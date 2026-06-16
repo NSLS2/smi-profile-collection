@@ -40,6 +40,38 @@ replaces every `EpicsSignal`/`EpicsMotor` with an in-memory fake — **no Channe
 Access connection is ever opened**, so the `unit` and `sim` tiers cannot reach
 the live beamline even if CA were enabled.
 
+### What the hardware tier covers
+
+`tests/hardware/test_hardware_connect.py` builds each device from the `DEVICES`
+list (which mirrors the `smibase` prefixes/classes) in **REAL** mode and asserts
+`wait_for_connection`. It is **connection + read only — nothing is moved, opened,
+closed, or triggered** — so it is safe to run **with no beam**. Covered today:
+detectors (`pil2M`, `pil900KW`), the sample stack (`stage`, `piezo`, `bdm`),
+`energy`, flux (`xbpm2`, `xbpm3`, `pin_diode`), `ls`, shutters (`ph_shutter`,
+`GV7`), a representative attenuator (`att2_9`), plus the WAXS arc readback and the
+Huber `stage` `.th/.ph/.ch` back-compat aliases. Extend by adding rows to
+`DEVICES` (keep them read-only).
+
+## Live connectivity check from the IPython terminal — `hardware_check()`
+
+For an interactive smoke-test inside the running Bluesky session (the companion to
+the pytest `hardware` tier), call `hardware_check()`. Unlike the pytest tier — which
+rebuilds classes from prefixes — this checks the **already-instantiated** beamline
+objects in the namespace (so anything pinned `fake` via the device factory shows up
+as connected-fake). It is **read-only**: nothing moves/opens/triggers; safe with no
+beam.
+
+```python
+hardware_check()                      # default key-device set -> prints a table
+hardware_check(["pil2M", "pil900KW"]) # just the detectors
+res = hardware_check(read=False)      # connection only, no value reads; returns a dict
+```
+
+It prints `device / status / t(s) / value` and a `N/M connected` summary, and returns
+`{name: {"ok", "connected", "value", "error"}}`. Statuses: `OK`, `NO CONN`,
+`MISSING` (name not in namespace), `ERROR`. The default device list is
+`smibase.utils.HARDWARE_CHECK_DEVICES`.
+
 ## The device factory — fake vs. real, per device
 
 `startup/smiclasses/device_factory.py` is a single chokepoint for building a
