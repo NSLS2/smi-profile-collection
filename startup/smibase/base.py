@@ -7,6 +7,7 @@ import nslsii
 import os
 
 import time
+import datetime
 from tiled.client import from_profile
 from databroker import Broker
 import logging
@@ -97,11 +98,18 @@ logger.setLevel("INFO")
 
 class ProposalIDPrompt(Prompts):
     def in_prompt_tokens(self, cli=None):
+        data_session = str(RE.md.get('data_session', 'N/A'))
+        # strip the leading "pass-" from the data session id
+        if data_session.startswith('pass-'):
+            data_session = data_session[len('pass-'):]
+        project_name = str(RE.md.get('project_name', 'N/A'))
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         return [
-            (
-                Token.Prompt,
-                f"{RE.md.get('data_session', 'N/A')} {RE.md.get('project_name', 'N/A')} [",
-            ),
+            (Token.OutPromptNum, "SMI "),          # bold/colored "SMI" tag
+            (Token.Prompt, f"{data_session} "),
+            (Token.Name.Class, f"{project_name} "),  # project name in its own color
+            (Token.Comment, f"{now} "),              # date/time, dimmed
+            (Token.Prompt, "["),
             (Token.PromptNum, str(self.shell.execution_count)),
             (Token.Prompt, "]: "),
         ]

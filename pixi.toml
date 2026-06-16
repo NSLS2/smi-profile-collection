@@ -63,6 +63,10 @@ numpy = ">2"
 
 [feature.terminal.tasks]
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
+# Like `start`, but with BEAM_DOWN set: builds the suspenders but does NOT enable them, so you
+# can test/restart without running turn_off_suspenders() each time (use turn_on_suspenders()
+# when the beam returns).
+start-beamdown = { cmd = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=.", env = { BEAM_DOWN = "1" } }
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 
 
