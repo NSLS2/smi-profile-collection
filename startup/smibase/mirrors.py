@@ -104,7 +104,6 @@ def load_bimorph(name, settle=1.0, timeout=120.0):
 
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([ vfm_voltage, hfm_voltage, hfm, vdm, vfm,])
+_context.baseline_register([ vfm_voltage, hfm_voltage, hfm, vdm, vfm,])

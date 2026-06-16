@@ -15,7 +15,6 @@ smi_shutter_enable = EpicsSignalRO(
 
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([ring.current])
+_context.baseline_register([ring.current])

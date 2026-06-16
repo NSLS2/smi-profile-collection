@@ -110,6 +110,17 @@ def test_saxs_beamstops_build_and_describe(make_fake):
     assert isinstance(bs.describe(), dict)
 
 
+def _wait_until(predicate, timeout=3.0, poll=0.02):
+    """Poll ``predicate`` until true or timeout (for CA-free fake signals updated by callbacks)."""
+    import time as _t
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        if predicate():
+            return True
+        _t.sleep(poll)
+    return predicate()
+
+
 def test_two_button_shutter_unified_and_polarity(make_fake):
     """M3/M4: one TwoButtonShutter (the polarity-aware SMI subclass of nslsii's), and the
     per-valve actuation polarity is honored -- 'open' writes cmd_actuate_val to Cmd:Opn-Cmd."""
@@ -128,8 +139,9 @@ def test_two_button_shutter_unified_and_polarity(make_fake):
     v.open_cmd.sim_put(0)
     v.close_cmd.sim_put(0)
     st = v.set("Open")
-    assert int(v.open_cmd.get()) == 1     # pressed the open button...
-    assert int(v.close_cmd.get()) == 0    # ...not the close button
+    # the command put is driven from set(); poll (the retry callback runs on a timer)
+    assert _wait_until(lambda: int(v.open_cmd.get()) == 1)   # pressed the open button...
+    assert int(v.close_cmd.get()) == 0                       # ...not the close button
     v.status.sim_put("Open")              # hardware confirms -> the move finishes
     st.wait(timeout=5)
     assert st.success
@@ -140,7 +152,7 @@ def test_two_button_shutter_unified_and_polarity(make_fake):
     v0.status.sim_put("Not Open")
     v0.open_cmd.sim_put(7)
     st0 = v0.set("Open")
-    assert int(v0.open_cmd.get()) == 0    # wrote 0 (this valve's "actuate"), not 1
+    assert _wait_until(lambda: int(v0.open_cmd.get()) == 0)  # wrote 0 (this valve's "actuate")
     v0.status.sim_put("Open")
     st0.wait(timeout=5)
     assert st0.success

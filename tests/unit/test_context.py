@@ -55,3 +55,31 @@ def test_current_energy_never_raises_on_bad_source():
     _context.configure(energy_source=lambda: (_ for _ in ()).throw(RuntimeError("no PV")))
     # should swallow the error and return None, not raise
     assert _context.current_energy_eV() is None
+
+
+def test_sd_bec_db_injection_and_accessors():
+    assert _context.get_sd() is None and _context.get_bec() is None and _context.get_db() is None
+    sd, bec, db = object(), object(), object()
+    _context.configure(sd=sd, bec=bec, db=db)
+    assert _context.get_sd() is sd
+    assert _context.get_bec() is bec
+    assert _context.get_db() is db
+
+
+def test_baseline_register_noop_when_unconfigured():
+    # no sd injected -> returns False, never raises (keeps modules importable headless)
+    assert _context.baseline_register("anything") is False
+
+
+def test_baseline_register_accepts_args_and_iterable():
+    class _FakeSD:
+        def __init__(self):
+            self.baseline = []
+
+    sd = _FakeSD()
+    _context.configure(sd=sd)
+    # individual args
+    assert _context.baseline_register("a", "b") is True
+    # a single iterable (the form the instance modules use)
+    _context.baseline_register(["c", "d"])
+    assert sd.baseline == ["a", "b", "c", "d"]

@@ -10,7 +10,6 @@ saxs_bs = SAXSBeamStops("XF:12IDC-ES:2{BS:SAXS-Ax:", name="saxs_beamstop")
 waxs_bs = EpicsMotor("XF:12ID2C-ES{MCS:2-Ax:1}Mtr", name="waxs_beamstop")
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([saxs_bs])
+_context.baseline_register([saxs_bs])

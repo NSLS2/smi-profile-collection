@@ -11,7 +11,6 @@ xbpm3_pos = XBPM("XF:12IDB-BI:2{XBPM:3-Ax:", name="xbpm3_pos")
 xbpm3y = EpicsSignal("XF:12IDB-BI:2{EM:BPM3}PosY:MeanValue_RBV", name="xbpm3y")
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([xbpm1_pos, xbpm2_pos, xbpm3_pos])
+_context.baseline_register([xbpm1_pos, xbpm2_pos, xbpm3_pos])

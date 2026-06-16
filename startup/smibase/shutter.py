@@ -57,7 +57,6 @@ GV7 = chamber_pressure.waxs_saxs_valve
 
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([ph_shutter])
+_context.baseline_register([ph_shutter])

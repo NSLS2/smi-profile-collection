@@ -35,7 +35,10 @@ None of these import ``smibase``; they only read what was injected.  This keeps 
 classes import-clean and hardware-free at import time.
 """
 
-__all__ = ["configure", "get_md", "get_config", "current_energy_eV", "is_configured"]
+__all__ = [
+    "configure", "get_md", "get_config", "current_energy_eV", "is_configured",
+    "get_sd", "get_bec", "get_db", "baseline_register",
+]
 
 
 # Injected by the profile bootstrap (see smibase.base).  Left as ``None`` until configured so
@@ -43,9 +46,13 @@ __all__ = ["configure", "get_md", "get_config", "current_energy_eV", "is_configu
 _run_engine = None
 _config_dict = None
 _energy_source = None  # a zero-arg callable returning energy in eV, or an object with .energy.readback
+_sd = None             # SupplementalData (carries the baseline)
+_bec = None            # BestEffortCallback
+_db = None             # databroker / Broker
 
 
-def configure(*, run_engine=None, config_dict=None, energy_source=None):
+def configure(*, run_engine=None, config_dict=None, energy_source=None,
+              sd=None, bec=None, db=None):
     """Wire the real runtime objects into the seam (called once, early, by the profile).
 
     Parameters
@@ -59,19 +66,69 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None):
         Either a zero-arg callable returning the current energy in eV, or an object exposing
         ``.energy.readback`` (e.g. the ``energy`` pseudo-positioner); used by
         :func:`current_energy_eV`.
+    sd : SupplementalData, optional
+        The ``sd`` object whose ``.baseline`` the modules extend.  Stored so device/instance
+        modules can register baselines via :func:`baseline_register` instead of grabbing ``sd``
+        from ``get_ipython().user_ns``.
+    bec : BestEffortCallback, optional
+        The live ``bec`` (best-effort callback).
+    db : object, optional
+        The live databroker / ``Broker``.
     """
-    global _run_engine, _config_dict, _energy_source
+    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db
     if run_engine is not None:
         _run_engine = run_engine
     if config_dict is not None:
         _config_dict = config_dict
     if energy_source is not None:
         _energy_source = energy_source
+    if sd is not None:
+        _sd = sd
+    if bec is not None:
+        _bec = bec
+    if db is not None:
+        _db = db
 
 
 def is_configured():
     """True if the live profile has wired the seam (False under bare import / tests)."""
     return _run_engine is not None
+
+
+def get_sd():
+    """Return the injected ``sd`` (SupplementalData), or ``None`` if not configured."""
+    return _sd
+
+
+def get_bec():
+    """Return the injected ``bec``, or ``None`` if not configured."""
+    return _bec
+
+
+def get_db():
+    """Return the injected databroker, or ``None`` if not configured."""
+    return _db
+
+
+def baseline_register(*devices):
+    """Add ``devices`` to ``sd.baseline`` (the per-scan baseline), via the injected ``sd``.
+
+    Replaces the ``sd = get_ipython().user_ns['sd']; sd.baseline.extend([...])`` pattern in the
+    instance modules with dependency injection.  No-op (returns ``False``) if the seam is not
+    configured with an ``sd`` (e.g. under bare import / tests / a worker that opts out), so the
+    modules stay importable headless.  ``devices`` may be passed as individual args or a single
+    iterable.
+    """
+    if _sd is None:
+        return False
+    # accept baseline_register(a, b, c) or baseline_register([a, b, c])
+    if len(devices) == 1 and not hasattr(devices[0], "name"):
+        try:
+            devices = tuple(devices[0])
+        except TypeError:
+            pass
+    _sd.baseline.extend(list(devices))
+    return True
 
 
 def get_md():

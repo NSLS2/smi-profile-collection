@@ -47,7 +47,6 @@ pin_diode.current2.mean_value.kind = "hinted"
 
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([xbpm2, xbpm3,ls])
+_context.baseline_register([xbpm2, xbpm3,ls])

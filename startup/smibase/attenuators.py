@@ -1,9 +1,7 @@
 print(f"Loading {__file__}")
 
 from smiclasses.attenuators import Attenuator, make_attenuator_bank
-
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
 
 att1_1 = Attenuator("XF:12IDC-OP:2{Fltr:1-1}", name="att1_1")
@@ -42,5 +40,5 @@ Bank2 = make_attenuator_bank("Bank2", "XF:12IDC-OP:2{{Fltr:2-{}}}", range(1, 13)
 attenuators1 = Bank1("", name="attenuators1")
 attenuators2 = Bank2("", name="attenuators2")
 
-sd.baseline.extend([att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12])
-sd.baseline.extend([att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12])
+_context.baseline_register([att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12])
+_context.baseline_register([att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12])

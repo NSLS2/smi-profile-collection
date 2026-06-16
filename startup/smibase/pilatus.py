@@ -17,8 +17,7 @@ import telnetlib
 import paramiko
 import time
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
 def det_exposure_time(exp_t, meas_t=1, period_delay=0.001):
     """
@@ -164,7 +163,7 @@ def multi_count(detectors, *args, **kwargs):
     delay = detectors[0].cam.num_images.get() * detectors[0].cam.acquire_time.get() + 1
     yield from bp.count(detectors, *args, delay=delay, **kwargs)
 
-sd.baseline.extend([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,pil2M.beam_center_y_px])
+_context.baseline_register([pil2m_pos,waxs,pil2M.active_beamstop,pil2M.beam_center_x_px,pil2M.beam_center_y_px])
 
 
 # This needs to be remove because not used

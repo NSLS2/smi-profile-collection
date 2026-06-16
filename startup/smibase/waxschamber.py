@@ -23,7 +23,6 @@ chamber_pressure.maxs.kind = "hinted"
 
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([ chamber_pressure])
+_context.baseline_register([ chamber_pressure])

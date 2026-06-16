@@ -29,10 +29,7 @@ dcm_config = DCMInternals("", name="dcm_config")
 bragg.read_attrs = ["user_readback"]
 
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
-
-sd.baseline.extend([energy, dcm_config, ivugap, bragg])
+_smiclasses_context.baseline_register([energy, dcm_config, ivugap, bragg])
 
 
 

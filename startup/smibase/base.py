@@ -71,13 +71,18 @@ RE.subscribe(tiled_inserter.insert)
 # dict (mdsave) WITHOUT importing smibase.base at module load.  Must run before the smiclasses
 # device modules (pilatus, prosilica, ...) are imported by startup.py.  The energy source is
 # added later in smibase/energy.py once the `energy` positioner exists.
+#
+# Also inject sd/bec/db so the instance modules register baselines via
+# _context.baseline_register(...) instead of grabbing `sd` from get_ipython().user_ns (Phase 4).
 from smiclasses import _context as _smiclasses_context
-_smiclasses_context.configure(run_engine=RE, config_dict=mdsave)
+_sd = get_ipython().user_ns['sd']
+_smiclasses_context.configure(run_engine=RE, config_dict=mdsave, sd=_sd, bec=bec)
 
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
 tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
 
 db = Broker(tiled_reading_client)
+_smiclasses_context.configure(db=db)
 
 # set plot properties for 4k monitors
 plt.rcParams['figure.dpi']=200

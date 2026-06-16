@@ -18,7 +18,6 @@ for hp in [stage]:
 for pz in [piezo]:
     pz.configuration_attrs = pz.read_attrs
 
-from IPython import get_ipython
-sd = get_ipython().user_ns['sd']
+from smiclasses import _context
 
-sd.baseline.extend([stage,  piezo,])
+_context.baseline_register([stage,  piezo,])
