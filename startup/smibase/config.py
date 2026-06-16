@@ -12,6 +12,27 @@ from pathlib import Path
 
 
 def sample_id(user_name="SMI",sample_name='test'):
+    """DEPRECATED: set the global ``RE.md['sample_name']`` used to name data files.
+
+    Kept working for existing user scripts, but **deprecated**: mutating the global ``RE.md``
+    before a plan is a side effect that leaks the name into unrelated subsequent runs and is not
+    queryable per-run (Tenets 2/4).
+
+    Prefer setting the name **per run**:
+    * in a plan, pass it as run metadata -- e.g. ``bp.count(dets, md={'sample_name': name})`` or,
+      to tag every run a plan opens, wrap the plan with
+      ``smiclasses._plan_helpers.sample_name_decorator(name)`` (this is what the alignment plans
+      now use);
+    * with smi-plans, use ``acquire(name, ...)`` / ``fname(...)`` which template the filename
+      from *recorded* fields.
+    """
+    warn(
+        "sample_id() is deprecated: it mutates the global RE.md['sample_name'], which leaks "
+        "into later runs. Pass the name per-run via md={'sample_name': ...} (or "
+        "smiclasses._plan_helpers.sample_name_decorator), or use smi-plans acquire()/fname().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     sample_name = f'{user_name}_{sample_name}'.translate(
                 {ord(c): "_" for c in r"!@#$%^&*{}:/<>?\|`~+ =,"})

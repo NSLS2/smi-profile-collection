@@ -4,6 +4,7 @@ print(f"Loading {__file__}")
 
 import bluesky.plan_stubs as bps
 from epics import caput
+import warnings
 import numpy as np
 from lmfit import Model
 from scipy.special import erf
@@ -383,9 +384,22 @@ def purge_cryo():
     caput('XF:12ID-UT{Cryo:1-IV:20}Cmd:Cls-Cmd', 1)
 
 def get_scan_md(tender=False):
+    """DEPRECATED: build a filename suffix string from LIVE ``.position``/``.get()`` reads.
+
+    Kept working for existing user scripts, but **deprecated**: it bakes context (energy, WAXS
+    arc, SDD) into a string via direct hardware reads, so the value in the name is not
+    guaranteed to be the value that was actually recorded (Tenets 2/3).
+
+    Prefer a filename **templated from recorded fields**: include the relevant devices in your
+    ``trigger_and_read`` and let the file writer fill ``{energy_energy}`` / ``{waxs_arc}`` /
+    ``{xbpm2_sumX}`` tokens (smi-plans ``fname(...)`` builds these).
     """
-    Create a string with scan metadata
-    """
+    warnings.warn(
+        "get_scan_md() is deprecated: it formats live .position/.get() reads into the filename. "
+        "Use recorded-field {token} filenames (e.g. smi-plans fname()) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Metadata
     e = energy.position.energy / 1000
     #temp = str(np.round(float(temp_degC), 1)).zfill(5)
@@ -410,10 +424,16 @@ def get_scan_md(tender=False):
     return scan_md
 
 def get_more_md(tender=True, bpm=True):
-    """
-    Add XBPM2 readings into the scan metadata
-    """
+    """DEPRECATED: append XBPM2 reading to :func:`get_scan_md` (live ``.get()`` into a string).
 
+    See :func:`get_scan_md`; prefer recorded-field ``{xbpm2_sumX}`` tokens.
+    """
+    warnings.warn(
+        "get_more_md() is deprecated: it formats live reads into the filename. "
+        "Use recorded-field {token} filenames (e.g. smi-plans fname()) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     more_md = f'{get_scan_md(tender=tender)}'
 
     if bpm:
