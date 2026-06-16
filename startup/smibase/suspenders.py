@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 import os
 import bluesky.plans as bp

@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from ophyd import EpicsSignal
 from smiclasses.prosilica import StandardProsilicaV33, StandardProsilicaWithTIFFV33

@@ -1,5 +1,4 @@
 
-print(f"Loading {__file__}")
 
 from smiclasses.motors import MDriveMotor, SAXSBeamStop, DetMotor, ThorlabsMotor
 from ophyd import EpicsMotor

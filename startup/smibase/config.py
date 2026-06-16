@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from nslsii.sync_experiment import switch_redis_proposal
 from warnings import warn

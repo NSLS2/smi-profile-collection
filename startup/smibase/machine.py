@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 from smiclasses.machine import Ring
 from ophyd import EpicsSignalRO
 

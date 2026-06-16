@@ -1,5 +1,4 @@
 
-print(f"Loading {__file__}")
 
 
 import numpy as np

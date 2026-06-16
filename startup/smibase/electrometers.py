@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.electrometers import XBPM, new_LakeShore, Keithly2450
 from ophyd import EpicsSignal

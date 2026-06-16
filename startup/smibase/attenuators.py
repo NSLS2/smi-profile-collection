@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.attenuators import Attenuator, make_attenuator_bank
 from smiclasses import _context

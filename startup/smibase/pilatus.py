@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 import warnings
 from time import ctime

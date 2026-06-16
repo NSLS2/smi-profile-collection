@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.slits import SLIT, SLTH, SLTV, APER
 

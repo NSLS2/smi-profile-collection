@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.shutter import TwoButtonShutter, SMIFastShutter
 from ophyd import EpicsMotor

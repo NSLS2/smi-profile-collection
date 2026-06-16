@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 
 from smiclasses.waxschamber import Sample_Chamber

@@ -1,5 +1,4 @@
 
-print(f"Loading {__file__}")
 
 from smiclasses.bladecoater import bladecoater_smaract, syringe_pump
 

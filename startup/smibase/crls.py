@@ -1,5 +1,4 @@
 
-print(f"Loading {__file__}")
 
 from smiclasses.crls import CRL
 

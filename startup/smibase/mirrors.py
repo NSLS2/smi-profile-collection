@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.mirrors import MIR
 from smiclasses.bimorph import VFM_voltage, HFM_voltage

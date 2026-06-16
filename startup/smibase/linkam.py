@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.linkam import Linkam, LinkamTensile, LinkamThermal
 

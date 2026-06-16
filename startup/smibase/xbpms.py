@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from ophyd import EpicsSignal
 from smiclasses.xbpms import XBPM

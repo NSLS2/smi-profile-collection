@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.energy import Energy, DCMInternals
 from ophyd import EpicsMotor

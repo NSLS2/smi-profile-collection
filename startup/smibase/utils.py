@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-print(f"Loading {__file__}")
 
 import bluesky.plan_stubs as bps
 from epics import caput

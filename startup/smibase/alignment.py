@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 import matplotlib.pyplot as plt
 import bluesky.plan_stubs as bps

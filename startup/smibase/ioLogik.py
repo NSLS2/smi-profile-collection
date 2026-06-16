@@ -1,5 +1,4 @@
 
-print(f"Loading {__file__}")
 
 from smiclasses.ioLogik import ioLogik1240, ioLogik1241, Diag_Module
 

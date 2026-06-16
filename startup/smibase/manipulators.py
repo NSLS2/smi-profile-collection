@@ -1,4 +1,3 @@
-print(f"Loading {__file__}")
 
 from smiclasses.manipulators import BDMStage, SMARACT, STG_pseudo
 
