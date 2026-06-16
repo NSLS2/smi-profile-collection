@@ -1,13 +1,24 @@
 # Testing the SMI profile-collection
 
-The test suite has **three tiers**. They are selected by pytest markers and by
+The test suite has **four tiers**. They are selected by pytest markers and by
 the directory a test lives in (tests are auto-tagged from their directory):
 
 | Tier | Directory | Marker | Touches | Default |
 |------|-----------|--------|---------|---------|
 | Pure code | `tests/unit/` | `unit` | nothing (no devices built) | always run |
 | Simulated | `tests/sim/` | `sim` | **fake**, non-broadcasting `ophyd.sim` devices | always run |
+| Integration | `tests/integration/` | `integration` | a **local, loopback-only** fake caproto IOC (motors that move at finite speed) | **off** unless `--run-iocs` |
 | Hardware | `tests/hardware/` | `hardware` | **real** EPICS PVs | **off** unless `--run-hardware` |
+
+The **integration** tier exists because `ophyd.sim` fakes are instantaneous (no
+readback ramp, no `forward()`-able motor positions), so they cannot exercise
+motion-timing behavior. It spins up `tests/iocs/sim_energy_ioc.py` -- a caproto
+IOC serving simulated DCM + undulator motors at configurable speeds -- and drives
+the **real** `Energy` / `InsertionDevice` logic against it to verify the energy
+move choreography: feedback disabled-during / enabled-after a move (H1), the IVU
+brake disengaged before the gap moves (H2), and `small_move` keeping bragg + IVU
+in lock-step. The IOC is loopback-only on a sandbox prefix (`SMIsim:`) and never
+touches the beamline.
 
 ## Running
 
@@ -15,6 +26,7 @@ the directory a test lives in (tests are auto-tagged from their directory):
 pixi run -e test test            # unit + sim (the safe default; no hardware)
 pixi run -e test test-unit       # pure-code tier only
 pixi run -e test test-sim        # fake-device tier only
+pixi run -e test test-iocs       # INTEGRATION tier (local fake IOC; safe anywhere)
 pixi run -e test test-hardware   # HARDWARE tier -- ONLY on the beamline
 ```
 
@@ -24,6 +36,7 @@ Equivalent raw pytest:
 pytest -m "not hardware"         # safe default
 pytest -m unit
 pytest -m sim
+pytest --run-iocs -m integration
 pytest --run-hardware -m hardware
 ```
 
