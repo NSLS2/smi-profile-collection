@@ -14,8 +14,9 @@ from .energy import energy
 from .pilatus import pil2m_pos, waxs
 from .electrometers import xbpm2
 
-from IPython import get_ipython
-db = get_ipython().user_ns['db']
+from IPython import get_ipython  # still used by hardware_check() for the live user namespace
+from smiclasses import _context
+db = _context.get_db()
 
 
 # def ps_new(der=False, plot=True):

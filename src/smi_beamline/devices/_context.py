@@ -37,7 +37,7 @@ classes import-clean and hardware-free at import time.
 
 __all__ = [
     "configure", "get_md", "get_config", "current_energy_eV", "is_configured",
-    "get_sd", "get_bec", "get_db", "baseline_register",
+    "get_re", "get_sd", "get_bec", "get_db", "baseline_register",
 ]
 
 
@@ -98,6 +98,11 @@ def is_configured():
 def get_sd():
     """Return the injected ``sd`` (SupplementalData), or ``None`` if not configured."""
     return _sd
+
+
+def get_re():
+    """Return the injected RunEngine (``RE``), or ``None`` if not configured."""
+    return _run_engine
 
 
 def get_bec():

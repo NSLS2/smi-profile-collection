@@ -2,7 +2,6 @@
 print(f"Loading {__file__}")
 
 
-from IPython import get_ipython
 import numpy as np
 import pandas as pd
 import os

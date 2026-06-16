@@ -9,8 +9,8 @@ from bluesky.suspenders import (
     SuspendCeil,
 )
 from ophyd import EpicsMotor, EpicsSignal, Device, Component as Cpt
-from IPython import get_ipython
-RE = get_ipython().user_ns['RE']
+from smiclasses import _context
+RE = _context.get_re()
 from .machine import ring, smi_shutter_enable
 from .electrometers import ls, xbpm2
 

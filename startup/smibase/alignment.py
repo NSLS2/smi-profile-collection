@@ -8,11 +8,11 @@ from smibase.manipulators import piezo, stage
 from .pilatus import pil2M
 from .pilatus import det_exposure_time
 from .utils import ps
-from IPython import get_ipython
+from smiclasses import _context
 from .beam import SMI as smi
 
 # Get the bluesky callback
-bec = get_ipython().user_ns['bec']
+bec = _context.get_bec()
 
 from bluesky.callbacks.mpl_plotting import QtAwareCallback
 
