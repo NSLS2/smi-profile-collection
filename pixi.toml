@@ -50,9 +50,19 @@ bluesky-httpserver = "*"
 # This section needs some development work to understand the best way to
 # thread the required configuration through both the task and files checked into
 # the profile.  These will interact with the ansible roles for pushing out the
-# systemd units
-qs-backend = "start-re-manager --profile-dir=."
+# systemd units.
+#
+# NOTE: this bluesky-queueserver (0.0.23) uses --startup-dir (not the old
+# --profile-dir); the profile entry point is startup/startup.py.  qs-backend
+# additionally needs a queue/state Redis on localhost:6379 (separate from the
+# metadata Redis) and a user_group_permissions.yaml before clients can submit
+# plans -- see smi-plans/docs/STARTUP_RESTRUCTURE_PLAN.md (§7.3).
+qs-backend = "start-re-manager --startup-dir=startup --ignore-invalid-plans=ON"
 qs-server = "uvicorn --host localhost --port 60610 bluesky_httpserver.server:app"
+# Headless QS-readiness smoke test: loads the profile exactly as the worker does
+# (no IPython) and writes the plan/device list. Good for catching worker-load or
+# plan-signature problems without standing up the full manager + Redis.
+qs-list = "qserver-list-plans-devices --startup-dir=startup --file-dir=startup --ignore-invalid-plans=ON"
 
 
 [feature.terminal.dependencies]

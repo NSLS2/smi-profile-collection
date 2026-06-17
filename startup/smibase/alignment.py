@@ -695,7 +695,7 @@ def fast_align(angle=0.1):
     print('y position is {:.3f} and theta position is {:.3f}'.format(piezo.y.position, piezo.th.position))
 
 
-def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=40):
+def fast_align_procedure(angle=0.1, detector=None, intensity_threshold=40):
     '''
     Fast alignment procedure for GISAXS. This involves first taking a direct beam data to know the db intensity.
     Then, the sample height and incident angle are scanned with the direct beam roi.
@@ -708,12 +708,16 @@ def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=40):
     ----------
     angle : float
         The targetted incident angle for the alignement
-    detector : detector object
-        The beamline detector to trigger to measure intensity (usually pil2M)
+    detector : detector object, optional
+        The beamline detector to trigger to measure intensity (defaults to ``pil2M``).
     intensity_threshold : float
         The minimum intensity in the reflected beam roi to consider that the reflected beam is found.
 
     '''   
+    # Resolve the default device inside the plan (a device object as a parameter default is not
+    # queueserver-serializable).
+    if detector is None:
+        detector = pil2M
 
     #purposely putting a non realistic value for the incident angle 
     rel_th = 10
@@ -816,7 +820,7 @@ def fast_align_procedure(angle=0.1, detector=pil2M, intensity_threshold=40):
         return False
 
 
-def bisection_search_plan(motor=piezo.y, step_size=1.0, min_step=0.05, intensity=None, target=0.5, 
+def bisection_search_plan(motor=None, step_size=1.0, min_step=0.05, intensity=None, target=0.5, 
                 detector=None, polarity=1, detector_suffix='_stats1_total'):
     '''
     Bissection search method with the idea to move a motor in one direction and searching for a target value. 
@@ -825,8 +829,8 @@ def bisection_search_plan(motor=piezo.y, step_size=1.0, min_step=0.05, intensity
     
     Parameters
     ----------
-    motor : bluesky motor
-        The motor to move
+    motor : bluesky motor, optional
+        The motor to move (defaults to ``piezo.y``).
     step_size : float
         The initial step size when moving the motor
     min_step : float
@@ -841,6 +845,11 @@ def bisection_search_plan(motor=piezo.y, step_size=1.0, min_step=0.05, intensity
     polarity : +1 or -1
         Positive motion assumes, e.g. a step-height 'up' (as the axis goes more positive)
     '''   
+    # Resolve device defaults inside the plan (device objects as parameter defaults are not
+    # queueserver-serializable).
+    if motor is None:
+        motor = piezo.y
+
     if detector is None:
         detector = pil2M
     
