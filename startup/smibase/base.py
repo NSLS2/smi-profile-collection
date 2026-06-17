@@ -34,6 +34,7 @@ samplestore = RedisJSONDict(sampleclient, 'swaxssamples')
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
+tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 class TiledInserter:
     def insert(self, name, doc):
@@ -87,6 +88,7 @@ _smiclasses_context.configure(run_engine=RE, config_dict=mdsave, sd=_sd, bec=bec
 
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
 tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
+tiled_reading_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 db = Broker(tiled_reading_client)
 _smiclasses_context.configure(db=db)
