@@ -90,7 +90,7 @@ tiled_inserter = TiledInserter()
 # (the live user_ns in the terminal, a plain dict in the worker) and disable the IPython/GUI-only
 # extras (magics, matplotlib hooks) when running headless in the worker.
 nslsii.configure_base(_user_ns,
-               broker_name='smi',
+               broker_name='temp',
                bec_derivative=True, 
                publish_documents_with_kafka=True,
                magics=not IS_QS_WORKER,

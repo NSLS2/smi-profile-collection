@@ -156,7 +156,7 @@ pil2M.beam_center_y_px.kind='config'
 
 
 waxs = pil900KW.motors # for backwards compatibility
-waxs.kind='config'
+waxs.kind='normal'
 
 def multi_count(detectors, *args, **kwargs):
     delay = detectors[0].cam.num_images.get() * detectors[0].cam.acquire_time.get() + 1
