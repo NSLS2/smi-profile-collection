@@ -9,7 +9,8 @@ from .pilatus import pil2m_pos
 from .beamstop import saxs_bs
 from smibase.base import RE
 from smibase.attenuators import (att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12,
-                                 att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12)
+                                 att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12,
+                                 attenuation)
 from smibase.energy import energy
 from smibase.pilatus import waxs, pil2M, pil900KW
 from smibase.beamstop import saxs_bs
@@ -362,22 +363,19 @@ class SMI_Beamline(Beamline): # used in alignment
             raise ValueError("Unknown geometry fo alignement mode")
 
     def attenuators_state(self):
-        self.att_state = {}
-        att_ophyd = [ att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12, 
-                      att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12]
+        """Summarize the inserted attenuators: per-foil material/thickness AND the
+        approximate numerical attenuation factor at the current energy.
 
-        att_material = ["Cu_68um", "Cu_68um", "Cu_68um", "Cu_68um", "Sn_60um", "Sn_60um", "Sn_60um", "Sn_60um", "Sn_30um", 
-                        "Sn_30um", "Sn_30um", "Sn_30um", "Mo_20um", "Mo_20um", "Mo_20um", "Mo_20um", "Al_102um", "Al_102um", 
-                        "Al_102um", "Al_102um", "Al_9um", "Al_9um", "Al_9um", "Al_9um"]
-
-        att_thickness = [ "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", "1x", "2x", "4x", "8x", 
-                          "1x", "2x", "4x", "8x", "1x", "2x", "4x", "6x"]
-
-        for att, material, thickness in zip(att_ophyd, att_material, att_thickness):
-            if att.status.get() == "Open":
-                self.att_state = {
-                    att.status.name: {"material": material, "thickness": thickness}
-                }
+        Delegates to the ``attenuation`` device (which uses the CXRO transmission curves and
+        also mirrors this state into ``RE.md['beamline_attenuators']`` itself).  ``self.att_state``
+        is the same dict the device writes, kept here for the legacy ``update_md`` path.
+        """
+        try:
+            self.att_state = attenuation.state_md()
+        except Exception:
+            self.att_state = {"foils": {}, "attenuation_factor": None,
+                              "transmission": None, "energy_eV": None,
+                              "description": "unavailable"}
 
     def crl_state(self):
         for crl_le in [

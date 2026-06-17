@@ -1,5 +1,5 @@
 
-from smi_beamline.devices.attenuators import Attenuator, make_attenuator_bank
+from smi_beamline.devices.attenuators import Attenuator, make_attenuator_bank, AttenuatorSet
 from smi_beamline.devices import _context
 
 
@@ -39,5 +39,17 @@ Bank2 = make_attenuator_bank("Bank2", "XF:12IDC-OP:2{{Fltr:2-{}}}", range(1, 13)
 attenuators1 = Bank1("", name="attenuators1")
 attenuators2 = Bank2("", name="attenuators2")
 
+# Energy-aware attenuation factor for the whole 24-foil set.  Reports an approximate
+# attenuation factor (from CXRO transmission curves) + a text description of which foils
+# are in, evaluated at the current beamline energy; and lets a user/plan REQUEST a factor:
+#   yield from bps.mv(attenuation, 100)          # auto-pick fewest foils ~100x at current E
+#   yield from bps.mv(attenuation, 1)            # retract all (no attenuation)
+#   attenuation.set_for_energy(100, 12000)       # pre-stage 100x for a PLANNED 12 keV
+# It is in the baseline (recorded at scan start/end) AND can be added to the detector list
+# to be read at every point when energy or attenuation changes during a scan.
+attenuation = AttenuatorSet("", name="attenuation", banks=[attenuators1, attenuators2],
+                            bank_prefixes=["1", "2"])
+
 _context.baseline_register([att1_1, att1_2, att1_3, att1_4, att1_5, att1_6, att1_7, att1_8, att1_9, att1_10, att1_11, att1_12])
 _context.baseline_register([att2_1, att2_2, att2_3, att2_4, att2_5, att2_6, att2_7, att2_8, att2_9, att2_10, att2_11, att2_12])
+_context.baseline_register([attenuation])

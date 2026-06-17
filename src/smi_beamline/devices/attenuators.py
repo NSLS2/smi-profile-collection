@@ -15,6 +15,16 @@ from ophyd import Component as Cpt
 import logging
 import threading
 
+from . import _context
+from . import _config
+from . import attenuator_data as _ad
+
+import math as _math
+_math_isfinite = _math.isfinite
+#: largest attenuation factor reported (beyond this the beam is effectively fully absorbed
+#: and the reading is non-physical for a measurement); keeps documents finite/serializable.
+_ad_MAX_FACTOR = 1e300
+
 logger = logging.getLogger("bluesky")
 
 
@@ -345,6 +355,316 @@ def make_attenuator_bank(class_name, prefix_fmt, foil_indices):
     body = {"f{}".format(i): Cpt(Attenuator, prefix_fmt.format(i), add_prefix=("suffix",))
             for i in foil_indices}
     return type(class_name, (Attenuators,), body)
+
+
+class AttenuatorSet(Device):
+    """Energy-aware attenuation factor for the whole 24-foil filter set.
+
+    This is the user-/plan-facing handle on attenuation.  It does three things:
+
+    1. **Reports** an approximate attenuation factor (and the equivalent transmission)
+       for whatever foils are currently inserted, evaluated at the **current beamline
+       energy** -- using the CXRO transmission curves embedded in
+       :mod:`smi_beamline.devices.attenuator_data`.  It also reports a plain-text
+       ``description`` naming every inserted foil (e.g. ``att1_3``), its material and
+       thickness.  These are recorded as ``configuration``-/``hinted``-kind signals, so
+       the factor lands in **baseline** (start & end of every scan) and -- because this
+       is a readable ``Device`` -- can also be added to the detector list to be read at
+       **every point** when energy or attenuation changes during a scan.
+
+    2. **Sets** a requested attenuation factor: ``yield from bps.mv(attenuation, 100)``
+       picks the foil combination whose factor is closest to 100 at the current (or a
+       planned) energy, using as **few foils as possible** (more foils are harder to
+       normalize and scatter more), inserts them via the settled, all-or-nothing bank
+       moves, and records the **actual achieved** factor (never the request).  If it
+       cannot get within tolerance with ``max_foils`` foils it still applies the best
+       combination, logs a warning, and the recorded factor reflects what was applied.
+
+    3. Lets a plan **pre-compute** for a *planned* energy (before moving the mono) via
+       :meth:`set_for_energy`, so attenuation can be staged for the energy a scan is
+       about to use.
+
+    Because attenuation depends on energy, the reported factor is only meaningful
+    alongside the energy at which it was computed; the energy used is recorded in
+    ``energy_eV`` so the baseline/primary reading is self-describing.
+
+    Parameters
+    ----------
+    banks : sequence of :class:`Attenuators`
+        The aggregate foil banks (``attenuators1``, ``attenuators2``).  Used both to read
+        the currently-inserted foils and to drive new combinations.
+    bank_prefixes : sequence of str, optional
+        The bank label of each entry in ``banks`` ("1", "2"), used to translate between
+        global foil labels ("2_5") and a bank's child foils ("f5").  Defaults to
+        ("1", "2", ...).
+    """
+
+    # --- reported (computed) values -------------------------------------------
+    #: attenuation factor 1/T (>= 1) at ``energy_eV`` for the inserted foils.  hinted so
+    #: it shows up in the live table / baseline.
+    attenuation_factor = Cpt(Signal, value=1.0, kind="hinted")
+    #: transmission 0-1 (== 1 / attenuation_factor).
+    transmission = Cpt(Signal, value=1.0, kind="normal")
+    #: photon energy (eV) at which the factor/transmission were computed.
+    energy_eV = Cpt(Signal, value=0.0, kind="normal")
+    #: comma-separated text naming each inserted foil + material + thickness.
+    description = Cpt(Signal, value="none", kind="normal")
+    #: list of inserted foil labels (e.g. ['1_3', '2_5']).
+    inserted = Cpt(Signal, value=[], kind="normal")
+    #: the most recently *requested* factor (0 -> never set via this device).
+    requested_factor = Cpt(Signal, value=0.0, kind="config")
+    #: True if the achieved factor was within ``tolerance`` of the last request.
+    within_tolerance = Cpt(Signal, value=True, kind="config")
+
+    # --- selection policy (config; recorded with every run) -------------------
+    #: hard cap on how many foils a requested factor may use (fewer = less scatter).
+    max_foils = Cpt(Signal, value=_config.load("attenuator_max_foils"), kind="config")
+    #: relative tolerance on the requested factor before a warning is emitted.
+    tolerance = Cpt(Signal, value=_config.load("attenuator_tolerance"), kind="config")
+    #: "closest" (match either side) or "atleast" (never less attenuation than asked).
+    select_mode = Cpt(Signal, value=_config.load("attenuator_select_mode"), kind="config")
+
+    #: the ``RE.md`` key under which the current attenuation state is mirrored, so it lands
+    #: in the **start document** of the next run (bluesky snapshots ``RE.md`` at open_run).
+    #: This complements the baseline registration (which records the device's signals at
+    #: start & end of every run); the start-doc copy is refreshed whenever attenuation is
+    #: set/changed/read so a run started after a change carries the up-to-date value.
+    md_key = "beamline_attenuators"
+
+    def __init__(self, *args, banks, bank_prefixes=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._banks = list(banks)
+        if bank_prefixes is None:
+            bank_prefixes = [str(i + 1) for i in range(len(self._banks))]
+        self._bank_prefixes = list(bank_prefixes)
+        if len(self._bank_prefixes) != len(self._banks):
+            raise ValueError("banks and bank_prefixes must be the same length")
+        # map global foil label ("2_5") -> (bank object, child attr "f5")
+        self._label_to_bank = {}
+        for bank, pfx in zip(self._banks, self._bank_prefixes):
+            for name in bank.component_names:
+                child = getattr(bank, name)
+                if isinstance(child, Attenuator) and name.startswith("f"):
+                    self._label_to_bank["{}_{}".format(pfx, name[1:])] = (bank, name)
+        self.read_attrs = ["attenuation_factor", "transmission", "energy_eV",
+                           "description", "inserted"]
+
+    # ----------------------------------------------------------------- helpers
+    def _current_energy(self, energy_eV=None):
+        """Resolve the energy (eV) to evaluate at: explicit arg, else live beamline."""
+        if energy_eV is not None:
+            return float(energy_eV)
+        e = _context.current_energy_eV()
+        if e is None:
+            # off-beamline / energy source unavailable: fall back to last value, else mid-range
+            e = self.energy_eV.get() or (
+                0.5 * (_ad.ENERGY_MIN_EV + _ad.ENERGY_MAX_EV))
+        return float(e)
+
+    def _read_inserted_labels(self):
+        """Return the sorted global labels of foils currently reading 'Open'."""
+        labels = []
+        for bank, pfx in zip(self._banks, self._bank_prefixes):
+            for name in bank.inserted_foils():        # child attrs like 'f5'
+                labels.append("{}_{}".format(pfx, name[1:]))
+        return tuple(sorted(labels, key=_ad._foil_sort_key))
+
+    def compute(self, labels=None, energy_eV=None):
+        """Compute (and store) factor/transmission/description for ``labels`` at energy.
+
+        With ``labels=None`` the *currently inserted* foils are used.  Returns a dict of
+        the computed values; also writes them into the component Signals so a subsequent
+        ``read()`` / baseline reflects them.
+        """
+        energy = self._current_energy(energy_eV)
+        if labels is None:
+            labels = self._read_inserted_labels()
+        labels = tuple(sorted(labels, key=_ad._foil_sort_key))
+
+        factor = _ad.attenuation_factor(labels, energy)
+        trans = _ad.transmission(labels, energy)
+        desc = self._describe(labels)
+
+        # Guard against non-finite values reaching the document stream when the beam is
+        # essentially fully absorbed (transmission underflows): report a large-but-finite
+        # factor instead of inf.  Such a reading is non-physical for a real measurement
+        # anyway; the description still names the (very thick) foils responsible.
+        if not _math_isfinite(factor):
+            factor = _ad_MAX_FACTOR
+        if trans <= 0.0:
+            trans = 1.0 / _ad_MAX_FACTOR
+
+        self.energy_eV.put(energy)
+        self.attenuation_factor.put(factor)
+        self.transmission.put(trans)
+        self.description.put(desc)
+        self.inserted.put(list(labels))
+
+        state = {"attenuation_factor": factor, "transmission": trans,
+                 "energy_eV": energy, "description": desc, "inserted": list(labels)}
+        # Mirror into RE.md so a run started after this change carries the up-to-date value
+        # in its START document (bluesky snapshots RE.md at open_run).  Never let a metadata
+        # write break a compute() that runs mid-scan.
+        try:
+            self._update_run_md(state, labels)
+        except Exception:
+            logger.exception("%s: failed to mirror attenuation state into RE.md", self.name)
+        return state
+
+    def state_md(self, labels=None, energy_eV=None):
+        """Return the attenuation-state dict that gets written to ``RE.md[md_key]``.
+
+        Same shape used in the start document: per-foil ``{att1_3: {material, thickness}}``
+        plus the overall ``attenuation_factor`` / ``transmission`` / ``energy_eV`` /
+        ``description``.  Computes from the live foils/energy if ``labels`` is None.
+        """
+        info = self.compute(labels=labels, energy_eV=energy_eV)
+        return self._build_md(info, tuple(info["inserted"]))
+
+    @staticmethod
+    def _build_md(state, labels):
+        """Build the RE.md attenuation dict (per-foil materials + overall factor) from a
+        computed ``state`` dict and the inserted ``labels``."""
+        foils = {}
+        for label in labels:
+            base, mult = _ad.FOIL_LAYOUT[label]
+            base_info = _ad.BASE_FOILS[base]
+            foils["att{}".format(label)] = {
+                "material": "{}_{:g}um".format(base_info["formula"], base_info["thickness_um"]),
+                "thickness": "{}x".format(mult),
+            }
+        return {
+            "foils": foils,
+            "attenuation_factor": state.get("attenuation_factor"),
+            "transmission": state.get("transmission"),
+            "energy_eV": state.get("energy_eV"),
+            "description": state.get("description"),
+        }
+
+    def _update_run_md(self, state, labels):
+        """Write the current attenuation state into ``RE.md[md_key]`` (via the context seam).
+
+        No-op off the beamline (``get_md()`` returns a throwaway dict).  Assigns the WHOLE
+        key (not a nested mutation) so a Redis-backed ``RE.md`` persists the change.
+        """
+        md = _context.get_md()
+        if md is None:
+            return
+        md[self.md_key] = self._build_md(state, labels)
+
+    @staticmethod
+    def _describe(labels):
+        """Plain-text description naming each inserted foil, material and thickness."""
+        if not labels:
+            return "none (no attenuation)"
+        return "; ".join(_ad.foil_description(l) for l in labels)
+
+    def describe_factor(self, target_factor, energy_eV=None):
+        """Preview (without moving anything) the foils that would be selected.
+
+        Returns ``(labels, achieved_factor, within_tol, energy_eV)``.  Useful from a plan
+        to decide on attenuation before committing the move.
+        """
+        energy = self._current_energy(energy_eV)
+        labels, factor, ok = _ad.select_foils(
+            float(target_factor), energy,
+            candidates=list(self._label_to_bank.keys()),
+            max_foils=int(self.max_foils.get()),
+            tolerance=float(self.tolerance.get()),
+            mode=str(self.select_mode.get()),
+        )
+        return labels, factor, ok, energy
+
+    # --------------------------------------------------------------- readable
+    def trigger(self):
+        """Recompute from the live foil states + energy (so per-point reads are fresh)."""
+        self.compute()
+        st = DeviceStatus(self)
+        st.set_finished()
+        return st
+
+    def read(self):
+        # make sure the computed values reflect the present state at read time
+        self.compute()
+        return super().read()
+
+    # ------------------------------------------------------------------- set
+    def set(self, target_factor, energy_eV=None):
+        """Insert the foil combination giving ~``target_factor`` and record what was applied.
+
+        ``target_factor`` is the desired attenuation factor (1/T).  ``<= 1`` retracts all
+        foils (no attenuation).  Optionally evaluate at a *planned* ``energy_eV`` instead
+        of the current energy (useful to pre-stage attenuation for an energy a scan is
+        about to move to).  Returns a Status that finishes when all foils confirm (it
+        inherits the banks' settled, all-or-nothing, safe-fail behavior).
+        """
+        target_factor = float(target_factor)
+        energy = self._current_energy(energy_eV)
+        self.requested_factor.put(target_factor)
+
+        labels, predicted, ok = _ad.select_foils(
+            target_factor, energy,
+            candidates=list(self._label_to_bank.keys()),
+            max_foils=int(self.max_foils.get()),
+            tolerance=float(self.tolerance.get()),
+            mode=str(self.select_mode.get()),
+        )
+        self.within_tolerance.put(bool(ok))
+
+        if not ok:
+            logger.warning(
+                "%s: requested attenuation factor %.4g at %.0f eV could not be matched "
+                "within %.0f%% using <=%d foils; applying closest = %.4g (%+.1f%%) with "
+                "foils %s.  The recorded factor reflects what was applied.",
+                self.name, target_factor, energy, 100 * float(self.tolerance.get()),
+                int(self.max_foils.get()), predicted,
+                (predicted / target_factor - 1.0) * 100.0 if target_factor else float("nan"),
+                ["att" + l for l in labels])
+        else:
+            logger.info(
+                "%s: attenuation factor %.4g at %.0f eV -> %d foil(s) %s (achieved ~%.4g, "
+                "%+.1f%%).", self.name, target_factor, energy, len(labels),
+                ["att" + l for l in labels], predicted,
+                (predicted / target_factor - 1.0) * 100.0 if target_factor else 0.0)
+
+        # Drive each bank to exactly the requested subset (insert chosen, retract rest).
+        statuses = []
+        for bank, pfx in zip(self._banks, self._bank_prefixes):
+            want = ["f{}".format(l.split("_", 1)[1])
+                    for l in labels if l.split("_", 1)[0] == pfx]
+            statuses.append(bank.set(want))
+
+        combined = statuses[0]
+        for s in statuses[1:]:
+            combined = combined & s
+
+        # Return a wrapper Status that finishes only AFTER the reported values have been
+        # refreshed from the (now actual) foil state -- so a caller that waits on the move
+        # is guaranteed to see the updated factor/description (no callback-vs-wait race).
+        wrapper = DeviceStatus(self)
+
+        def _on_done(*a, **k):
+            try:
+                self.compute(labels=labels, energy_eV=energy)
+            except Exception:
+                logger.exception("%s: failed to refresh reported factor after move",
+                                 self.name)
+            exc = None
+            try:
+                exc = combined.exception()
+            except Exception:
+                pass
+            if exc is not None:
+                wrapper.set_exception(exc)
+            else:
+                wrapper.set_finished()
+
+        combined.add_callback(_on_done)
+        return wrapper
+
+    def set_for_energy(self, target_factor, energy_eV):
+        """Convenience: :meth:`set` evaluated for a specific *planned* energy (eV)."""
+        return self.set(target_factor, energy_eV=energy_eV)
 
 
 # Uncomment and complete the following class if needed
