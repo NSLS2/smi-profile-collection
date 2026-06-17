@@ -491,7 +491,10 @@ def hardware_check(devices=None, *, timeout=5.0, read=True, verbose=True):
     """
     import time as _time
 
-    ns = get_ipython().user_ns
+    # Look up devices by name in the live namespace.  This is a terminal diagnostic; fall back to
+    # this module's globals if there is no IPython shell (e.g. called from the queueserver worker).
+    _ip = get_ipython()
+    ns = _ip.user_ns if _ip is not None else globals()
     names = list(devices) if devices is not None else list(HARDWARE_CHECK_DEVICES)
 
     results = {}

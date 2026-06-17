@@ -10,6 +10,12 @@ from smi_beamline.devices import _context
 RE = _context.get_re()
 RE.md["tiled_access_tags"] = [RE.md['data_session']]
 
+try:
+    from bluesky_queueserver import is_re_worker_active
+    _IS_QS_WORKER = bool(is_re_worker_active())
+except Exception:
+    _IS_QS_WORKER = False
+
 
 def patch_descriptor(doc):
     # This was labeled "<f8" but it is actually "<i4".
@@ -50,5 +56,8 @@ tw = BufferingWrapper(tw)
 
 RE.subscribe(tw)
 
-print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
-tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
+# Second Tiled reading client (interactive Duo auth via from_uri without an api_key).  It is
+# currently unused, and the interactive auth would hang a headless worker -- skip it there.
+if not _IS_QS_WORKER:
+    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
+    tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
