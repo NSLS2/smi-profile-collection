@@ -41,13 +41,13 @@ DEVICE_MODULES = [
     ("pilatus",        "smibase.pilatus"),
     ("prosilica",      "smibase.prosilica"),
     ("beam modes",     "smibase.beam"),
-    ("alignment",      "smibase.alignment"),
-    ("config",         "smibase.config"),
+    ("alignment",      "smi_beamline.plans.alignment"),
+    ("config",         "smi_beamline.plans.config"),
     ("blade coater",   "smibase.bladecoater"),
-    ("humidity cell",  "smibase.humidity_cell"),
+    ("humidity cell",  "smi_beamline.plans.humidity_cell"),
     ("linkam",         "smibase.linkam"),
     ("suspenders",     "smibase.suspenders"),
-    ("utils",          "smibase.utils"),
+    ("utils",          "smi_beamline.plans.utils"),
 ]
 
 

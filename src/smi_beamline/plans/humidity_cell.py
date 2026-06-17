@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from .ioLogik import moxa_in, moxa_out
+from smibase.ioLogik import moxa_in, moxa_out
 
 
 def readHumidity(temperature=25, voltage_supply=5, verbosity=3):

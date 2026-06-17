@@ -4,11 +4,11 @@ import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
 import bluesky.plans as bp
 from smibase.manipulators import piezo, stage
-from .pilatus import pil2M
-from .pilatus import det_exposure_time
+from smibase.pilatus import pil2M
+from smibase.pilatus import det_exposure_time
 from .utils import ps
 from smi_beamline.devices import _context
-from .beam import SMI as smi
+from smibase.beam import SMI as smi
 
 # Get the bluesky callback
 bec = _context.get_bec()
@@ -921,7 +921,7 @@ def bisection_search_plan(motor=None, step_size=1.0, min_step=0.05, intensity=No
     yield from inner_search()
 
 
-from .manipulators import bdm
+from smibase.manipulators import bdm
 
 
 @sample_name_decorator("alignment_bdm")
