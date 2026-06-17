@@ -390,13 +390,24 @@ def get_scan_md(tender=False):
     arc, SDD) into a string via direct hardware reads, so the value in the name is not
     guaranteed to be the value that was actually recorded (Tenets 2/3).
 
-    Prefer a filename **templated from recorded fields**: include the relevant devices in your
-    ``trigger_and_read`` and let the file writer fill ``{energy_energy}`` / ``{waxs_arc}`` /
-    ``{xbpm2_sumX}`` tokens (smi-plans ``fname(...)`` builds these).
+    Replacement
+    -----------
+    This is now done automatically for **every** scan by the default scan-naming preprocessor
+    (:func:`smi_beamline.plans.scan_naming.install_default_scan_naming`, installed at startup):
+    each run's ``sample_name`` is extended with a recorded-field template
+    (``{energy_energy:.2f}eV_wa{waxs_arc:04.1f}_sdd{pil2M_motor_z:.1f}mm``) which the readout
+    worker fills from the values actually recorded in the run -- and the referenced devices are
+    read into the run for you.  To override per run, pass your own templated name, e.g.::
+
+        RE(bp.count([pil2M], md={'sample_name': 'test_{energy_energy}eV_{waxs_arc}wa'}))
+
+    (a name that already contains ``{tokens}`` is used as-is; the default is not appended).
     """
     warnings.warn(
         "get_scan_md() is deprecated: it formats live .position/.get() reads into the filename. "
-        "Use recorded-field {token} filenames (e.g. smi-plans fname()) instead.",
+        "Recorded-field {token} naming is now applied automatically by the default scan-naming "
+        "preprocessor (smi_beamline.plans.scan_naming); pass md={'sample_name': '...{token}...'} "
+        "to override per run.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -426,11 +437,13 @@ def get_scan_md(tender=False):
 def get_more_md(tender=True, bpm=True):
     """DEPRECATED: append XBPM2 reading to :func:`get_scan_md` (live ``.get()`` into a string).
 
-    See :func:`get_scan_md`; prefer recorded-field ``{xbpm2_sumX}`` tokens.
+    See :func:`get_scan_md`.  For the XBPM2 sum in the filename, prefer the recorded-field token
+    ``{xbpm2_sumX}`` -- either via ``install_default_scan_naming(..., with_xbpm=True)`` or by
+    passing your own ``md={'sample_name': '...{xbpm2_sumX:.3f}...'}``.
     """
     warnings.warn(
         "get_more_md() is deprecated: it formats live reads into the filename. "
-        "Use recorded-field {token} filenames (e.g. smi-plans fname()) instead.",
+        "Use recorded-field {token} naming (smi_beamline.plans.scan_naming; {xbpm2_sumX}) instead.",
         DeprecationWarning,
         stacklevel=2,
     )
