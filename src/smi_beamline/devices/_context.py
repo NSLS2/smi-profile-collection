@@ -29,6 +29,7 @@ Contract
   profile bootstrap to wire the real objects.
 * ``get_md()`` -> the ``RE.md`` mapping (or an empty dict if not configured, e.g. under test).
 * ``get_config()`` -> the ``mdsave`` RedisJSONDict (or a plain dict fallback under test).
+* ``get_sample_store()`` -> the ``samplestore`` RedisJSONDict on db=2 (or a plain dict fallback).
 * ``current_energy_eV()`` -> the live beamline energy in eV (or ``None`` if unavailable).
 
 None of these import ``smibase``; they only read what was injected.  This keeps the device
@@ -37,7 +38,7 @@ classes import-clean and hardware-free at import time.
 
 __all__ = [
     "configure", "get_md", "get_config", "current_energy_eV", "is_configured",
-    "get_re", "get_sd", "get_bec", "get_db", "baseline_register",
+    "get_re", "get_sd", "get_bec", "get_db", "get_sample_store", "baseline_register",
 ]
 
 
@@ -49,10 +50,11 @@ _energy_source = None  # a zero-arg callable returning energy in eV, or an objec
 _sd = None             # SupplementalData (carries the baseline)
 _bec = None            # BestEffortCallback
 _db = None             # databroker / Broker
+_sample_store = None   # Redis-backed sample/holder store (RedisJSONDict on db=2) or dict fallback
 
 
 def configure(*, run_engine=None, config_dict=None, energy_source=None,
-              sd=None, bec=None, db=None):
+              sd=None, bec=None, db=None, sample_store=None):
     """Wire the real runtime objects into the seam (called once, early, by the profile).
 
     Parameters
@@ -74,8 +76,12 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         The live ``bec`` (best-effort callback).
     db : object, optional
         The live databroker / ``Broker``.
+    sample_store : mapping, optional
+        The persistent **sample/holder store** (the Redis-backed ``samplestore`` on db=2, a
+        ``RedisJSONDict``).  Stored by reference; reached via :func:`get_sample_store` by the
+        sample-system plans (load/unload, history append) without importing ``smibase.base``.
     """
-    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db
+    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db, _sample_store
     if run_engine is not None:
         _run_engine = run_engine
     if config_dict is not None:
@@ -88,6 +94,8 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         _bec = bec
     if db is not None:
         _db = db
+    if sample_store is not None:
+        _sample_store = sample_store
 
 
 def is_configured():
@@ -151,6 +159,19 @@ def get_config():
     """
     if _config_dict is not None:
         return _config_dict
+    return {}
+
+
+def get_sample_store():
+    """Return the persistent **sample/holder store** (Redis ``samplestore`` on db=2).
+
+    Returns the injected ``RedisJSONDict`` on the live beamline, or a plain-dict fallback
+    (``{}``) when the seam is unconfigured (bare import / tests / GUI offline).  The fallback
+    keeps the sample-system plans and ``SampleStore`` facade importable and exercisable headless,
+    exactly like :func:`get_config` does for ``mdsave``.
+    """
+    if _sample_store is not None:
+        return _sample_store
     return {}
 
 

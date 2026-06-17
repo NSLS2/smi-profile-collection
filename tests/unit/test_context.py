@@ -12,6 +12,7 @@ def test_unconfigured_defaults_are_safe():
     assert _context.is_configured() is False
     assert _context.get_md() == {}
     assert _context.get_config() == {}
+    assert _context.get_sample_store() == {}
     assert _context.current_energy_eV() is None
 
 
@@ -83,3 +84,22 @@ def test_baseline_register_accepts_args_and_iterable():
     # a single iterable (the form the instance modules use)
     _context.baseline_register(["c", "d"])
     assert sd.baseline == ["a", "b", "c", "d"]
+
+
+def test_sample_store_unconfigured_is_empty_dict():
+    # unconfigured -> {} fallback so the sample plans / SampleStore work headless
+    assert _context.get_sample_store() == {}
+
+
+def test_sample_store_injection_is_by_reference():
+    store = {"swaxssamples:magazine": {"holder_ids": [], "active_sample_id": None}}
+    _context.configure(sample_store=store)
+    got = _context.get_sample_store()
+    assert got is store                       # same object (RedisJSONDict on the beamline)
+    # later writes are visible (reference semantics, like mdsave)
+    store["swaxssamples:sample:abc"] = {"name": "s1"}
+    assert _context.get_sample_store()["swaxssamples:sample:abc"] == {"name": "s1"}
+
+
+def test_sample_store_in_all():
+    assert "get_sample_store" in _context.__all__

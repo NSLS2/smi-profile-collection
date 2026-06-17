@@ -25,6 +25,12 @@ with open("/etc/bluesky/redis.secret", "r") as f:
 mdclient = redis.Redis('xf12id2-smi-redis1.nsls2.bnl.gov', db=1, ssl=True, port=6380, password=redis_secret)
 mdsave = RedisJSONDict(mdclient,'swaxsmetadata')
 
+# Persistent SAMPLE / HOLDER store (separate Redis db so it never collides with RE.md on db=0
+# or the beamline config 'mdsave' on db=1).  Mirrors the mdsave construction above.
+# See smi-plans/docs/SAMPLE_SYSTEM_PLAN.md (db=2, prefix 'swaxssamples').
+sampleclient = redis.Redis('xf12id2-smi-redis1.nsls2.bnl.gov', db=2, ssl=True, port=6380, password=redis_secret)
+samplestore = RedisJSONDict(sampleclient, 'swaxssamples')
+
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
@@ -76,7 +82,8 @@ RE.subscribe(tiled_inserter.insert)
 # _context.baseline_register(...) instead of grabbing `sd` from get_ipython().user_ns (Phase 4).
 from smi_beamline.devices import _context as _smiclasses_context
 _sd = get_ipython().user_ns['sd']
-_smiclasses_context.configure(run_engine=RE, config_dict=mdsave, sd=_sd, bec=bec)
+_smiclasses_context.configure(run_engine=RE, config_dict=mdsave, sd=_sd, bec=bec,
+                              sample_store=samplestore)
 
 print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
 tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]

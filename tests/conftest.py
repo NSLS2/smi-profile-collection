@@ -109,16 +109,17 @@ def _unconfigured_context():
     from smi_beamline.devices import _context
 
     saved = (_context._run_engine, _context._config_dict, _context._energy_source,
-             _context._sd, _context._bec, _context._db)
+             _context._sd, _context._bec, _context._db, _context._sample_store)
     _context._run_engine = None
     _context._config_dict = None
     _context._energy_source = None
     _context._sd = None
     _context._bec = None
     _context._db = None
+    _context._sample_store = None
     yield
     (_context._run_engine, _context._config_dict, _context._energy_source,
-     _context._sd, _context._bec, _context._db) = saved
+     _context._sd, _context._bec, _context._db, _context._sample_store) = saved
 
 
 @pytest.fixture(autouse=True)
