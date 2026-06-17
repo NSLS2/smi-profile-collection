@@ -30,6 +30,8 @@ Contract
 * ``get_md()`` -> the ``RE.md`` mapping (or an empty dict if not configured, e.g. under test).
 * ``get_config()`` -> the ``mdsave`` RedisJSONDict (or a plain dict fallback under test).
 * ``get_sample_store()`` -> the ``samplestore`` RedisJSONDict on db=2 (or a plain dict fallback).
+* ``get_status_store()`` -> the raw Redis client for EPHEMERAL RE liveness/status on db=3 (or
+  ``None`` if not configured).
 * ``current_energy_eV()`` -> the live beamline energy in eV (or ``None`` if unavailable).
 
 None of these import ``smibase``; they only read what was injected.  This keeps the device
@@ -38,7 +40,8 @@ classes import-clean and hardware-free at import time.
 
 __all__ = [
     "configure", "get_md", "get_config", "current_energy_eV", "is_configured",
-    "get_re", "get_sd", "get_bec", "get_db", "get_sample_store", "baseline_register",
+    "get_re", "get_sd", "get_bec", "get_db", "get_sample_store", "get_status_store",
+    "baseline_register",
 ]
 
 
@@ -51,10 +54,11 @@ _sd = None             # SupplementalData (carries the baseline)
 _bec = None            # BestEffortCallback
 _db = None             # databroker / Broker
 _sample_store = None   # Redis-backed sample/holder store (RedisJSONDict on db=2) or dict fallback
+_status_store = None   # raw Redis client for EPHEMERAL RE liveness/status (db=3), or None
 
 
 def configure(*, run_engine=None, config_dict=None, energy_source=None,
-              sd=None, bec=None, db=None, sample_store=None):
+              sd=None, bec=None, db=None, sample_store=None, status_store=None):
     """Wire the real runtime objects into the seam (called once, early, by the profile).
 
     Parameters
@@ -80,8 +84,13 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         The persistent **sample/holder store** (the Redis-backed ``samplestore`` on db=2, a
         ``RedisJSONDict``).  Stored by reference; reached via :func:`get_sample_store` by the
         sample-system plans (load/unload, history append) without importing ``smibase.base``.
+    status_store : redis.Redis, optional
+        The **raw** Redis client for EPHEMERAL RE liveness/status (db=3).  A raw client (not a
+        ``RedisJSONDict``) so the busy flag can be written with a TTL (``SETEX``) and refreshed by
+        a heartbeat -- see :mod:`smi_beamline.plans.re_status`.  Reached via
+        :func:`get_status_store`.
     """
-    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db, _sample_store
+    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db, _sample_store, _status_store
     if run_engine is not None:
         _run_engine = run_engine
     if config_dict is not None:
@@ -96,6 +105,8 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         _db = db
     if sample_store is not None:
         _sample_store = sample_store
+    if status_store is not None:
+        _status_store = status_store
 
 
 def is_configured():
@@ -173,6 +184,19 @@ def get_sample_store():
     if _sample_store is not None:
         return _sample_store
     return {}
+
+
+def get_status_store():
+    """Return the raw Redis client for EPHEMERAL RE liveness/status (db=3), or ``None``.
+
+    Unlike :func:`get_config` / :func:`get_sample_store` (which fall back to an empty ``dict``
+    so device classes stay importable off the beamline), this returns ``None`` when unconfigured.
+    The status store is a *raw* ``redis.Redis`` client -- callers need its TTL-aware ``setex`` /
+    ``delete`` for the heartbeat lock-out flag, which a dict cannot emulate -- so consumers
+    (see :mod:`smi_beamline.plans.re_status`) must treat ``None`` as "no status store wired"
+    (off-beamline / tests / GUI offline) and simply skip publishing, rather than crash.
+    """
+    return _status_store
 
 
 def current_energy_eV():

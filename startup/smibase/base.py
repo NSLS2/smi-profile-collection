@@ -52,6 +52,16 @@ mdsave = RedisJSONDict(mdclient,'swaxsmetadata')
 sampleclient = redis.Redis('xf12id2-smi-redis1.nsls2.bnl.gov', db=2, ssl=True, port=6380, password=redis_secret)
 samplestore = RedisJSONDict(sampleclient, 'swaxssamples')
 
+# EPHEMERAL RunEngine liveness / status store (db=3).  Deliberately a *separate* db from the
+# PERSISTENT config (db=1) and sample (db=2) stores: the keys here are volatile session state
+# (e.g. the "RE is busy" lock-out flag the GUI polls) that must NEVER outlive a process and must
+# never be swept into config dump/restore tooling.  This is a RAW redis.Redis client (NOT a
+# RedisJSONDict) on purpose -- the busy flag is written with a short TTL (SETEX) and refreshed by
+# a heartbeat while a plan runs, so it auto-expires if the worker is killed (kill -9 / crash /
+# power loss), which RedisJSONDict's persistent-dict abstraction cannot express.  See
+# smi_beamline.plans.re_status (key 'swaxsstatus:re_busy').
+statusclient = redis.Redis('xf12id2-smi-redis1.nsls2.bnl.gov', db=3, ssl=True, port=6380, password=redis_secret)
+
 
 # Configure a Tiled writing client
 tiled_writing_client = from_profile("nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
@@ -111,7 +121,7 @@ RE.subscribe(tiled_inserter.insert)
 # _context.baseline_register(...) and reach the sample store via the seam (Phase 4).
 from smi_beamline.devices import _context as _seam
 _seam.configure(run_engine=RE, config_dict=mdsave, sd=sd, bec=bec,
-                sample_store=samplestore)
+                sample_store=samplestore, status_store=statusclient)
 
 # Tiled READING client uses an interactive Duo push (username=None), which a headless worker
 # cannot satisfy -- skip it in the worker (the worker writes via the API-keyed writing client and

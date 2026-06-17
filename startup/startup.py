@@ -39,3 +39,43 @@ _ctx = {"RE": _seam.get_re(), "sd": _seam.get_sd(),
         "bec": _seam.get_bec(), "db": _seam.get_db(), "mdsave": mdsave}
 _devices_ns = _make_devices(_ctx, verbose=True)
 globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith("_")})
+
+# --- Default scan-naming preprocessor (recorded-field filename templating). ---
+# Append the modern replacement for get_scan_md() to RE.preprocessors so EVERY plan run through
+# the RunEngine gets its run-scoped sample_name extended with a recorded-field template
+# (energy/WAXS-arc/SDD by default), and those fields are read into each data-taking run's primary
+# stream for the downstream symlink/readout worker to fill.  The existing RE.md['sample_name']
+# (user/proposal prefix) is APPENDED TO, never overwritten.
+#
+# We pass this module's globals() as the device namespace: tokens are resolved by device VARIABLE
+# NAME, so adding/removing signals or whole measurement sets is done entirely in
+# smi_beamline.plans.scan_naming (MEASUREMENT_SETS / DEFAULT_SETS) -- THIS call never needs to
+# change.  Runs after the factory so the devices exist; guarded so a missing device never blocks
+# startup (an unresolved token is simply skipped).
+try:
+    from smi_beamline.plans.scan_naming import install_default_scan_naming as _install_scan_naming
+
+    _install_scan_naming(_seam.get_re(), globals(), verbose=True)
+    print("\u2713 default scan-naming preprocessor installed "
+          "(sample_name += recorded-field template)")
+except Exception as _exc:  # noqa: BLE001 -- never let naming setup block the session
+    print(f"\u2717 default scan-naming preprocessor NOT installed: "
+          f"{type(_exc).__name__}: {_exc}")
+
+# --- RE-busy signal (cross-process lock-out flag for the GUI). ---
+# Append a preprocessor that holds a "RE is busy" flag high in Redis (db=3, key
+# 'swaxsstatus:re_busy') for the duration of every plan, so the out-of-process alignment GUI can
+# poll it and disable the small motor moves it would otherwise make while the RunEngine drives the
+# beamline.  The flag is heartbeat-refreshed with a short TTL and cleared in a finally, so it can
+# never latch (it auto-expires even on a hard kill of the worker).  Guarded so a Redis hiccup never
+# blocks the session.  See smi_beamline.plans.re_status.
+try:
+    from smi_beamline.plans.re_status import install_re_busy_signal as _install_re_busy
+
+    _install_re_busy(_seam.get_re(), verbose=True)
+    print("\u2713 RE-busy signal preprocessor installed "
+          "(Redis 'swaxsstatus:re_busy' held while plans run)")
+except Exception as _exc:  # noqa: BLE001 -- never let the busy signal block the session
+    print(f"\u2717 RE-busy signal preprocessor NOT installed: "
+          f"{type(_exc).__name__}: {_exc}")
+

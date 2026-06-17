@@ -103,3 +103,22 @@ def test_sample_store_injection_is_by_reference():
 
 def test_sample_store_in_all():
     assert "get_sample_store" in _context.__all__
+
+
+def test_status_store_unconfigured_is_none():
+    # unconfigured -> None (NOT {} -- consumers need a real redis client or nothing; see
+    # get_status_store docstring).  The re_status plans treat None as "don't publish".
+    assert _context.get_status_store() is None
+
+
+def test_status_store_injection_is_by_reference():
+    class _FakeRedis:
+        pass
+
+    client = _FakeRedis()
+    _context.configure(status_store=client)
+    assert _context.get_status_store() is client     # same raw redis.Redis on the beamline
+
+
+def test_status_store_in_all():
+    assert "get_status_store" in _context.__all__
