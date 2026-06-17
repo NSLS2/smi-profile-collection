@@ -104,6 +104,14 @@ test-hardware = "pytest --run-hardware -m hardware"
 terminal = {features=["profile", "terminal"], solve-group="profile"}
 test = {features=["profile", "test"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
+qsgui = {features=["profile", "qsgui"], solve-group="profile"}
 
 
+[feature.qsgui.tasks]
+qserver-gui = "queue-monitor --http-server-uri https://xf12id2-smi-qs1.nsls2.bnl.gov"
 
+[feature.qsgui.dependencies]
+bluesky-widgets = ">=0.0.17,<0.0.18"
+pyqt = ">=5.15.11,<6"
+qtpy = ">=2.4.3,<3"
+bluesky-httpserver = ">=0.0.12,<0.0.13"
