@@ -14,12 +14,17 @@ from .machine import ring, smi_shutter_enable
 from .electrometers import ls, xbpm2
 
 # When the beam is down (e.g. testing / restarting Bluesky during a shutdown) the suspenders
-# would immediately pause everything (ring current / shutter floors).  Set the environment
-# variable BEAM_DOWN=1 before launching Bluesky to BUILD the suspenders but NOT enable them, so
-# you can test without running turn_off_suspenders() every restart.  Re-enable with
-# turn_on_suspenders() once the beam is back.
-BEAM_DOWN = os.environ.get("BEAM_DOWN", os.environ.get("SMI_BEAM_DOWN", "")).strip().lower() \
-    in ("1", "true", "yes", "on")
+# would immediately pause everything (ring current / shutter floors).  The "beam is down" state is
+# read ONCE here, at startup, from the persistent Redis flag 'swaxsstatus:beam_down' (db=3) -- set
+# it with  set_beam_down()  (or the start-beamdown pixi task) BEFORE launching Bluesky to BUILD the
+# suspenders but NOT enable them, so you can test/restart without running turn_off_suspenders()
+# every time.  Re-enable in a live session with  turn_on_suspenders()  once the beam is back.
+#
+# Redis (not an env var) so the SAME flag reaches both the interactive terminal and the
+# queueserver worker (which runs on a separate host).  The legacy BEAM_DOWN/SMI_BEAM_DOWN env vars
+# are still honoured as a fallback (see beam_down_active).
+from smi_beamline.plans.re_status import beam_down_active, set_beam_down, clear_beam_down, read_beam_down
+BEAM_DOWN = beam_down_active()
 
 
 def _install(suspender):
@@ -83,6 +88,7 @@ if BEAM_DOWN:
     print("\n" + "!" * 72)
     print("!!  BEAM_DOWN is set: suspenders are BUILT but NOT enabled.")
     print("!!  The RunEngine will NOT pause on low ring current / shutter / temperature.")
-    print("!!  Run  turn_on_suspenders()  once the beam is back to re-enable them.")
+    print("!!  Run  turn_on_suspenders()  once the beam is back to re-enable them,")
+    print("!!  and  clear_beam_down()  to clear the persistent flag for future restarts.")
     print("!" * 72 + "\n")
     

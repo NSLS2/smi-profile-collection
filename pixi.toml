@@ -73,10 +73,18 @@ numpy = ">2"
 
 [feature.terminal.tasks]
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
-# Like `start`, but with BEAM_DOWN set: builds the suspenders but does NOT enable them, so you
-# can test/restart without running turn_off_suspenders() each time (use turn_on_suspenders()
-# when the beam returns).
-start-beamdown = { cmd = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=.", env = { BEAM_DOWN = "1" } }
+# Like `start`, but first SETS the persistent Redis beam_down flag (db=3,
+# 'swaxsstatus:beam_down') so the suspenders are BUILT but NOT enabled -- you can
+# test/restart without running turn_off_suspenders() each time (use turn_on_suspenders()
+# when the beam returns).  The flag persists across restarts AND reaches the queueserver
+# worker on its separate host; clear it with the `beam-up` task (or clear_beam_down() in a
+# session).
+start-beamdown = "PYTHONPATH=src python -m smi_beamline.plans.re_status set-beam-down --reason 'start-beamdown task' && unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
+# Set / clear the persistent Redis beam_down flag WITHOUT launching a session (handy for the
+# queueserver host, or to arm/disarm beam-down ahead of a restart).
+beam-down = "PYTHONPATH=src python -m smi_beamline.plans.re_status set-beam-down"
+beam-up = "PYTHONPATH=src python -m smi_beamline.plans.re_status clear-beam-down"
+beam-status = "PYTHONPATH=src python -m smi_beamline.plans.re_status status"
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 
 

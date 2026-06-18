@@ -8,6 +8,9 @@ the cross-process "RE is busy" lock-out flag the alignment GUI polls.  We assert
 * heartbeat-refreshed (TTL re-asserted) while a plan runs,
 * a no-op (plan still runs, nothing published) when no Redis client is wired,
 * installed idempotently on ``RE.preprocessors``.
+
+Plus the persistent ``beam_down`` operator-mode flag: set (persistent, no TTL) / clear / read,
+the env-var fallback, and the Redis-OR-env effective predicate.
 """
 import json
 import threading
@@ -28,15 +31,17 @@ from smi_beamline.plans import re_status as rs  # noqa: E402
 class FakeRedis:
     """Minimal thread-safe in-memory stand-in for redis.Redis with TTL semantics.
 
-    Supports just what re_status uses: ``setex`` / ``get`` / ``delete``.  TTL is honoured on read
-    (an expired key reads as absent), and every ``setex`` is recorded so the heartbeat can be
+    Supports just what re_status uses: ``set`` (no expiry) / ``setex`` (TTL) / ``get`` / ``delete``.
+    TTL is honoured on read (an expired key reads as absent); a plain ``set`` key never expires.
+    Every ``setex`` / ``set`` is recorded so the heartbeat and the persistent writes can be
     observed.  Strings are stored/returned as bytes, like the real client's default.
     """
 
     def __init__(self):
-        self._store = {}                  # key -> (value_bytes, expiry_epoch)
+        self._store = {}                  # key -> (value_bytes, expiry_monotonic_or_None)
         self._lock = threading.Lock()
         self.setex_calls = []             # (key, ttl) per setex, for heartbeat assertions
+        self.set_calls = []               # (key,) per set, for persistent-write assertions
         self.delete_calls = []
 
     def setex(self, key, ttl, value):
@@ -46,13 +51,20 @@ class FakeRedis:
             self._store[key] = (value, time.monotonic() + ttl)
             self.setex_calls.append((key, ttl))
 
+    def set(self, key, value):
+        if isinstance(value, str):
+            value = value.encode()
+        with self._lock:
+            self._store[key] = (value, None)   # None expiry -> persistent
+            self.set_calls.append((key,))
+
     def get(self, key):
         with self._lock:
             item = self._store.get(key)
             if item is None:
                 return None
             value, expiry = item
-            if time.monotonic() >= expiry:
+            if expiry is not None and time.monotonic() >= expiry:
                 del self._store[key]
                 return None
             return value
@@ -240,3 +252,88 @@ def test_read_and_clear_helpers():
 def test_read_clear_with_no_client():
     assert rs.read_re_busy(status_store=None) is None
     assert rs.clear_re_busy(status_store=None) is False
+
+
+# ============================================================================= beam_down flag
+def _beam_down_raw(client):
+    raw = client.get(rs.BEAM_DOWN_KEY)
+    return None if raw is None else json.loads(raw.decode())
+
+
+def test_beam_down_default_inactive(monkeypatch):
+    monkeypatch.delenv("BEAM_DOWN", raising=False)
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    client = FakeRedis()
+    assert rs.beam_down_active(status_store=client) is False
+    assert rs.read_beam_down(status_store=client) is None
+
+
+def test_beam_down_set_is_persistent_no_ttl(monkeypatch):
+    monkeypatch.delenv("BEAM_DOWN", raising=False)
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    client = FakeRedis()
+
+    assert rs.set_beam_down(reason="shutdown", by="alice", status_store=client) is True
+    # written with .set (persistent), NOT .setex (TTL) -- this is the whole point
+    assert client.set_calls == [(rs.BEAM_DOWN_KEY,)]
+    assert client.setex_calls == []
+
+    doc = _beam_down_raw(client)
+    assert doc["beam_down"] is True
+    assert doc["reason"] == "shutdown" and doc["by"] == "alice"
+    assert "since" in doc and "host" in doc
+
+    assert rs.beam_down_active(status_store=client) is True
+    assert rs.read_beam_down(status_store=client)["beam_down"] is True
+
+
+def test_beam_down_clear(monkeypatch):
+    monkeypatch.delenv("BEAM_DOWN", raising=False)
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    client = FakeRedis()
+    rs.set_beam_down(status_store=client)
+    assert rs.beam_down_active(status_store=client) is True
+
+    assert rs.clear_beam_down(status_store=client) is True
+    assert rs.beam_down_active(status_store=client) is False
+    assert rs.read_beam_down(status_store=client) is None
+    assert rs.BEAM_DOWN_KEY in client.delete_calls
+
+
+@pytest.mark.parametrize("val,expected", [
+    ("1", True), ("true", True), ("YES", True), ("on", True),
+    ("0", False), ("", False), ("no", False),
+])
+def test_beam_down_env_fallback(monkeypatch, val, expected):
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    monkeypatch.setenv("BEAM_DOWN", val)
+    client = FakeRedis()                         # empty store -> only the env var can make it active
+    assert rs.beam_down_active(status_store=client) is expected
+
+
+def test_beam_down_env_or_redis(monkeypatch):
+    # env OFF but Redis flag ON -> active (Redis path)
+    monkeypatch.delenv("BEAM_DOWN", raising=False)
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    client = FakeRedis()
+    rs.set_beam_down(status_store=client)
+    assert rs.beam_down_active(status_store=client) is True
+    # env ON but Redis flag OFF -> still active (env path), even with an empty store
+    rs.clear_beam_down(status_store=client)
+    monkeypatch.setenv("SMI_BEAM_DOWN", "1")
+    assert rs.beam_down_active(status_store=client) is True
+
+
+def test_beam_down_no_client_safe(monkeypatch):
+    monkeypatch.delenv("BEAM_DOWN", raising=False)
+    monkeypatch.delenv("SMI_BEAM_DOWN", raising=False)
+    assert rs.set_beam_down(status_store=None) is False
+    assert rs.clear_beam_down(status_store=None) is False
+    assert rs.read_beam_down(status_store=None) is None
+    assert rs.beam_down_active(status_store=None) is False
+
+
+def test_beam_down_in_all():
+    for name in ("BEAM_DOWN_KEY", "set_beam_down", "clear_beam_down",
+                 "read_beam_down", "beam_down_active"):
+        assert name in rs.__all__
