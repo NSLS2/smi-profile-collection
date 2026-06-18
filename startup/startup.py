@@ -40,6 +40,23 @@ _ctx = {"RE": _seam.get_re(), "sd": _seam.get_sd(),
 _devices_ns = _make_devices(_ctx, verbose=True)
 globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith("_")})
 
+# --- smi-plans queue surface (technique presets + *_from_spec wrappers). ---
+# Wire the external smi_plans package: inject THIS namespace (devices + bps/np/Signal/...) into the
+# smi_plans modules so their bare-global device references resolve, and merge the curated queue
+# surface (smi_plans._qserver.__all__) into globals() so the queueserver introspects the plans and
+# the terminal user can call them.  Runs AFTER the factory so the device globals exist; guarded so
+# a missing smi-plans package never blocks startup.  See smi-plans/docs/QSERVER_WIRING.md.
+try:
+    from smibase.zz_smi_plans import wire as _wire_smi_plans
+
+    _smi_plans_ns = _wire_smi_plans(globals(), verbose=True)
+    globals().update(_smi_plans_ns)
+    if _smi_plans_ns:
+        print(f"\u2713 smi-plans queue surface exposed ({len(_smi_plans_ns)} plans)")
+except Exception as _exc:  # noqa: BLE001 -- never let smi-plans wiring block the session
+    print(f"\u2717 smi-plans queue surface NOT exposed: "
+          f"{type(_exc).__name__}: {_exc}")
+
 # --- Default scan-naming preprocessor (recorded-field filename templating). ---
 # Append the modern replacement for get_scan_md() to RE.preprocessors so EVERY plan run through
 # the RunEngine gets its run-scoped sample_name extended with a recorded-field template

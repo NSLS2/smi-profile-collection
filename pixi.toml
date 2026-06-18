@@ -41,6 +41,12 @@ qtpy = "*"
 [feature.profile.pypi-dependencies]
 pvxslibs = ">=1.3.2, <2"
 ag2 = { version = "*", extras = ["jupyter-executor", "openai"] }
+# Curated acquisition plans (the technique A-O presets + *_from_spec queue wrappers) used by the
+# queueserver and the terminal.  smi_plans declares dependencies=[] (bluesky/ophyd/numpy come from
+# this env), so it installs plain.  Its modules reference beamline devices as bare globals that the
+# profile injects at runtime (see startup/smibase/zz_smi_plans.py).  Pin to a tag/rev for
+# production reproducibility.  See smi-plans/docs/QSERVER_WIRING.md.
+smi-plans = { git = "https://github.com/EliotGann/smi-plans.git", branch = "master" }
 
 [feature.qs.dependencies]
 bluesky-queueserver = "*"

@@ -1,26 +1,189 @@
+# =============================================================================================
+# Queueserver user-group permissions for the SMI beamline.
+# =============================================================================================
+# Two-layer filter (bluesky-queueserver): a plan/device/function is usable by a group iff it is
+# matched by an `allowed_*` pattern AND NOT matched by a `forbidden_*` pattern, in BOTH the `root`
+# group (the global gate) and the user's own group.
+#
+# Pattern syntax: a leading ":" marks a regex (matched against the whole name); "^" anchors the
+# start, "$" the end.  A plain string is an exact name.  `null` (a YAML null) means "match all".
+#
+# Design here = EXPLICIT ALLOW-LISTS (not allow-all).  `root` opens the categories we intend to
+# expose and globally FORBIDS the names that leak into the startup namespace but must never be
+# queued: imported library handles (np, bp, EpicsMotor, paramiko ...), the non-message-pure
+# "pseudo-plans" that block the RunEngine (set_energy, feedback, setDryFlow, det_exposure_time_sync,
+# ...), closed-loop controllers that call RE() themselves (smi_plans technique_M loops), and the
+# hardcoded `password` string in pilatus.py.  Named groups then refine within that gate:
+#   * `primary` -- full staff surface (all acquisition/alignment plans + bluesky scans + smi-plans
+#     + all real devices + safe control functions).
+#   * `gui` -- restricted surface for the alignment GUI / generic queue clients (only the data-only
+#     smi-plans `*_from_spec` wrappers + the bluesky scans; devices/functions locked down).
+#
+# After editing, regenerate the introspection cache and smoke-test the worker load:
+#   pixi run -e qs qs-list      # -> startup/existing_plans_and_devices.yaml
+# (QS reads PLANS/DEVICES from that generated cache, not from this file; this file only FILTERS.)
+# =============================================================================================
+
 user_groups:
-  root:  # Defines the rules for preliminary filtering of plan/device/function names for all groups.
+
+  # ------------------------------------------------------------------------------------------
+  # root: the GLOBAL gate applied to every group.  Open the intended categories; forbid the junk.
+  # ------------------------------------------------------------------------------------------
+  root:
     allowed_plans:
-      - null  # Allow all
+      # smi-plans curated queue surface --------------------------------------------------------
+      - ":.*_from_spec$"                 # the data-only spec wrappers (acquire_from_spec, ...)
+      - ":^[A-O]_"                       # technique presets A_*..O_* (A_nexafs_bar, C_temperature_ramp_run, ...)
+      - "acquire"                        # smi-plans composition plans
+      - "acquire_bar"
+      - "manual_step"
+      - "manual_value"
+      - "manual_loop"
+      - "pause_for_user"
+      # profile alignment routines -------------------------------------------------------------
+      - ":^align_"                       # align_gisaxs_height, align_bdm_th, align_xrr_height, ...
+      - ":^alignement_"                  # alignement_gisaxs_hex / _doblestack / _rough / _short / ...
+      - ":^alignment_"                   # alignment_gisaxs, alignment_bdm, alignment_gisaxs_finer_for_bdm
+      - ":^quickalign_"                  # quickalign_gisaxs
+      - ":^fast_align"                   # fast_align, fast_align_procedure
+      - "bisection_search_plan"          # alignment sub-plan (motor bisection to target intensity)
+      # profile acquisition / motion plans -----------------------------------------------------
+      - "move_energy"                    # energy.py: move the DCM/IVU to a target energy
+      - "det_exposure_time"              # pilatus.py: set detector exposure (message-pure generator)
+      - "multi_count"                    # pilatus.py: count multiple detectors
+      - "shopen"                         # shutter.py: open the photon shutter (+feedback)
+      - "shclose"                        # shutter.py: close the photon shutter
+      - "purge_cryo"                     # utils.py: cryo-cooler purge sequence
+      - ":^save_bimorph$"                # mirrors.py bimorph state plans
+      - ":^stage_bimorph$"
+      - ":^apply_bimorph$"
+      - ":^load_bimorph$"
+      - ":^pump_waxs$"                   # pilatus.py WAXS vacuum plans
+      - ":^vent_waxs$"
+      - ":^startWAXS$"
+      - ":^restartWAXS$"
+      # standard bluesky scans (from nslsii.configure_base import_star of bluesky.plans) ---------
+      - "count"
+      - "scan"
+      - "rel_scan"
+      - "list_scan"
+      - "rel_list_scan"
+      - "grid_scan"
+      - "rel_grid_scan"
+      - "list_grid_scan"
+      - "rel_list_grid_scan"
+      - "scan_nd"
+      - "spiral"
+      - "spiral_fermat"
+      - "rel_spiral"
+      - "rel_spiral_fermat"
+      - "adaptive_scan"
+      - "rel_adaptive_scan"
+      - "scan_nd"
+      - "tune_centroid"
+      - "x_value_scan"
     forbidden_plans:
-      - ":^_"  # All plans with names starting with '_'
+      - ":^_"                            # anything underscore-private
+      # NON-message-pure callables that live among "plans" but block/own the RE if queued.
+      # (They use .put()/.set()/blocking .move()/.get(); run them as FUNCTIONS, not plans.)
+      - "set_energy"
+      - "feedback"
+      - "det_exposure_time_sync"
+      - "det_next_file"
+      - "beamstop_save"
+      - "setDryFlow"
+      - "setWetFlow"
+      - "sample_id"                      # deprecated: mutates RE.md (global side effect)
+      - "proposal_id"                    # deprecated shim
+      - "get_scan_md"                    # deprecated live-read filename builder
+      - "get_more_md"
+      # smi-plans technique_M closed-loop CONTROLLERS (they call RE() themselves -- never queue).
+      # (_qserver already drops these from its surface; belt-and-suspenders if a name leaks in.)
+      - "autonomous_loop"
+      - "align_loop"
+      - "ask_tell_loop"
+      # library handles / classes that leak into the namespace (instance modules lack __all__).
+      - "np"
+      - "bp"
+      - "bps"
+      - "bpp"
+      - "bc"
+
     allowed_devices:
-      - null  # Allow all
+      - null                             # allow all introspected devices; forbidden list trims junk
     forbidden_devices:
-      - ":^_:?.*"  # All devices with names starting with '_'
+      - ":^_"                            # underscore-private
+      # imported ophyd/utility CLASSES re-exported by instance modules (not real device instances).
+      - "EpicsMotor"
+      - "EpicsSignal"
+      - "EpicsSignalRO"
+      - "Device"
+      - "Component"
+      - "Signal"
+      - "Cpt"
+
     allowed_functions:
-      - null  # Allow all
+      - null                             # allow all; the forbidden list + groups restrict
     forbidden_functions:
-      - ":^_"  # All functions with names starting with '_'
-  primary:  # Default group. The group can be renamed or other groups may be created.
+      - ":^_"
+      - "password"                       # hardcoded credential string in pilatus.py -- NEVER expose
+      - "username"
+      - "hostname"
+      - "client"                         # paramiko SSH client object
+
+  # ------------------------------------------------------------------------------------------
+  # primary: full staff surface.  Inherits root's gate; opens devices + the safe control funcs.
+  # ------------------------------------------------------------------------------------------
+  primary:
     allowed_plans:
-      - ":.*"  # Different way to allow all plans.
+      - ":.*"                            # everything root allows (root already curated the set)
     forbidden_plans:
-      - null  # Nothing is forbidden
+      - null
     allowed_devices:
-      - ":?.*:depth=5"  # Allow all device and subdevices. Maximum deepth for subdevices is 5.
+      - ":?.*:depth=5"                   # all devices + sub-devices (max sub-device depth 5)
     forbidden_devices:
-      - null  # Nothing is forbidden
+      - null
     allowed_functions:
-      - "function_sleep"  # Explicitly listed name
-      - ":^func_for_test"
+      # Safe, explicitly-allowed control / status functions a staff queue client may call.
+      - "proposal_swap"                  # switch active proposal (rebuilds RE.md)
+      - "project_set"                    # set RE.md['project_name']
+      - "turn_on_suspenders"             # re-enable ring/shutter/temperature suspenders
+      - "turn_off_suspenders"
+      - "set_beam_down"                  # persistent beam-down flag (db=3)
+      - "clear_beam_down"
+      - "read_beam_down"
+      - "beam_down_active"
+      - "enable_set"                     # scan-naming toggles
+      - "disable_set"
+      - "show_scan_naming"
+      - "hardware_check"                 # read-only device connectivity smoke-test
+      - "list_bimorph_states"
+      - "delete_bimorph_state"
+    forbidden_functions:
+      - ":^_"
+
+  # ------------------------------------------------------------------------------------------
+  # gui: restricted surface for the alignment GUI / generic queue clients.
+  #   Only the data-only smi-plans `*_from_spec` wrappers (their single arg is a JSON spec, so a
+  #   queue client can build them) + the standard bluesky scans.  No bare control functions.
+  # ------------------------------------------------------------------------------------------
+  gui:
+    allowed_plans:
+      - ":.*_from_spec$"                 # acquire_from_spec / nexafs_from_spec / giwaxs_from_spec / temperature_ramp_from_spec
+      - "count"                          # the data-only standard scans a GUI can fully specify
+      - "scan"
+      - "rel_scan"
+      - "grid_scan"
+      - "rel_grid_scan"
+      - "list_scan"
+    forbidden_plans:
+      - ":^_"
+    allowed_devices:
+      - null                             # devices are referenced BY NAME inside the spec; listing
+                                         # them lets the GUI populate pickers (read-only to the client)
+    forbidden_devices:
+      - ":^_"
+    allowed_functions:
+      - null                             # no functions needed; root's forbid-list still applies
+    forbidden_functions:
+      - ":.*"                            # gui clients call no queueserver functions

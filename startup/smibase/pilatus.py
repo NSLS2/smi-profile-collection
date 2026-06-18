@@ -133,6 +133,10 @@ pil2M = SAXS_Detector("XF:12ID2-ES{Pilatus:Det-2M}", name="pil2M", asset_path="p
 pil2M.set_primary_roi(1)
 
 pil2m_pos = pil2M.motor
+# Capitalized alias: smi_plans' _qserver DEVICE_REGISTRY / SDD specs reference this as ``pil2M_pos``
+# (matching the ``pil2M`` detector casing).  Same object; keeps both spellings resolvable so the
+# smi-plans spec wrappers (acquire_from_spec, commissioning AgBH, ...) find the SDD translation.
+pil2M_pos = pil2m_pos
 
 for detpos in [pil2m_pos]:
     detpos.configuration_attrs = detpos.read_attrs
