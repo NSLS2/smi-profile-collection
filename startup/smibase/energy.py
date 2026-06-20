@@ -28,6 +28,19 @@ dcm_config = DCMInternals("", name="dcm_config")
 bragg.read_attrs = ["user_readback"]
 
 
+# Hinting: plot ONLY the photon energy.  By default the EpicsMotor `user_readback` of bragg/ivugap
+# (and the PseudoSingle energy) are all kind='hinted', which gives the device 3 hinted fields and
+# makes the BestEffortCallback raise "we do not know how to pick out a single value".  Make the
+# synthetic `energy` axis the sole hinted field; keep bragg/ivugap/dcmgap readbacks and `harmonic`
+# recorded but kind='normal' (in every event, just not auto-plotted).  Do this AFTER the
+# `bragg.read_attrs = [...]` reassignment above (which would otherwise re-hint bragg.user_readback).
+energy.energy.kind = "hinted"
+energy.bragg.user_readback.kind = "normal"
+energy.ivugap.user_readback.kind = "normal"
+energy.dcmgap.user_readback.kind = "normal"
+energy.harmonic.kind = "normal"
+
+
 _smiclasses_context.baseline_register([energy, dcm_config, ivugap, bragg])
 
 

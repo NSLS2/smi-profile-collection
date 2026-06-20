@@ -108,6 +108,14 @@ pil900kwroi4 = EpicsSignal("XF:12IDC-ES:2{Det:900KW}Stats4:Total_RBV", name="pil
 
 pil900KW.stats1.kind = "hinted"
 pil900KW.stats1.total.kind = "hinted"
+# set_primary_roi(1) above reset read_attrs to just [stats1, tiff], which forces stats2..5 to
+# kind='omitted' (so they drop out of read()/describe()).  Restore them as 'normal' (recorded but
+# not plotted) by setting kind -- which is the authoritative knob; assigning read_attrs would
+# clobber it again.  Set both the plugin and its .total signal so the *_stats{n}_total fields are
+# emitted in every event.
+for _n in (2, 3, 4, 5):
+    getattr(pil900KW, f"stats{_n}").kind = "normal"
+    getattr(pil900KW, f"stats{_n}").total.kind = "normal"
 pil900KW.cam.num_images.kind = "config"
 pil900KW.cam.kind = 'normal'
 pil900KW.cam.file_number.kind = 'normal'
@@ -148,12 +156,20 @@ pil2mroi4 = EpicsSignal("XF:12ID2-ES{Pilatus:Det-2M}Stats4:Total_RBV", name="pil
 
 pil2M.stats1.kind = "hinted"
 pil2M.stats1.total.kind = "hinted"
+# set_primary_roi(1) above reset read_attrs to just [stats1, tiff], which forces stats2..5 to
+# kind='omitted' (so they drop out of read()/describe()).  Restore them as 'normal' (recorded but
+# not plotted) by setting kind -- which is the authoritative knob; assigning read_attrs would
+# clobber it again.  Set both the plugin and its .total signal so the *_stats{n}_total fields are
+# emitted in every event.
+for _n in (2, 3, 4, 5):
+    getattr(pil2M, f"stats{_n}").kind = "normal"
+    getattr(pil2M, f"stats{_n}").total.kind = "normal"
 pil2M.cam.num_images.kind = "config"
 pil2M.cam.kind = 'config'
 pil2M.cam.file_number.kind = 'config'
 pil2M.cam.ensure_nonblocking()
 pil2M.active_beamstop.kind='config'
-pil2M.motor.kind='config'
+pil2M.motor.kind='normal'
 pil2M.beamstop.kind='config'
 pil2M.beam_center_x_px.kind='config'
 pil2M.beam_center_y_px.kind='config'

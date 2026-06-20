@@ -61,11 +61,11 @@ class Energy(PseudoPositioner):
         harmonic (Signal): Current harmonic being used.
     """
     # Synthetic axis
-    energy = Cpt(PseudoSingle, kind="hinted", labels=["mono"])
+    energy = Cpt(PseudoSingle, kind="normal", labels=["mono"])
 
     # Real motors
-    dcmgap = Cpt(EpicsMotor, "XF:12ID:m66", read_attrs=["user_readback"], labels=["mono"])
-    bragg = Cpt(EpicsMotor, "XF:12ID:m65", read_attrs=["user_readback"], labels=["mono"])
+    dcmgap = Cpt(EpicsMotor, "XF:12ID:m66", read_attrs=["user_readback"], kind="normal", labels=["mono"])
+    bragg = Cpt(EpicsMotor, "XF:12ID:m65", read_attrs=["user_readback"], kind="normal", labels=["mono"])
 
     # Feedback signals
     pitch_feedback_disabled = Cpt(
@@ -91,6 +91,7 @@ class Energy(PseudoPositioner):
         configuration_attrs=[],
         labels=["mono"],
         add_prefix=(),
+        kind="normal",
     )
 
     # Enable/disable signals
@@ -108,7 +109,7 @@ class Energy(PseudoPositioner):
 
     # Harmonic signals
     target_harmonic = Cpt(Signal, value=21)
-    harmonic = Cpt(Signal, kind="hinted", value=21)
+    harmonic = Cpt(Signal, kind="normal", value=21)
 
 
     def __init__(self, *args, **kwargs):
