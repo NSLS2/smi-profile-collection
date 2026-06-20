@@ -11,7 +11,7 @@ from ophyd import EpicsMotor, EpicsSignal, Device, Component as Cpt
 from smi_beamline.devices import _context
 RE = _context.get_re()
 from .machine import ring, smi_shutter_enable
-from .electrometers import ls, xbpm2
+from .electrometers import ls, xbpm3
 
 # When the beam is down (e.g. testing / restarting Bluesky during a shutdown) the suspenders
 # would immediately pause everything (ring current / shutter floors).  The "beam is down" state is
@@ -55,11 +55,11 @@ def stop_turbo():
 # waxs_pr = SuspendCeil(chamber_pressure.maxs, 9.1E-03, pre_plan = stop_turbo())
 # RE.install_suspender(waxs_pr)
 
-"""
+
 #Count on XBPM3 suspender
-susp_xbpm3_sum = SuspendFloor( xbpm3.sumY, 0.3, resume_thresh= 0.8 )
-RE.install_suspender( susp_xbpm3_sum )
-"""
+susp_xbpm3_sum = SuspendFloor( xbpm3.sumY, 5, resume_thresh= 20 )
+#_install( susp_xbpm3_sum )
+
 
 # Ring current suspender
 susp_beam = SuspendFloor(ring.current, 100, resume_thresh=350, sleep=600)
@@ -75,7 +75,7 @@ def turn_on_suspenders():
     RE.install_suspender(susp_phi_motor)
     RE.install_suspender(susp_smi_shutter)
     RE.install_suspender(susp_beam)
-    # RE.install_suspender(susp_xbpm2_sum)
+    #RE.install_suspender(susp_xbpm3_sum)
     print('Suspenders turned on')
 
 
