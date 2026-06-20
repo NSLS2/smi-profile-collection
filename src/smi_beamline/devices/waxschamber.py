@@ -55,7 +55,7 @@ class Sample_Chamber(Device):
         yield from bps.mv(
             self.turbo_valve,'Open',timeout=15)
     
-    def wait_for_pump(self,pressure=0.005,verbose=False):
+    def wait_for_pump(self,pressure=0.007,verbose=False):
         while float(self.maxs.get()) > pressure:
             if verbose:
                 print(f'Chamber pressure is {self.maxs.get()} waiting for pressure to reach {pressure}')
