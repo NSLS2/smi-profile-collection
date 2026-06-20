@@ -18,9 +18,11 @@ from functools import wraps
 try:
     import bluesky.preprocessors as bpp
     import bluesky.plan_stubs as bps
+    from bluesky.utils import Msg
 except Exception:  # pragma: no cover - outside the beamline env
     bpp = None
     bps = None
+    Msg = None
 
 
 __all__ = [
@@ -153,8 +155,23 @@ def scan_name_preprocessor(
        the worker can fill the token.  This is what makes
        ``RE(bp.count([pil2M], md={'sample_name': '..{waxs_arc}..'}))`` work without the user
        adding ``waxs`` to the detector list.  Only devices whose key appears in the final name are
-       read (an energy-only name does not force a WAXS read), and a token device the plan already
-       reads in a bundle is not read again (a duplicate read of one object in an Event raises).
+       read (an energy-only name does not force a WAXS read).  A token device the plan **already**
+       reads itself is excluded from injection so no object is read twice in one Event (which
+       raises) -- this covers the device named in the ``detectors``/``motors`` of the ``open_run``
+       (e.g. ``bp.count([pil2M, energy], md=...{energy_energy}...)`` or a scan *over* ``energy``)
+       **and** the parent/child case (reading a parent device records its children's keys, so a
+       token that is an ancestor or descendant of a read device is excluded too -- e.g. plan reads
+       ``pil900KW`` and the token device is its ``.motors`` sub-device, whose ``waxs_arc`` key the
+       parent already records).
+
+    How the reads are inserted (robustness)
+    ---------------------------------------
+    The token reads are inserted as a **tail right after** each ``create('primary')`` (the same
+    pattern :func:`bluesky.preprocessors.baseline_wrapper` uses).  This preprocessor therefore
+    **never** intercepts ``save``/``drop`` and cannot disturb the bundle accounting of the run, or
+    of any other ``plan_mutator``-based preprocessor whose bundles interleave with it -- in
+    particular the ``baseline`` stream opened by ``SupplementalData`` (``sd.baseline``) at run
+    open/close.
 
     Detectors-only by construction
     ------------------------------
@@ -219,12 +236,63 @@ def scan_name_preprocessor(
         b = base_name() if callable(base_name) else base_name
         return "" if b is None else str(b)
 
-    # Per-run state.  ``in_primary``/``read_objs`` track the current primary bundle so token reads
-    # are injected just before its ``save`` (and a device the plan ALREADY reads is not read
-    # again -- a duplicate read of one object in an Event raises in the RunEngine).  ``inject`` is
-    # the token-device list for THIS run, decided at ``open_run`` from the run's *final* name (so
-    # a user-supplied ``{token}`` name drives its own field recording).
-    state = {"in_primary": False, "read_objs": [], "inject": list(default_inject)}
+    # Per-run state.
+    #   ``inject`` : the token devices to read into each primary bundle of THIS run -- decided at
+    #                ``open_run`` from the run's *final* name (so a user-supplied ``{token}`` name
+    #                records its own tokens), MINUS any device the plan already reads itself (the
+    #                ``detectors``/``motors`` named on the open_run), so we never read one object
+    #                twice in an Event (which raises in the RunEngine).
+    # The reads are inserted as a **tail after** ``create('primary')`` (the same proven pattern as
+    # ``bluesky.preprocessors.baseline_wrapper``), so this preprocessor NEVER intercepts ``save``
+    # and cannot disturb the bundle accounting of the run or of any other interleaved preprocessor
+    # (e.g. the ``baseline`` stream from SupplementalData).
+    state = {"inject": list(default_inject)}
+
+    def _related_names(dev):
+        """All device names in ``dev``'s tree that could share recorded keys with it:
+        ``dev`` itself, every ancestor (walking ``.parent`` to the root), and every descendant
+        sub-component.  Used to decide whether ``dev`` would COLLIDE with a device the plan reads
+        (reading a parent reads its children's keys, and vice-versa, so either direction is a
+        duplicate-key collision in one Event)."""
+        names = set()
+        # self + ancestors
+        node = dev
+        seen = set()
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            nm = getattr(node, "name", None)
+            if nm:
+                names.add(nm)
+            node = getattr(node, "parent", None)
+        # descendants (sub-components), if this is a Device with a component tree
+        walker = getattr(dev, "walk_subdevices", None)
+        if callable(walker):
+            try:
+                for _attr, sub in walker(include_lazy=True):
+                    nm = getattr(sub, "name", None)
+                    if nm:
+                        names.add(nm)
+            except Exception:
+                pass
+        return names
+
+    def _inject_set(name, msg):
+        """Token devices to inject for a run named ``name`` whose open_run is ``msg`` -- excluding
+        any device the plan reads itself (so no duplicate read in a bundle).
+
+        A token device is excluded when it, an ancestor, or a descendant of it is named in the
+        plan's ``detectors``/``motors`` -- because reading a parent device also records its
+        children's keys (and vice-versa), so injecting the token too would collide on those keys
+        (e.g. plan reads ``pil900KW`` and the token device is its ``.motors`` sub-device, whose
+        ``waxs_arc`` key ``pil900KW`` already records)."""
+        devs = _devices_for(name)
+        if not devs:
+            return []
+        already = set(msg.kwargs.get("detectors", []) or [])
+        already |= set(msg.kwargs.get("motors", []) or [])
+        if not already:
+            return list(devs)
+        return [d for d in devs if not (_related_names(d) & already)]
 
     def _mutate(msg):
         cmd = msg.command
@@ -240,7 +308,7 @@ def scan_name_preprocessor(
             if skip_if_tokens and existing_has_tokens:
                 # The user supplied their OWN recorded-field template -> use it verbatim (do not
                 # append the default, do not sanitize away its braces).  Record from ITS tokens.
-                state["inject"] = _devices_for(existing)
+                state["inject"] = _inject_set(existing, msg)
                 return None, None
 
             if existing and (existing == template or existing.endswith(suffix)):
@@ -249,53 +317,36 @@ def scan_name_preprocessor(
                 # loop -- the renamed ``open_run`` we emit below carries the final name, so when
                 # ``plan_mutator`` feeds that (new) msg object back through here it lands in this
                 # branch (or the token branch above) and passes straight through.
-                state["inject"] = _devices_for(existing)
+                state["inject"] = _inject_set(existing, msg)
                 return None, None
 
             if existing:
                 new_name = f"{sanitize_name(existing)}{suffix}"
             else:
                 new_name = template
-            state["inject"] = _devices_for(new_name)
+            state["inject"] = _inject_set(new_name, msg)
 
             def _renamed_open_run():
                 # The response (run uid) to THIS message is what the host plan receives back from
-                # ``open_run`` -- so it must be the last (only) message of the head generator.
+                # ``open_run`` -- so it must be the last (only) message of the head generator.  The
+                # detectors/motors kwargs are preserved, so the re-fed msg recomputes the same
+                # inject set.
                 yield msg._replace(kwargs={**msg.kwargs, "sample_name": new_name})
 
             return _renamed_open_run(), None
 
         if cmd == "create" and msg.kwargs.get("name", primary_stream) == primary_stream:
-            state["in_primary"] = True
-            state["read_objs"] = []
-            return None, None
-
-        if cmd == "read" and state["in_primary"]:
-            # Remember what the plan itself reads in this bundle so we don't re-read it.
-            state["read_objs"].append(msg.obj)
-            return None, None
-
-        if cmd == "save" and state["in_primary"]:
-            state["in_primary"] = False
-            already = state["read_objs"]
-            state["read_objs"] = []
-            to_read = [d for d in state["inject"] if d not in already]
-            if not to_read:
+            # Inject the token reads right AFTER the create (as a tail), so they land inside the
+            # just-opened primary bundle.  ``inject`` already excludes anything the plan reads
+            # itself, so there is no duplicate-read collision and we never touch ``save``.
+            if not state["inject"]:
                 return None, None
 
-            def _inject():
-                # Read the (not-yet-read) token devices into the open bundle, THEN let the
-                # original save run.  ``save`` is last so its response goes to the host plan.
-                for dev in to_read:
-                    yield from bps.read(dev)
-                yield msg
+            def _inject_after_create():
+                for dev in state["inject"]:
+                    yield Msg("read", dev)
 
-            return _inject(), None
-
-        if cmd == "drop" and state["in_primary"]:
-            state["in_primary"] = False
-            state["read_objs"] = []
-            return None, None
+            return None, _inject_after_create()
 
         return None, None
 

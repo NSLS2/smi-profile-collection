@@ -237,6 +237,119 @@ def test_token_device_already_in_detector_list_does_not_crash():
     assert "waxs" in events[-1] and "energy" in events[-1]
 
 
+# --------------------------------------------------------------------------- baseline interleaving
+# Regression for IllegalMessageSequence ("A second 'create' ... until ... 'save'/'drop'"): the
+# preprocessor must coexist with SupplementalData's baseline stream (which opens its own
+# create/save bundles at run open/close).  This is the real beamline config (sd.baseline holds
+# pil2m_pos/waxs, which are ALSO token devices).
+def _primary_events(plan, baseline, token_devices, template):
+    """Run ``plan`` with sd.baseline + the naming PP; return the PRIMARY-stream event data dicts."""
+    from bluesky.preprocessors import SupplementalData
+
+    RE = RunEngine({})
+    RE.preprocessors.append(SupplementalData(baseline=baseline))
+    RE.preprocessors.append(
+        lambda p: scan_name_preprocessor(
+            p, template=template, token_devices=token_devices, base_name="u")
+    )
+    desc, prim, stop = {}, [], []
+
+    def cb(name, doc):
+        if name == "descriptor":
+            desc[doc["uid"]] = doc.get("name")
+        elif name == "event" and desc.get(doc["descriptor"]) == "primary":
+            prim.append(doc["data"])
+        elif name == "stop":
+            stop.append(doc)
+
+    RE(plan, cb)
+    assert stop and stop[-1]["exit_status"] == "success"  # run closed cleanly, no IMS
+    return prim
+
+
+def test_runs_cleanly_with_baseline_stream():
+    energy = SynAxis(name="energy")
+    waxs = SynAxis(name="waxs")
+    sdd = SynAxis(name="sdd")
+    td = {"energy": energy, "waxs": waxs, "sdd": sdd}
+    tmpl = "{energy:.1f}_{waxs:.1f}_{sdd:.1f}"
+
+    # baseline holds devices that are ALSO token devices (the SMI config)
+    prim = _primary_events(bp.count([det], num=2), [waxs, sdd], td, tmpl)
+    assert len(prim) == 2
+    for ev in prim:
+        # injected token fields are present in the PRIMARY events
+        assert "energy" in ev and "waxs" in ev and "sdd" in ev
+
+
+def test_collision_with_baseline_records_field_once():
+    energy = SynAxis(name="energy")
+    waxs = SynAxis(name="waxs")
+    sdd = SynAxis(name="sdd")
+    td = {"energy": energy, "waxs": waxs, "sdd": sdd}
+    tmpl = "{energy:.1f}_{waxs:.1f}_{sdd:.1f}"
+
+    # energy is in the detector list (plan reads it) AND a token; baseline holds waxs/sdd.
+    prim = _primary_events(bp.count([det, energy], num=1), [waxs, sdd], td, tmpl)
+    keys = list(prim[0])
+    assert keys.count("energy") == 1          # recorded exactly once (not double-read)
+    assert "det" in keys and "waxs" in keys and "sdd" in keys
+
+
+def test_scan_over_a_token_device_records_it_once():
+    """Scanning a motor that is also a token device must not double-read it."""
+    energy = SynAxis(name="energy")
+    waxs = SynAxis(name="waxs")
+    sdd = SynAxis(name="sdd")
+    td = {"energy": energy, "waxs": waxs, "sdd": sdd}
+    tmpl = "{energy:.1f}_{waxs:.1f}_{sdd:.1f}"
+
+    # scan OVER waxs (it is the motor) -> waxs recorded once by the scan; energy/sdd injected
+    prim = _primary_events(bp.scan([det], waxs, 0, 1, 3), [sdd], td, tmpl)
+    assert len(prim) == 3
+    for ev in prim:
+        assert list(ev).count("waxs") == 1
+        assert "energy" in ev and "sdd" in ev and "det" in ev
+
+
+def test_parent_detector_with_child_token_does_not_collide():
+    """Plan reads a PARENT detector whose CHILD sub-device is a token (the real pil900KW/waxs case).
+
+    Reading ``pil900KW`` already records its ``.motors`` child's ``waxs_arc`` key, so the
+    preprocessor must NOT also inject the ``waxs`` (== ``pil900KW.motors``) token -- that would
+    collide on ``waxs_arc``.  Exercised here with a generic parent/child device.
+    """
+    from ophyd import Device, Component as Cpt, Signal
+    from ophyd.sim import SynSignal
+
+    class _Child(Device):
+        arc = Cpt(Signal, value=20.0)
+
+    class _Parent(Device):
+        motors = Cpt(_Child)
+        val = Cpt(Signal, value=1.0)
+
+    parent = _Parent(name="pil900KW_like")
+    parent.motors.arc.name = "waxs_arc"          # renamed key, like smibase does
+    waxs = parent.motors                          # token device is the CHILD sub-device
+    energy = SynSignal(name="energy", func=lambda: 9000.0)
+
+    td = {"waxs_arc": waxs, "energy": energy}
+    tmpl = "{waxs_arc:.1f}_{energy:.0f}"
+
+    # 1) plan reads the PARENT; baseline ALSO holds the child (the full SMI shape)
+    prim = _primary_events(bp.count([parent], num=2), [waxs], td, tmpl)
+    assert len(prim) == 2
+    for ev in prim:
+        assert list(ev).count("waxs_arc") == 1    # recorded once (via the parent), not doubled
+        assert "energy" in ev                      # energy still injected
+
+    # 2) plan reads the CHILD directly while energy token is injected
+    prim = _primary_events(bp.count([det, waxs], num=1), [], td, tmpl)
+    assert list(prim[0]).count("waxs_arc") == 1
+    assert "energy" in prim[0] and "det" in prim[0]
+
+
 # --------------------------------------------------------------------------- only-referenced reads
 def test_only_referenced_devices_are_injected():
     """A template that names only energy must not force a WAXS/SDD read."""
