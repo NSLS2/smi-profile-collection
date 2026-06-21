@@ -10,16 +10,19 @@ feedback:
 1. **feedback OFF** (both pitch & roll);
 2. **brake-confirmed energy move** to ``target_eV`` (uses the Part A ``InsertionDevice.move`` fix
    under the hood via ``bps.mv(energy, ...)``), then **verify** the energy actually moved;
-3. **flux gate** -- BPM3 sum must exceed an *energy-dependent* threshold (``<8 keV`` -> ``>10``;
+3. **set the BPM3 electrometer range (gain)** for the new energy (``<10 keV`` -> 1000 uA;
+   ``10-12 keV`` -> 100 uA; ``>=12 keV`` -> 10 uA), confirmed via the readback, so the sum/position
+   are on the right scale before the gate / re-centre;
+4. **flux gate** -- BPM3 sum must exceed an *energy-dependent* threshold (``<8 keV`` -> ``>10``;
    ``8-10 keV`` -> ``>5``; ``10-12 keV`` -> ``>1``; ``>=12 keV`` -> ``>0.1``).  On failure: make
    sure the axes are in position, dwell a
    second, **revert to the previous energy**, and raise (a signal that smaller steps are needed);
-4. **feedback ON**;
-5. wait until ``OVAL`` (the PID control value / piezo command) **settles**;
-6. per axis, if ``|OVAL| > oval_window`` (~3000), **slowly re-centre** with the coarse DCM motors
+5. **feedback ON**;
+6. wait until ``OVAL`` (the PID control value / piezo command) **settles**;
+7. per axis, if ``|OVAL| > oval_window`` (~3000), **slowly re-centre** with the coarse DCM motors
    (m68 roll / m67 pitch) -- small steps, ``<= 1/s``, judged on the *settled* OVAL direction, with
    a **wrong-way abort** -- until ``|OVAL| < oval_target`` (~400);
-7. only then report success.
+8. only then report success.
 
 Message-pure: every read is ``bps.rd``, every move ``bps.mv``/``bps.abs_set``, every dwell
 ``bps.sleep`` -- no blocking ``.get()``/``time.sleep`` -- so it runs under the RunEngine and the
@@ -34,7 +37,7 @@ live in one place.
 import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
 
-from smi_beamline.plans.dcm_diag import flux_threshold
+from smi_beamline.plans.dcm_diag import flux_threshold, range_index
 
 
 __all__ = ["energy_walk", "recenter_axis_plan", "settle_oval_plan"]
@@ -214,7 +217,8 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
 def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
                 flux_settle=1.0, oval_settle_s=3.0, oval_settle_window=300.0,
                 oval_window=None, oval_target=None, recenter_step=0.0001,
-                recenter_rate=1.0, recenter_settle=1.5, move_tol_eV=1.0, verbose=True):
+                recenter_rate=1.0, recenter_settle=1.5, move_tol_eV=1.0,
+                set_bpm3_range=True, verbose=True):
     """Plan: feedback-managed move of the photon energy to ``target_eV`` (eV).
 
     Parameters
@@ -248,6 +252,10 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
         Coarse-motor step (EGU), max steps/s, and per-step settle for the recenter loop.
     move_tol_eV : float
         Tolerance for "the energy actually moved / reached target".
+    set_bpm3_range : bool
+        If true (default), set the BPM3 electrometer range (gain) for each sub-step's energy from
+        the range table, confirming via the readback, before the flux gate.  Set false to leave the
+        range untouched.
 
     Raises
     ------
@@ -286,6 +294,18 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
             raise RuntimeError(
                 f"energy did not reach {sub_target:.2f} eV (at {now_eV:.2f}, "
                 f"|diff| {abs(now_eV - sub_target):.2f} > {move_tol_eV}).")
+
+        # set the BPM3 electrometer range (gain) for this energy BEFORE reading flux / re-centring,
+        # so the sum/position are on the right scale.  Confirm via the readback.
+        if set_bpm3_range and hasattr(diag, "range_sp"):
+            chooser = getattr(diag, "range_index", None) or range_index
+            want_idx = int(chooser(now_eV / 1000.0))
+            cur_idx = yield from _rd(diag.range_rb)
+            if int(cur_idx) != want_idx:
+                yield from bps.mv(diag.range_sp, want_idx)
+                yield from bps.sleep(0.3)                   # let the electrometer settle on the new range
+                got = yield from _rd(diag.range_rb)
+                _emit(f"    BPM3 range -> {int(got)} (wanted {want_idx})")
 
         # flux gate (energy-dependent).  On failure: settle, revert to prev good energy, raise.
         flux = yield from _rd(diag.sumY)

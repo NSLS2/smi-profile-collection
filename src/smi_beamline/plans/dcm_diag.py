@@ -71,6 +71,28 @@ def flux_threshold(energy_keV, table=None):
     return table[-1][1]
 
 
+# --------------------------------------------------------------------------- BPM3 range (gain)
+#: BPM3 electrometer **range enum index** vs photon energy (keV).  ``(max_energy_keV, range_idx)``
+#: rows, checked in order; the first row whose ``max_energy_keV`` the energy is **below** applies.
+#: Index map is 0-based (confirmed live: "100 uA" reads back as 2): ``1 = 10 uA``, ``2 = 100 uA``,
+#: ``3 = 1000 uA`` (full-scale current; smaller index -> more sensitive).  Low energy has more BPM3
+#: flux -> a less sensitive (larger full-scale) range; high energy less flux -> more sensitive.
+DEFAULT_RANGE_TABLE = [
+    (10.0, 3),     # E < 10 keV    -> 1000 uA (index 3)
+    (12.0, 2),     # 10 <= E < 12  -> 100 uA  (index 2)
+    (float("inf"), 1),   # E >= 12 keV -> 10 uA (index 1)
+]
+
+
+def range_index(energy_keV, table=None):
+    """Return the BPM3 electrometer range enum index for ``energy_keV`` from ``table``."""
+    table = table or DEFAULT_RANGE_TABLE
+    for max_e, idx in table:
+        if energy_keV < max_e:
+            return idx
+    return table[-1][1]
+
+
 # --------------------------------------------------------------------------- the diagnostic
 class DCMDiag:
     """Read-only DCM-feedback diagnostics + supervised single-step coarse re-centring.
@@ -141,6 +163,12 @@ class DCMDiag:
         self.posX = EpicsSignalRO(f"{p}PosX:MeanValue_RBV", name="bpm3_posX")
         self.posY = EpicsSignalRO(f"{p}PosY:MeanValue_RBV", name="bpm3_posY")
 
+        # --- BPM3 electrometer range / gain (mbbo set + mbbi readback) -------------------------
+        # Index map is 0-based (confirmed on the live IOC: "100 uA" reads back as 2):
+        #   1 = 10 uA, 2 = 100 uA, 3 = 1000 uA (full-scale current; smaller -> more sensitive).
+        self.range_sp = EpicsSignal(f"{p}Range", name="bpm3_range_sp")
+        self.range_rb = EpicsSignalRO(f"{p}Range_RBV", name="bpm3_range_rb")
+
         # --- coarse in-vacuum DCM motors: roll = m68, pitch = m67 -----------------------------
         self.motor = {
             "roll":  EpicsMotor("XF:12ID:m68", name="dcm_roll_m68"),
@@ -161,10 +189,15 @@ class DCMDiag:
         """Connect all signals (short timeout; raises if the IOC is unreachable)."""
         sigs = (list(self.oval.values()) + list(self.cval.values()) + list(self.setp.values())
                 + list(self.fb_disable.values()) + list(self.motor.values())
-                + [self.sumX, self.sumY, self.posX, self.posY])
+                + [self.sumX, self.sumY, self.posX, self.posY, self.range_sp, self.range_rb])
         for s in sigs:
             s.wait_for_connection(timeout=timeout)
         return self
+
+    def range_index(self, energy_keV):
+        """The BPM3 electrometer range **enum index** for ``energy_keV`` from
+        :data:`DEFAULT_RANGE_TABLE` (or ``self.range_table``)."""
+        return range_index(energy_keV, getattr(self, "range_table", None))
 
     def energy_keV(self):
         """Current photon energy in keV (0.0 if no energy source wired)."""

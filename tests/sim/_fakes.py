@@ -33,6 +33,15 @@ class FakeOval(Signal):
         return super().get()
 
 
+def _make_range_signals(initial=0):
+    """A BPM3 range setpoint + readback pair where writing the setpoint echoes into the readback
+    (like the IOC), without overriding ``Signal.set``/``put`` (so ``bps.mv`` Status stays clean)."""
+    readback = Signal(name="bpm3_range_rb", value=int(initial))
+    setpoint = Signal(name="bpm3_range_sp", value=int(initial))
+    setpoint.subscribe(lambda value, **k: readback.put(int(value)), run=False)
+    return setpoint, readback
+
+
 class FakeDiag:
     OVAL_RANGE = 8192.0
     OVAL_RAIL = {"roll": 4095.0, "pitch": 8191.0}
@@ -63,3 +72,11 @@ class FakeDiag:
             for a, v in oval0.items():
                 self.oval[a].put(v)
         self.sumY = Signal(name="sumY", value=sumY)
+
+        # BPM3 electrometer range (gain): writing the setpoint echoes into the readback, like the
+        # IOC.  Seed the readback to an index that will differ from the table so tests see a switch.
+        self.range_sp, self.range_rb = _make_range_signals(initial=0)
+
+    def range_index(self, energy_keV):
+        from smi_beamline.plans.dcm_diag import range_index
+        return range_index(energy_keV)

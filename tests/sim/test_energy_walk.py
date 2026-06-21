@@ -226,3 +226,33 @@ def test_energy_walk_restores_feedback_on_error(energy):
         pass
     assert str(diag.fb_disable["roll"].get()) == "0"
     assert str(diag.fb_disable["pitch"].get()) == "0"
+
+
+# --------------------------------------------------------------------------- BPM3 range (gain)
+def test_energy_walk_sets_bpm3_range_per_energy_band(energy):
+    """Walking across the range-table boundaries switches the BPM3 range (gain) and ends on the
+    final-energy band, confirmed via the readback."""
+    energy.set(9000.0)                                   # starts in the <10 keV band (idx 3)
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 100.0, "pitch": 100.0})
+    diag.range_rb.put(3)
+    seen = []
+    diag.range_rb.subscribe(lambda value, **k: seen.append(int(value)), run=False)
+    RE = RunEngine({})
+    RE(energy_walk(13000.0, diag=diag, energy=energy, step_eV=500.0, oval_settle_s=0.05,
+                   oval_settle_window=50.0, recenter_settle=0.05, verbose=False))
+    # final energy 13 keV -> 10 uA (index 1)
+    assert int(diag.range_rb.get()) == 1
+    # passed through the 100 uA band (index 2) on the way (10 <= E < 12 keV)
+    assert 2 in seen, seen
+
+
+def test_energy_walk_can_skip_bpm3_range(energy):
+    """set_bpm3_range=False leaves the range untouched."""
+    energy.set(9000.0)
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 100.0, "pitch": 100.0})
+    diag.range_rb.put(3)
+    RE = RunEngine({})
+    RE(energy_walk(13000.0, diag=diag, energy=energy, step_eV=500.0, oval_settle_s=0.05,
+                   oval_settle_window=50.0, recenter_settle=0.05, set_bpm3_range=False,
+                   verbose=False))
+    assert int(diag.range_rb.get()) == 3      # never changed
