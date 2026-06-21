@@ -177,7 +177,7 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
 
 
 # ---------------------------------------------------------------- the main plan
-def energy_walk(target_eV, *, diag=None, energy=None,
+def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
                 flux_settle=1.0, oval_settle_s=3.0, oval_settle_window=300.0,
                 oval_window=None, oval_target=None, recenter_step=0.0001,
                 recenter_rate=1.0, recenter_settle=1.5, move_tol_eV=1.0, verbose=True):
@@ -192,6 +192,12 @@ def energy_walk(target_eV, *, diag=None, energy=None,
         ``None``, one is built (``DCMDiag(energy_source=energy)``).
     energy : positioner, optional
         The ``energy`` pseudo-positioner.  If ``None``, taken from ``diag._energy_source``.
+    step_eV : float
+        Maximum energy sub-step (eV).  The move is progressed to ``target_eV`` in increments of at
+        most ``step_eV`` (default 500), running the full per-step choreography (feedback off ->
+        brake-confirmed move -> flux gate -> feedback on -> settle -> recenter) at each.  Set
+        ``None``/0 to move straight to the target in one step.  On a flux failure mid-walk it
+        reverts to the **previous (last good) sub-step energy**, not all the way to the start.
     flux_settle : float
         Dwell (s) before the flux re-check / before reverting on flux failure.
     oval_settle_s, oval_settle_window : float
@@ -229,64 +235,77 @@ def energy_walk(target_eV, *, diag=None, energy=None,
         if verbose:
             print(msg)
 
-    def _body():
-        start_eV = float(energy.position) if not hasattr(energy.position, "energy") \
-            else float(energy.position.energy)
-        _emit(f"energy_walk: {start_eV:.2f} -> {target_eV:.2f} eV")
+    def _now():
+        p = energy.position
+        return float(p.energy) if hasattr(p, "energy") else float(p)
 
-        # 1) feedback OFF (both)
-        _emit("  feedback OFF")
+    def _one_substep(sub_target, prev_eV):
+        """Move to ``sub_target`` (feedback off), flux-gate, feedback on, settle, recenter.
+        On flux failure: revert to ``prev_eV`` (the last good energy) and raise."""
+        # feedback OFF for the move
         yield from bps.mv(diag.fb_disable["roll"], "1", diag.fb_disable["pitch"], "1")
 
-        # 2) brake-confirmed energy move (Part A path), then verify it moved/reached target
-        _emit("  moving energy (brake-confirmed) ...")
-        yield from bps.mv(energy, float(target_eV))
-        now_eV = float(energy.position) if not hasattr(energy.position, "energy") \
-            else float(energy.position.energy)
-        if abs(now_eV - target_eV) > move_tol_eV:
+        # brake-confirmed energy move (Part A path), verify it reached the sub-target
+        yield from bps.mv(energy, float(sub_target))
+        now_eV = _now()
+        if abs(now_eV - sub_target) > move_tol_eV:
             raise RuntimeError(
-                f"energy did not reach target: at {now_eV:.2f} eV, wanted {target_eV:.2f} eV "
-                f"(|diff| {abs(now_eV - target_eV):.2f} > {move_tol_eV}).")
-        _emit(f"  energy at {now_eV:.2f} eV")
+                f"energy did not reach {sub_target:.2f} eV (at {now_eV:.2f}, "
+                f"|diff| {abs(now_eV - sub_target):.2f} > {move_tol_eV}).")
 
-        # 3) flux gate (energy-dependent).  On failure: settle, revert, raise.
+        # flux gate (energy-dependent).  On failure: settle, revert to prev good energy, raise.
         flux = yield from _rd(diag.sumY)
         thr = flux_threshold(now_eV / 1000.0, diag.flux_table)
-        _emit(f"  flux sumY={flux:.3f}  threshold(@{now_eV/1000:.2f}keV)={thr:.3f}")
+        _emit(f"    {now_eV:.1f} eV: flux sumY={flux:.3f} (min {thr:.3f})")
         if flux <= thr:
-            _emit("  FLUX LOW -> settling, then reverting energy")
             yield from bps.sleep(flux_settle)
             flux = yield from _rd(diag.sumY)               # one more chance after settle
             if flux <= thr:
-                yield from bps.mv(energy, start_eV)        # revert to previous energy
+                yield from bps.mv(energy, float(prev_eV))  # revert to the last good energy
                 raise RuntimeError(
                     f"energy_walk: BPM3 flux {flux:.3f} below threshold {thr:.3f} at "
-                    f"{now_eV:.2f} eV -- reverted to {start_eV:.2f} eV.  Use smaller energy steps.")
+                    f"{now_eV:.2f} eV -- reverted to {prev_eV:.2f} eV.  Use smaller energy steps.")
 
-        # 4) feedback ON (both)
-        _emit("  feedback ON")
+        # feedback ON, settle, recenter the coarse pitch/roll if OVAL is outside its window
         yield from bps.mv(diag.fb_disable["roll"], "0", diag.fb_disable["pitch"], "0")
-
-        # 5) wait for OVAL to settle
-        settled = yield from settle_oval_plan(
+        yield from settle_oval_plan(
             diag, axis="both", oval_window=oval_settle_window, seconds=oval_settle_s,
             timeout=max(oval_settle_s * 3, 6.0))
-        _emit(f"  OVAL {'settled' if settled else 'did NOT settle (continuing)'}")
-
-        # 6) per-axis recenter if |OVAL| exceeds the axis trigger window (well inside the rail).
         for axis in ("roll", "pitch"):
             win = oval_window if oval_window is not None else diag.recenter_window(axis)
             tgt = oval_target if oval_target is not None else getattr(diag, "OVAL_TARGET", 400.0)
             ov = yield from _rd(diag.oval[axis])
             if abs(ov) > win:
-                _emit(f"  {axis}: |OVAL|={abs(ov):.1f} > {win:.0f} -> recentering to <{tgt:.0f}")
+                _emit(f"    {axis}: |OVAL|={abs(ov):.0f} > {win:.0f} -> recentering to <{tgt:.0f}")
                 yield from recenter_axis_plan(
                     diag, axis, target=tgt, step=recenter_step, settle=recenter_settle,
                     rate=recenter_rate, verbose=verbose)
-            else:
-                _emit(f"  {axis}: |OVAL|={abs(ov):.1f} within +/-{win:.0f} (no recenter)")
+        return now_eV
 
-        _emit(f"energy_walk: DONE at {now_eV:.2f} eV")
+    def _substep_targets(start_eV, final_eV):
+        """The sequence of intermediate energies from ``start`` to ``final`` in <= ``step_eV``
+        increments (landing exactly on ``final``).  If ``step_eV`` is None/<=0 or the span fits in
+        one step, just ``[final]``."""
+        span = final_eV - start_eV
+        if not step_eV or step_eV <= 0 or abs(span) <= step_eV:
+            return [final_eV]
+        import math
+        n = int(math.ceil(abs(span) / step_eV))
+        direction = 1.0 if span > 0 else -1.0
+        edges = [start_eV + direction * step_eV * k for k in range(1, n + 1)]
+        edges[-1] = final_eV                                # land exactly on target
+        return edges
+
+    def _body():
+        start_eV = _now()
+        targets = _substep_targets(start_eV, float(target_eV))
+        _emit(f"energy_walk: {start_eV:.2f} -> {float(target_eV):.2f} eV "
+              f"({len(targets)} step(s) of <= {step_eV} eV)")
+        prev = start_eV
+        for i, sub in enumerate(targets, 1):
+            _emit(f"  step {i}/{len(targets)} -> {sub:.2f} eV")
+            prev = yield from _one_substep(sub, prev)
+        _emit(f"energy_walk: DONE at {_now():.2f} eV")
 
     def _restore_feedback_on():
         # Always leave feedback ON, even on abort/error.

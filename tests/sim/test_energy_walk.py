@@ -19,64 +19,7 @@ from ophyd import Signal  # noqa: E402
 from ophyd.sim import SynAxis  # noqa: E402
 
 from smi_beamline.plans.energy_walk import energy_walk, recenter_axis_plan, settle_oval_plan  # noqa: E402
-
-
-# --------------------------------------------------------------------------- fake DCMDiag
-class FakeOval(Signal):
-    """An OVAL signal coupled to a coarse motor: when feedback is ON, moving the motor changes
-    this OVAL by ``gain * motor_delta`` (sign per the real system), **clamped at +/-rail** to model
-    the piezo DAC saturation."""
-    def __init__(self, name, motor, fb_disable, gain, rail=4095.0):
-        super().__init__(name=name, value=0.0)
-        self._motor = motor
-        self._fb = fb_disable           # "0" = feedback ON
-        self._gain = gain
-        self._rail = rail
-        self._last_motor = float(motor.position)
-
-    def get(self):
-        # advance OVAL by the motor change since last read, only while feedback is ON
-        cur_m = float(self._motor.position)
-        dm = cur_m - self._last_motor
-        self._last_motor = cur_m
-        if dm and str(self._fb.get()) == "0":
-            v = float(super().get()) + self._gain * dm
-            v = max(-self._rail, min(self._rail, v))   # clamp at the hardware rail
-            super().put(v)
-        return super().get()
-
-
-class FakeDiag:
-    OVAL_RANGE = 8192.0
-    OVAL_RAIL = {"roll": 4095.0, "pitch": 8191.0}
-    OVAL_RAIL_MARGIN = 200.0
-    OVAL_RECENTER_WINDOW = {"roll": 2000.0, "pitch": 4000.0}
-    OVAL_TARGET = 400.0
-
-    def rail(self, axis):
-        return self.OVAL_RAIL.get(axis, self.OVAL_RANGE)
-
-    def recenter_window(self, axis):
-        return self.OVAL_RECENTER_WINDOW.get(axis, 0.5 * self.rail(axis))
-
-    def __init__(self, energy, sumY=10.0, gains=None, flux_table=None,
-                 oval0=None):
-        gains = gains or {"roll": 600000.0, "pitch": -600000.0}     # verified signs
-        self._energy_source = energy
-        self.assumed_sign = {"roll": +1.0, "pitch": -1.0}
-        self.flux_table = flux_table
-        self.motor = {"roll": SynAxis(name="m68"), "pitch": SynAxis(name="m67")}
-        self.fb_disable = {"roll": Signal(name="fb_roll", value="0"),
-                           "pitch": Signal(name="fb_pitch", value="0")}
-        self.oval = {
-            a: FakeOval(f"oval_{a}", self.motor[a], self.fb_disable[a], gains[a],
-                        rail=self.OVAL_RAIL[a])
-            for a in ("roll", "pitch")
-        }
-        if oval0:
-            for a, v in oval0.items():
-                self.oval[a].put(v)
-        self.sumY = Signal(name="sumY", value=sumY)
+from _fakes import FakeDiag, FakeOval  # noqa: E402,F401  (shared fake DCM-feedback model)
 
 
 @pytest.fixture
@@ -149,6 +92,45 @@ def test_energy_walk_happy_path(energy):
     # feedback left ON
     assert str(diag.fb_disable["roll"].get()) == "0"
     assert str(diag.fb_disable["pitch"].get()) == "0"
+
+
+def test_energy_walk_substeps_a_large_move(energy):
+    """A move larger than step_eV is progressed in <= step_eV increments (each landing exactly),
+    and ends at the final target."""
+    energy.set(9000.0)
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 100.0, "pitch": 100.0})
+    visited = []
+    energy.subscribe(lambda value, **k: visited.append(round(float(value), 1)), run=False)
+    RE = RunEngine({})
+    RE(energy_walk(10000.0, diag=diag, energy=energy, step_eV=500.0, oval_settle_s=0.05,
+                   oval_settle_window=50.0, recenter_settle=0.05, verbose=False))
+    assert abs(float(energy.position) - 10000.0) < 1.0
+    # it stopped at the 9500 sub-step on the way (not a single 9000->10000 jump)
+    assert any(abs(v - 9500.0) < 1.0 for v in visited), visited
+
+
+def test_energy_walk_reverts_to_previous_substep_on_low_flux(energy):
+    """If flux fails at a later sub-step, revert to the PREVIOUS (last good) sub-step, not start."""
+    energy.set(9000.0)
+
+    # flux is fine at <=9500 but drops below threshold beyond that.
+    class FluxByEnergy(Signal):
+        def __init__(self, en, **kw):
+            super().__init__(name="sumY", value=10.0, **kw)
+            self._en = en
+        def get(self):
+            return 10.0 if float(self._en.position) <= 9500.5 else 0.2
+
+    diag = FakeDiag(energy, oval0={"roll": 50.0, "pitch": 50.0})
+    diag.sumY = FluxByEnergy(energy)
+    RE = RunEngine({})
+    with pytest.raises(Exception):
+        RE(energy_walk(10000.0, diag=diag, energy=energy, step_eV=500.0, flux_settle=0.02,
+                       oval_settle_s=0.05, oval_settle_window=50.0, recenter_settle=0.05,
+                       verbose=False))
+    # reverted to 9500 (the last good sub-step), NOT 9000 (the start)
+    assert abs(float(energy.position) - 9500.0) < 1.0, float(energy.position)
+    assert str(diag.fb_disable["roll"].get()) == "0"   # feedback restored ON
 
 
 def test_energy_walk_recenters_when_oval_large(energy):

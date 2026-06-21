@@ -126,3 +126,37 @@ def dcm_diag():
     """Return the live :class:`DCMDiag` (build on first call).  For console diagnostics:
     ``dcm_diag().snapshot()`` / ``.measure_gain('roll')`` / ``.recenter('pitch')``."""
     return _get_dcm_diag()
+
+
+# ---------------------------------------------------------------------------------------------
+# Managed-energy-move PREPROCESSOR -- makes large energy moves in ANY plan (scans, bps.mv(energy,E),
+# queued multi-edge plans) go through energy_walk in 500 eV steps; small moves stay plain.  NOT
+# installed automatically -- enable it once the full managed move is proven on beam.
+# ---------------------------------------------------------------------------------------------
+def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
+    """Install the energy-move preprocessor on ``RE``: every plan energy move with
+    ``|target-current| > threshold_eV`` is routed through the feedback-managed ``energy_walk`` in
+    ``step_eV`` sub-steps (silent unless it errors, with one warning line per large move); smaller
+    moves pass through as plain ``set`` (fine scan steps stay fast).
+
+    Call this when you are ready to make managed moves the default.  Idempotent (re-installing
+    de-dups).  ``disable_managed_energy_moves()`` removes it.
+    """
+    from smi_beamline.plans.energy_move_preprocessor import install_energy_move_preprocessor
+    RE = _smiclasses_context.get_re()
+    diag = kwargs.pop("diag", None) or _get_dcm_diag()
+    walk_kwargs = dict(kwargs.pop("walk_kwargs", {}))
+    walk_kwargs.setdefault("diag", diag)
+    return install_energy_move_preprocessor(
+        RE, energy, threshold_eV=threshold_eV, step_eV=step_eV,
+        walk_kwargs=walk_kwargs, verbose=True, **kwargs)
+
+
+def disable_managed_energy_moves():
+    """Remove the energy-move preprocessor from ``RE`` (energy moves go back to plain ``set``)."""
+    RE = _smiclasses_context.get_re()
+    before = len(RE.preprocessors)
+    RE.preprocessors[:] = [
+        pp for pp in RE.preprocessors if not getattr(pp, "_smi_energy_move", False)]
+    removed = before - len(RE.preprocessors)
+    print(f"managed energy moves: {'removed' if removed else 'were not installed'}")

@@ -326,3 +326,53 @@ queueserver permissions, and document operator usage.
 3. Measured m67/m68 → `OVAL` sign + gain, per axis.
 4. Intensity floor below which feedback must stay off; resulting max step size.
 5. `pos_window` / `intensity_thresh` / `oval_margin` starting values.
+
+---
+
+## 10. Future phase — OAV-referenced per-energy BPM3 setpoint calibration
+
+**Problem.** Centring on the BPM3 feedback (`CVAL → VAL`, OVAL → 0) gets the beam *close*, but not
+*dead on*. The true "beam centred" reference is the **on-axis camera (OAV)** image. The BPM3
+setpoint that corresponds to a truly-centred beam appears to be **energy-dependent** (suspected:
+beam intensity on the BPM and/or an energy dependence of the BPM response). So the feedback
+**setpoint** (`fast_pidX/Y.VAL`, i.e. the BPM3 `PosX/PosY` target) needs a small per-energy offset
+to put the beam dead-centre on the OAV.
+
+**Why it can't run live / always.** Calibrating against the OAV requires a **reference sample with
+a YAG** loaded into the beam and the **shutter open** — which cannot be done during user data
+collection. So this is a **periodic calibration routine**, run on a maintenance/commissioning shift,
+that produces a stored offset-vs-energy curve applied to all subsequent energy moves.
+
+**Proposed calibration plan (`calibrate_bpm3_offsets`).**
+1. Pre-req (operator/guarded): YAG reference sample in, shutter open, feedback ON.
+2. Step the energy across the range in ~100 eV increments (reusing `energy_walk` for the moves).
+3. At each energy: take an **OAV image**, find the beam centroid, and **tweak the BPM3 setpoint**
+   (`fast_pidX.VAL` / `fast_pidY.VAL` — the `PosX/PosY` targets) in a small feedback loop until the
+   OAV centroid is at the defined "dead-centre" pixel (with the loop holding the beam there).
+4. Record the resulting BPM3 `PosX/PosY` setpoint offsets (relative to nominal) **vs energy**.
+5. Optionally also record/choose the **BPM3 electrometer range/gain** per energy band for best
+   responsiveness: `XF:12IDB-BI:2{EM:BPM3}Range_RBV` (read) / its setpoint (write) — a coarser gain
+   at low flux, finer at high, so the loop is responsive across the range.
+
+**Storage & application.**
+* Persist the offset-vs-energy table (and the range-vs-energy bands) via the existing Redis
+  `_config` seam (like the IVU gap-offset table), so they survive restarts and are recorded as
+  device config in every run.
+* Fit a smooth curve (e.g. **spline**) so the offset can be interpolated at any energy.
+* **Apply in the energy move**: after `energy_walk` settles/recentres at the new energy, set the
+  BPM3 `PosX/PosY` setpoint to `nominal + offset(E)` (and select the range band for `E`) so the
+  feedback holds the beam *dead on* per the OAV calibration — not just OVAL≈0.
+
+**Notes / risks.**
+* Centroiding must be robust to YAG artefacts/saturation; define the "dead-centre" pixel once
+  (beam-defining aperture reference).
+* The offset is a **setpoint** tweak, distinct from the OVAL re-centring (which keeps the *piezo*
+  in range); both are needed — recentre keeps headroom, the offset puts the beam on the OAV target.
+* This is a **periodic** routine; the energy move consumes the *stored* curve and never needs the
+  YAG/shutter at run time.
+* Add a dedicated sim model (OAV centroid that depends on the BPM3 setpoint error + an injected
+  per-energy bias) so the calibration loop is testable off-beam.
+
+**Phase placement:** after Part B (`energy_walk`) is in routine use — this refines "close" to
+"dead on" and is gated on a YAG/shutter maintenance window.
+

@@ -4,6 +4,10 @@ Every device here is built through :func:`smi_beamline.devices.device_factory.ma
 with ``force="fake"``, so the construction path is identical to what the live
 profile would use with ``SMI_FAKE_DEVICES=all`` -- but no Channel Access
 connection is ever opened.
+
+The shared fake DCM-feedback model (``FakeDiag``) used by the energy_walk /
+energy-move-preprocessor tests lives in the sibling ``_fakes`` module (importable
+because pytest puts each test directory on ``sys.path``).
 """
 import pytest
 

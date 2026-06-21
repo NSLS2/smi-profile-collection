@@ -200,6 +200,72 @@ def test_set_toggles_feedback_around_move(energy):
     assert "1" in hist and hist[-1] == "0", hist
 
 
+def test_set_toggles_feedback_under_runengine(energy):
+    """The SAME feedback choreography must work when energy is moved INSIDE A PLAN (the scan path):
+    ``RE(bps.mv(energy, E))`` -> Msg('set', energy) -> Energy.set under the RunEngine.
+
+    This is the path a scan / queued plan uses (NOT the direct ``energy.set()`` call), and the
+    re-enable runs from the move-Status completion callback while the RE drives the move.  We
+    assert feedback is disabled ("1") at some point and is back ON ("0") after the run completes.
+    """
+    from bluesky import RunEngine
+    import bluesky.plan_stubs as bps
+
+    # start with feedback ON
+    energy.pitch_feedback_disabled.put("0", wait=True)
+    energy.roll_feedback_disabled.put("0", wait=True)
+
+    hist = {"pitch": [], "roll": []}
+    energy.pitch_feedback_disabled.subscribe(
+        lambda value, **k: hist["pitch"].append(str(value)), run=False)
+    energy.roll_feedback_disabled.subscribe(
+        lambda value, **k: hist["roll"].append(str(value)), run=False)
+
+    # moderate speeds so the move completes in a few seconds (the IOC motors actually ramp)
+    energy.bragg.velocity.put(2.0, wait=True)
+    energy.ivugap.gap_speed.put(2000.0, wait=True)
+
+    target = energy.position[0] + 30.0
+    RE = RunEngine({})
+    RE(bps.mv(energy, target))        # <-- the in-plan move path
+
+    time.sleep(0.5)                   # let the completion callback's re-enable land
+    # feedback was disabled at some point during the move
+    assert "1" in hist["pitch"] and "1" in hist["roll"], hist
+    # and is back ON now that the run finished
+    assert str(energy.pitch_feedback_disabled.get()) == "0", hist["pitch"]
+    assert str(energy.roll_feedback_disabled.get()) == "0", hist["roll"]
+    # the energy actually moved
+    assert abs(energy.position[0] - target) < 2.0
+
+
+def test_set_reenables_feedback_on_failed_move_under_runengine(energy):
+    """If the move FAILS inside a plan, feedback must still be re-enabled (not left off).
+
+    We force a failure by commanding past a real-motor soft limit; the RE raises, and the
+    finalize/completion path must leave feedback ON.
+    """
+    from bluesky import RunEngine
+    import bluesky.plan_stubs as bps
+
+    energy.pitch_feedback_disabled.put("0", wait=True)
+    energy.roll_feedback_disabled.put("0", wait=True)
+
+    # Command an energy whose bragg target is outside the sim bragg limits (-30..30 deg) so the
+    # underlying move is rejected -> Energy.set's error path must re-enable feedback.
+    RE = RunEngine({})
+    bad_energy = 1.0e6   # absurd -> forward() bragg far out of range / move rejected
+    try:
+        RE(bps.mv(energy, bad_energy))
+    except Exception:
+        pass  # expected to fail
+
+    time.sleep(0.3)
+    assert str(energy.pitch_feedback_disabled.get()) == "0", "feedback left OFF after a failed move"
+    assert str(energy.roll_feedback_disabled.get()) == "0", "feedback left OFF after a failed move"
+
+
+
 def test_ivu_brake_disengaged_before_move(energy):
     """InsertionDevice.move disengages the brake before the gap moves, and reaches target (H2)."""
     brake_hist = []
