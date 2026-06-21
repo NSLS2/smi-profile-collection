@@ -20,10 +20,23 @@ here:
 * ``fbk:pitch`` -- DCM pitch feedback-disable signal ("0"/"1")
 * ``fbk:roll``  -- DCM roll feedback-disable signal ("0"/"1")
 
+Brake-fault model (for the "move it twice" bug, Part A)
+-------------------------------------------------------
+One knob lets a test reproduce the real failure where the brake takes time to *mechanically*
+disengage after the SP is written -- so writing the SP and waiting only for the put-ack is NOT
+enough, and code that commands the gap immediately would do so while still braked:
+
+* ``ivu:brake:delay`` (s) -- the readback ``ivu:brake:RB`` only reflects a *disengage* command
+  after this delay (the ``BrakesDisengaged-Sts`` stays "engaged" for ``delay`` seconds after the
+  SP write).  Default 0 (instant, back-compatible).  The fixed ``InsertionDevice.move`` waits for
+  this readback to confirm before commanding the gap.
+
 Run standalone (loopback only, safe)::
 
     python -m tests.iocs.sim_energy_ioc --prefix SMIsim: --interfaces 127.0.0.1
 """
+import time
+
 from textwrap import dedent
 
 from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
@@ -53,11 +66,39 @@ class SimEnergyIOC(PVGroup):
     ivu_brake_sp = pvproperty(value=0, name="ivu:brake", dtype=int)
     ivu_brake_rb = pvproperty(value=0, name="ivu:brake:RB", dtype=int)
 
+    # Fault-model knob (see module docstring).  Default keeps the IOC back-compatible (instant
+    # brake) so existing tests are unaffected.
+    ivu_brake_delay = pvproperty(value=0.0, name="ivu:brake:delay")     # s before Sts disengages
+
+    #: wall-clock time at which the brake readback is allowed to become "disengaged" (set when a
+    #: disengage SP is written; the periodic scan flips the RB once we pass it).
+    _brake_disengage_at = None
+
     @ivu_brake_sp.putter
     async def ivu_brake_sp(self, instance, value):
-        # mirror the SP onto the readback so BrakesDisengaged-Sts reflects the command
-        await self.ivu_brake_rb.write(value)
+        # Engage is immediate; disengage is delayed by ivu:brake:delay before the readback (Sts)
+        # reflects it -- modelling the mechanical brake taking time to physically release.
+        if int(value) == 0:
+            self._brake_disengage_at = None
+            await self.ivu_brake_rb.write(0)
+        else:
+            delay = float(self.ivu_brake_delay.value or 0.0)
+            if delay <= 0:
+                self._brake_disengage_at = None
+                await self.ivu_brake_rb.write(value)
+            else:
+                # leave RB engaged (0); the scan below flips it to `value` after `delay`.
+                self._brake_disengage_at = time.monotonic() + delay
+                await self.ivu_brake_rb.write(0)
         return value
+
+    @ivu_brake_rb.scan(period=0.05)
+    async def ivu_brake_rb(self, instance, async_lib):
+        # Flip the readback to disengaged once the (delayed) release time has passed.
+        if (self._brake_disengage_at is not None
+                and time.monotonic() >= self._brake_disengage_at):
+            self._brake_disengage_at = None
+            await self.ivu_brake_rb.write(1)
 
     # --- IVU gap speed: SP + readback ----------------------------------------------------
     ivu_gapspeed_sp = pvproperty(value=50.0, name="ivu:gapspeed")

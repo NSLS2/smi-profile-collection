@@ -201,16 +201,52 @@ def test_set_toggles_feedback_around_move(energy):
 
 
 def test_ivu_brake_disengaged_before_move(energy):
-    """InsertionDevice.move disengages the brake before the gap moves (H2)."""
+    """InsertionDevice.move disengages the brake before the gap moves, and reaches target (H2)."""
     brake_hist = []
     energy.ivugap.brake.subscribe(
         lambda value, **k: brake_hist.append(value), run=False)
 
     start = energy.ivugap.position
     st = energy.ivugap.move(start + 200.0, wait=False)
-    st.wait(timeout=30)
+    st.wait(timeout=10)
     assert any(int(v) == 1 for v in brake_hist), "brake was never disengaged"
-    assert abs(energy.ivugap.position - (start + 200.0)) < 1.0
+    # the gap actually REACHED the target (not just "Status succeeded")
+    assert abs(energy.ivugap.position - (start + 200.0)) <= energy.ivugap.move_deadband
+
+
+def test_ivu_move_waits_for_brake_confirm(energy):
+    """With a brake that takes time to *confirm* disengaged, the gap must not start moving until
+    BrakesDisengaged-Sts reads disengaged -- and must still reach target.
+
+    This is the core of the Part A fix: the old code wrote the brake SP and (CA-ack only) issued
+    the gap immediately, so the gap could be commanded while still braked.  The sim IOC's
+    ``ivu:brake:delay`` holds the Sts readback "engaged" for a while after the SP write.
+    """
+    brake_delay = EpicsSignal(PREFIX + "ivu:brake:delay", name="brake_delay")
+    brake_delay.wait_for_connection(timeout=5)
+    brake_delay.put(0.8, wait=True)            # brake confirms ~0.8 s after the SP write
+    try:
+        # Slow the gap so motion is observable; park the brake engaged first.
+        energy.ivugap.gap_speed.put(2000.0, wait=True)
+        energy.ivugap.brake.put(0, wait=True)  # engaged
+        time.sleep(0.2)
+
+        start = energy.ivugap.position
+        st = energy.ivugap.move(start + 300.0, wait=False)
+
+        # At 0.4 s the brake has NOT yet confirmed (delay 0.8 s) -> the gap must not have moved.
+        time.sleep(0.4)
+        moved_early = abs(energy.ivugap.position - start) > energy.ivugap.move_deadband
+        assert not moved_early, (
+            "gap moved before the brake confirmed disengaged (pos moved %.1f um)"
+            % (energy.ivugap.position - start))
+
+        st.wait(timeout=10)
+        # ...but it does reach target once the brake confirms.
+        assert abs(energy.ivugap.position - (start + 300.0)) <= energy.ivugap.move_deadband
+    finally:
+        brake_delay.put(0.0, wait=True)        # restore instant-brake for other tests
+
 
 
 def test_small_move_axes_finish_together(energy):
