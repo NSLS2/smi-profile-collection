@@ -58,7 +58,56 @@ def test_recenter_aborts_when_stuck_at_rail_wrong_sign(energy):
     RE = RunEngine({})
     with pytest.raises(Exception):
         RE(recenter_axis_plan(diag, "roll", target=400.0, settle=0.03, sample_interval=0.02,
-                              max_steps=20, verbose=False))
+                              max_steps=40, rail_max_steps=10, verbose=False))
+
+
+def test_recenter_aborts_when_flux_falls_and_stays_down_at_rail(energy):
+    """While stuck rail-stepping, if the (settled) flux falls and STAYS down, abort on flux (before
+    the rail-stuck step budget)."""
+    from ophyd import Signal
+
+    # Keep OVAL pinned at the rail every step (so it KEEPS rail-stepping): use a coupling that
+    # drives further into the clamped +rail (like the wrong-sign case), so at_rail stays True.
+    diag = FakeDiag(energy, gains={"roll": +600000.0, "pitch": -600000.0}, oval0={"roll": 4095.0})
+    diag.assumed_sign["roll"] = -1.0    # 'toward 0' pushes INTO +rail -> OVAL stays at 4095
+
+    # Flux collapses as soon as we start stepping and stays down.
+    class CollapsedFlux(Signal):
+        def __init__(self, motor, **kw):
+            super().__init__(name="sumY", value=10.0, **kw)
+            self._m = motor
+            self._m0 = float(motor.position)
+        def get(self):
+            return 10.0 if abs(float(self._m.position) - self._m0) < 1e-6 else 0.5
+
+    diag.sumY = CollapsedFlux(diag.motor["roll"])
+    RE = RunEngine({})
+    with pytest.raises(Exception, match="intensity fell and stayed down"):
+        RE(recenter_axis_plan(diag, "roll", target=400.0, settle=0.03, sample_interval=0.02,
+                              max_steps=40, rail_max_steps=10,
+                              flux_drop_frac=0.5, flux_drop_consec=2, verbose=False))
+
+
+def test_recenter_tolerates_a_single_flux_dip_at_rail(energy):
+    """A one-step flux dip (then recovery) while rail-stepping must NOT abort (it converges)."""
+    from ophyd import Signal
+
+    diag = FakeDiag(energy, oval0={"roll": 4095.0})    # correct sign -> escapes rail quickly
+
+    class DipOnceFlux(Signal):
+        def __init__(self, **kw):
+            super().__init__(name="sumY", value=10.0, **kw)
+            self._reads = 0
+        def get(self):
+            self._reads += 1
+            return 2.0 if self._reads == 2 else 10.0   # a single low read, then fine
+
+    diag.sumY = DipOnceFlux()
+    RE = RunEngine({})
+    RE(recenter_axis_plan(diag, "roll", target=400.0, settle=0.03, sample_interval=0.02,
+                          rail_max_steps=10, flux_drop_frac=0.5, flux_drop_consec=2,
+                          verbose=False))
+    assert abs(diag.oval["roll"].get()) < 400.0
 
 
 def test_recenter_aborts_on_wrong_sign(energy):

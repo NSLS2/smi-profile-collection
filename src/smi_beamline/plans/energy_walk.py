@@ -79,19 +79,26 @@ def settle_oval_plan(diag, axis="both", oval_window=300.0, seconds=2.0, interval
 def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1.0,
                        max_steps=200, max_step=0.002, oval_abort=None, deadband=10.0,
                        sample_interval=0.15, adapt=True, verbose=True,
-                       rail_step_factor=10.0, rail_max_steps=3):
+                       rail_step_factor=10.0, rail_max_steps=10,
+                       flux_drop_frac=0.5, flux_drop_consec=2, flux_floor=None):
     """Message-pure version of ``DCMDiag.recenter``: step the coarse motor for ``axis`` until
     ``|OVAL[axis]| < target``, judging on the **settled** OVAL direction (waits ``settle`` s so a
     brief wrong-way transient does not abort), with an adaptive step and a wrong-way abort.
 
     At-the-rail behaviour: when ``|OVAL|`` is saturated at the rail, the small adaptive steps barely
     register (the loop is clamped), so the step is enlarged by ``rail_step_factor`` (default 10x,
-    still clamped to ``rail_step_factor * max_step``) to decisively pull OVAL off the rail; only
-    ``rail_max_steps`` (default 3) such rail steps are allowed before aborting (vs. many ineffective
-    small ones).
+    bounded by ``max_step``) to decisively pull OVAL off the rail; up to ``rail_max_steps`` (default
+    10) such rail steps are allowed before aborting.
+
+    Beam-intensity guard (while rail-stepping): the enlarged coarse moves can perturb the beam, so a
+    single-step flux dip is tolerated, but if the **settled** flux on ``diag.sumY`` falls below
+    ``flux_drop_frac`` of its baseline (captured at entry) -- or below an absolute ``flux_floor`` --
+    for ``flux_drop_consec`` consecutive rail steps (i.e. it *fell and stayed down*), the recenter
+    **aborts** (the rail-stepping is losing the beam).
 
     Raises ``RuntimeError`` on a *settled* wrong-way step, on ``|OVAL|`` reading *beyond* the axis
-    hardware rail, or if ``max_steps``/``rail_max_steps`` is hit without progress.
+    hardware rail, on a sustained flux drop while rail-stepping, or if ``max_steps`` /
+    ``rail_max_steps`` is hit without progress.
     """
     # Default abort = the axis rail + margin (per-axis: roll ~+/-4095, pitch ~+/-8191).  Being AT
     # the rail is allowed -- that's when stepping toward 0 matters; only a reading clearly beyond
@@ -106,6 +113,8 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
     mot = diag.motor[axis]
     cur_step = abs(step)
     rail_steps = 0          # how many enlarged "at the rail" steps we've taken
+    flux_low_run = 0        # consecutive rail steps with flux below the floor (fell & stayed down)
+    flux_baseline = None    # flux at entry (set on the first rail step we take)
 
     for i in range(1, max_steps + 1):
         cur = yield from _rd(sig)
@@ -129,6 +138,8 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
                     f"{axis}: OVAL still at the rail (~{before:+.0f}) after {rail_max_steps} "
                     f"enlarged steps -- not coming off (wrong sign? / piezo cannot recover).  "
                     "Aborting; re-check by hand.")
+            if flux_baseline is None:                   # baseline flux before we start perturbing
+                flux_baseline = yield from _rd(diag.sumY)
             # 10x the BASE step (not the adapted one), bounded by max_step.
             step_mag = min(abs(step) * rail_step_factor, abs(max_step))
         else:
@@ -165,9 +176,31 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
                 f"a {motor_delta:+.5f} step on {mot.name} -- sign/coupling not as assumed; "
                 "aborting before the piezo is driven into the rail.")
 
+        # Beam-intensity guard while rail-stepping: the enlarged coarse moves can briefly perturb
+        # the beam, so tolerate a single-step dip, but abort if the (settled) flux FELL AND STAYED
+        # DOWN -- below flux_drop_frac of the baseline (or below an absolute flux_floor) for
+        # flux_drop_consec consecutive rail steps.
+        if at_rail and flux_baseline is not None:
+            fnow = yield from _rd(diag.sumY)
+            rel_floor = flux_drop_frac * flux_baseline
+            floor = max(rel_floor, flux_floor) if flux_floor is not None else rel_floor
+            if fnow < floor:
+                flux_low_run += 1
+                if verbose:
+                    print(f"    flux low while rail-stepping: {fnow:.3f} < {floor:.3f} "
+                          f"({flux_low_run}/{flux_drop_consec})")
+                if flux_low_run >= flux_drop_consec:
+                    raise RuntimeError(
+                        f"{axis}: beam intensity fell and stayed down while rail-stepping "
+                        f"(sumY {fnow:.3f} < {floor:.3f} for {flux_low_run} steps; baseline "
+                        f"{flux_baseline:.3f}) -- aborting recenter (losing the beam).")
+            else:
+                flux_low_run = 0
+
         # Once OVAL has come off the rail, reset the rail-step counter and resume normal adapt.
         if not (abs(after) >= (rail - margin)):
             rail_steps = 0
+            flux_low_run = 0
             if adapt and abs(gain) > 1e-9:
                 want_dOVAL = -0.5 * after                # aim halfway to 0 (damped)
                 cur_step = max(min(abs(want_dOVAL / gain), max_step), abs(step) * 0.25)
@@ -279,7 +312,7 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
                 _emit(f"    {axis}: |OVAL|={abs(ov):.0f} > {win:.0f} -> recentering to <{tgt:.0f}")
                 yield from recenter_axis_plan(
                     diag, axis, target=tgt, step=recenter_step, settle=recenter_settle,
-                    rate=recenter_rate, verbose=verbose)
+                    rate=recenter_rate, verbose=verbose, flux_floor=thr)
         return now_eV
 
     def _substep_targets(start_eV, final_eV):
