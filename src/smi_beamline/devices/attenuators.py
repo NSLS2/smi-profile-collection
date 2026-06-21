@@ -409,8 +409,12 @@ class AttenuatorSet(Device):
     energy_eV = Cpt(Signal, value=0.0, kind="normal")
     #: comma-separated text naming each inserted foil + material + thickness.
     description = Cpt(Signal, value="none", kind="normal")
-    #: list of inserted foil labels (e.g. ['1_3', '2_5']).
-    inserted = Cpt(Signal, value=[], kind="normal")
+    #: comma-separated inserted foil labels (e.g. "1_3,2_5"); "" when none are inserted.
+    #: Stored as a STRING (not a list) so the document-stream data key has a fixed shape --
+    #: a variable-length list makes ophyd describe it as a (N,)-array whose N changes with the
+    #: number of inserted foils, which databroker's per-event shape validation rejects
+    #: (BadShapeMetadata).  The machine-readable list is still available from ``compute()``.
+    inserted = Cpt(Signal, value="", kind="normal")
     #: the most recently *requested* factor (0 -> never set via this device).
     requested_factor = Cpt(Signal, value=0.0, kind="config")
     #: True if the achieved factor was within ``tolerance`` of the last request.
@@ -498,7 +502,7 @@ class AttenuatorSet(Device):
         self.attenuation_factor.put(factor)
         self.transmission.put(trans)
         self.description.put(desc)
-        self.inserted.put(list(labels))
+        self.inserted.put(",".join(labels))
 
         state = {"attenuation_factor": factor, "transmission": trans,
                  "energy_eV": energy, "description": desc, "inserted": list(labels)}

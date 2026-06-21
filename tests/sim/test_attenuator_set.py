@@ -116,7 +116,7 @@ def test_set_factor_selects_and_drives_foils(attset):
     st = att.set(100)
     st.wait(timeout=10)
     assert st.success
-    inserted = att.inserted.get()
+    inserted = att.inserted.get().split(",") if att.inserted.get() else []
     assert 1 <= len(inserted) <= 4
     # the foils the device says are in are actually Open on the banks
     for label in inserted:
@@ -142,7 +142,7 @@ def test_set_one_retracts_all(attset):
     att.set(100).wait(timeout=10)
     assert att.inserted.get()                      # something is in
     att.set(1).wait(timeout=10)
-    assert att.inserted.get() == []                # all retracted
+    assert att.inserted.get() == ""                # all retracted
     assert att.attenuation_factor.get() == 1.0
     for bank in (b1, b2):
         assert bank.inserted_foils() == []
@@ -156,7 +156,7 @@ def test_set_for_planned_energy(attset):
     st = att.set_for_energy(50, 18000.0)
     st.wait(timeout=10)
     assert att.energy_eV.get() == 18000.0
-    assert set(att.inserted.get()) == set(labels)
+    assert set(att.inserted.get().split(",")) == set(labels)
 
 
 def test_set_out_of_tolerance_warns_but_applies(attset, caplog):
@@ -165,7 +165,7 @@ def test_set_out_of_tolerance_warns_but_applies(attset, caplog):
     att.set(3.3).wait(timeout=10)
     # it still applied a combination and flagged out-of-tolerance
     assert att.within_tolerance.get() is False
-    assert att.inserted.get() != []                 # the best-effort combo was applied
+    assert att.inserted.get() != ""                 # the best-effort combo was applied
     # and the reported factor is the ACTUAL achieved one (used the closest combo)
     assert att.attenuation_factor.get() != 1.0
 
