@@ -1,8 +1,11 @@
 # DCM beam-position feedback & reliable energy moves — design and commissioning plan
 
-**Status:** design only. *No code in the repo has been changed by this document.* It captures
-the analysis, the discovered PVs, the proposed architecture, the complexities, and a phased
-commissioning plan so the work can be reviewed and scheduled before any implementation.
+**Status:** Part A (IVU brake fix) and Part B (managed `energy_walk` + per-energy BPM3 range,
+installed by default via the energy-move preprocessor) are **implemented and live-validated 8 ↔
+16.1 keV** — see the §7 phase markers and §8 for what shipped vs the original proposal. Still open:
+the Pilatus-threshold finishing touches (§11), moving calibration to the Redis `_config` seam, and
+the OAV setpoint-calibration phase (§10). The architecture in §5 is kept as the original proposal /
+future-refactor target.
 
 **Scope.** Two related problems:
 
@@ -336,8 +339,8 @@ extended sim IOC first; then with beam over progressively larger spans. **Live-v
 
 **Phase 5 — Integrate & expose. ✅ DONE (default).** Folded in via the managed-move preprocessor —
 installed by default at startup so every plan's >500 eV energy move uses `energy_walk`; console
-`disable_managed_energy_moves()` opts out.  *Remaining:* move calibration to the Redis `_config`
-seam, and the §10 OAV setpoint-calibration phase.
+`disable_managed_energy_moves()` opts out.  *Remaining:* the Pilatus-threshold finishing touches
+(§11), move calibration to the Redis `_config` seam, and the §10 OAV setpoint-calibration phase.
 
 ---
 
@@ -413,4 +416,51 @@ that produces a stored offset-vs-energy curve applied to all subsequent energy m
 
 **Phase placement:** after Part B (`energy_walk`) is in routine use — this refines "close" to
 "dead on" and is gated on a YAG/shutter maintenance window.
+
+---
+
+## 11. Finishing touches (Pilatus thresholds tied to managed moves)
+
+Two small, closely-related follow-ups to the managed energy move. Both are about keeping the
+**Pilatus camera thresholds/gain in step with the photon energy** — today only the manual
+`set_energy()` does this, so a managed move (or a camserver restart) can leave the detectors on a
+stale threshold. Treat these as finishing touches on this work, not a new phase.
+
+### 11.1 Set the camera thresholds after a managed (large) move
+
+* **What.** When `energy_walk` finishes a managed move, set the Pilatus threshold/gain for the new
+  energy — the same thing `set_energy()` does today via `set_energy_cam(cam, en_ev, ...)`
+  (`src/smi_beamline/devices/pilatus.py:752`: writes `cam_energy` / `threshold_energy` / `gain_menu`,
+  pulses `threshold_apply`, and stores `energyset`). Today `set_energy()`
+  (`startup/smibase/pilatus.py:277`) moves energy **and** sets both cameras (`pil900KW`, `pil2M`);
+  the managed-move path (preprocessor → `energy_walk`) currently moves energy **only**.
+* **When.** **Only for big moves**, and **after the move is complete** (after the final
+  settle/recentre), so threshold writes don't churn on every fine scan step. Natural home: a finalize
+  step in `energy_walk` (or a hook the preprocessor calls once the walk returns), gated like the move
+  itself (`|Δe| > threshold_eV`). Threshold setting is a plain `put`, so it composes fine with the
+  message-pure plan or can run in the finalize.
+* **Notes.** Reuse `set_energy_cam`'s existing energy→threshold/gain logic (don't duplicate the
+  bands); apply to **all** detectors `set_energy()` covers. The cam already remembers the energy via
+  `energyset` (`pilatus.py:61`/`:74`), which feeds 11.2.
+
+### 11.2 On camserver restart, verify thresholds vs current energy and warn
+
+* **What.** When the camserver is (re)started, **check** that the loaded threshold/energy/gain match
+  what the **current beamline energy** requires, and **warn loudly if not**. For now just warn (and
+  log the expected-vs-actual); optionally **fix** later (re-apply via `set_energy_cam`).
+* **Where.** This is exactly the standing `ToDo` in the restart path: `restartWAXS()` /`startWAXS()`
+  currently run the **camserver defaults** and never reconcile them with the beamline energy
+  (`startup/smibase/pilatus.py:209`, `:273`–`:275` — the commented
+  `set_energy_cam(pil900KW.cam, energy.get())`). After a restart, read back the camera's
+  threshold/energy (`cam.threshold_read` / `cam.energy_read`, e.g. via `read_threshold()`
+  `pilatus.py:231`) and compare to the values `set_energy_cam` would pick for the current energy.
+* **Behaviour.** Compare within a small tolerance (threshold is in keV); on mismatch, print a clear
+  warning naming the detector, the current energy, and expected-vs-actual threshold/gain. Default
+  to **warn-only** (don't silently re-drive the detector during a restart); leave an opt-in to
+  auto-correct (`set_energy_cam(cam, energy.get())`) for later. The remembered `energyset` value is a
+  convenient cross-check that the restart landed on the right energy.
+
+**Why grouped here.** Both items make the detector thresholds track energy the way the feedback now
+tracks the beam — small, safe, and best done right after the managed move lands. No new calibration
+or beam-time gating required (unlike §10).
 
