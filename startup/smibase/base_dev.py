@@ -49,7 +49,13 @@ def patch_resource(doc):
 
 # Configure a Tiled writing client
 tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi/migration"]
-tw = TiledWriter(tiled_writing_client_sql, batch_size=1, patches = {'resource': patch_resource, 'descriptor': patch_descriptor})
+# batch_size: number of Events / StreamDatums buffered before a bulk write to Tiled.  Set high
+# for fast bulk migration (far fewer, larger writes).  NOTE: batching is purely COUNT-based --
+# there is NO time-based flush, so a stream is written only when it reaches batch_size OR when the
+# run STOPS (stop() flushes any partial batch).  So most normal runs (< batch_size points) are
+# written all-at-once at run-stop, and they do NOT appear in Tiled mid-run; a crash before the
+# stop document would lose that run's buffered events.  For live streaming you'd want <=1 instead.
+tw = TiledWriter(tiled_writing_client_sql, batch_size=10000, patches = {'resource': patch_resource, 'descriptor': patch_descriptor})
 
 # Optional: Thread-safe wrapper for TiledWriter
 tw = BufferingWrapper(tw)
