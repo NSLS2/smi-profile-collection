@@ -86,3 +86,43 @@ def move_energy(target_energy):
     the enclosing function a generator / run it under ``RE``).
     """
     yield from bps.mv(energy, target_energy)
+
+
+# ---------------------------------------------------------------------------------------------
+# Feedback-managed energy move (Part B) -- exposed for commissioning, NOT yet the default path.
+# Use ``RE(energy_walk(E))`` to test the full choreography (feedback off -> brake-confirmed move
+# -> flux gate -> feedback on -> OVAL settle -> recenter coarse pitch/roll if |OVAL|>3000).  Once
+# proven on beam, route move_energy() through it.
+# ---------------------------------------------------------------------------------------------
+from smi_beamline.plans.energy_walk import energy_walk as _energy_walk_plan
+
+#: Lazily-built DCMDiag (holds the BPM3/OVAL/feedback/m67-m68 PVs + verified signs).  Built on
+#: first use so importing this module never blocks on a CA connect to BPM3.
+_dcm_diag = None
+
+
+def _get_dcm_diag():
+    global _dcm_diag
+    if _dcm_diag is None:
+        from smi_beamline.plans.dcm_diag import DCMDiag
+        _dcm_diag = DCMDiag(energy_source=energy)
+    return _dcm_diag
+
+
+def energy_walk(target_eV, **kwargs):
+    """Plan: feedback-managed move of the photon energy to ``target_eV`` (eV).
+
+    Thin wrapper over :func:`smi_beamline.plans.energy_walk.energy_walk` that supplies the live
+    ``energy`` positioner and a (lazily-built, cached) ``DCMDiag``.  See that function for the full
+    choreography and parameters.  Run as ``RE(energy_walk(E))``.
+
+    Commissioning helper -- not yet wired into ``move_energy``/the default energy move.
+    """
+    diag = kwargs.pop("diag", None) or _get_dcm_diag()
+    return (yield from _energy_walk_plan(target_eV, diag=diag, energy=energy, **kwargs))
+
+
+def dcm_diag():
+    """Return the live :class:`DCMDiag` (build on first call).  For console diagnostics:
+    ``dcm_diag().snapshot()`` / ``.measure_gain('roll')`` / ``.recenter('pitch')``."""
+    return _get_dcm_diag()

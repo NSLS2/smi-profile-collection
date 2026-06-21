@@ -85,8 +85,28 @@ class DCMDiag:
         Override :data:`DEFAULT_FLUX_TABLE`.
     """
 
-    #: practical OVAL working window (|OVAL| beyond this ~ "maxed out"); for display only.
-    OVAL_RANGE = 4000.0
+    #: Per-axis OVAL hardware rail (|OVAL| saturates here -- the piezo DAC limit).  MEASURED on
+    #: the live system: roll rails at ~+/-4095 (12-bit), pitch at ~+/-8191.  Being AT the rail is
+    #: exactly when re-centring (toward 0) matters most, so the loop steps from the rail; it only
+    #: refuses a value that reads *beyond* the rail by ``OVAL_RAIL_MARGIN`` (a garbage/disconnected
+    #: reading).  ``OVAL_RANGE`` is kept as a back-compat fallback for any axis not in the dict.
+    OVAL_RANGE = 8192.0
+    OVAL_RAIL = {"roll": 4095.0, "pitch": 8191.0}
+    OVAL_RAIL_MARGIN = 200.0   # allow readings up to rail+margin before calling them invalid
+
+    #: Per-axis recenter-TRIGGER threshold: re-centre an axis when |OVAL| exceeds this.  Set well
+    #: inside the rail (~half) to stay out of the nonlinear region near the edge -- roll ~2000 (rail
+    #: 4095), pitch ~4000 (rail 8191).  ``OVAL_TARGET`` is how far in we then drive it.
+    OVAL_RECENTER_WINDOW = {"roll": 2000.0, "pitch": 4000.0}
+    OVAL_TARGET = 400.0
+
+    def rail(self, axis):
+        """The OVAL saturation limit (|OVAL|) for ``axis``."""
+        return self.OVAL_RAIL.get(axis, self.OVAL_RANGE)
+
+    def recenter_window(self, axis):
+        """The |OVAL| above which ``axis`` should be re-centred (per-axis, well inside the rail)."""
+        return self.OVAL_RECENTER_WINDOW.get(axis, 0.5 * self.rail(axis))
 
     def __init__(self, bpm3_prefix="XF:12IDB-BI:2{EM:BPM3}", energy_source=None, flux_table=None):
         p = bpm3_prefix
@@ -290,11 +310,15 @@ class DCMDiag:
         Safety:
         * ``step`` is a small RELATIVE move (default 0.0001 EGU) on m68 (roll) / m67 (pitch), clamped
           to ``max_step``; direction comes from :attr:`assumed_sign`.
-        * ``oval_abort`` (default ``OVAL_RANGE``): refuse to step if ``|OVAL|`` is beyond it.
+        * ``oval_abort`` (default: the axis rail + margin): refuse to step only if ``|OVAL|`` reads
+          *beyond* the hardware rail (a garbage/disconnected value).  Being AT the rail is allowed
+          -- that is exactly when stepping toward 0 matters.
         """
         if axis not in ("roll", "pitch"):
             raise ValueError("axis must be 'roll' or 'pitch'")
-        oval_abort = self.OVAL_RANGE if oval_abort is None else oval_abort
+        # Default abort threshold = the axis hardware rail + a margin.  At/near the rail we still
+        # step (toward 0); only a reading clearly beyond the rail is treated as invalid.
+        oval_abort = (self.rail(axis) + self.OVAL_RAIL_MARGIN) if oval_abort is None else oval_abort
         deadband = (10.0 if deadband is None else deadband)   # OVAL units of noise to ignore
         sig = self.oval[axis]
         mot = self.motor[axis]
@@ -302,8 +326,9 @@ class DCMDiag:
         before = float(sig.get())
         if abs(before) > oval_abort:
             raise RuntimeError(
-                f"{axis} OVAL {before:.1f} already beyond safe range +/-{oval_abort:.0f}; "
-                "refuse to step (investigate before automating).")
+                f"{axis} OVAL {before:.1f} reads beyond the hardware rail "
+                f"(+/-{self.rail(axis):.0f}); treating as invalid -- investigate (PV/connection?) "
+                "before stepping.")
 
         want = -1.0 if before > 0 else 1.0       # desired sign of delta_oval (toward 0)
         motor_dir = want / self.assumed_sign[axis]
