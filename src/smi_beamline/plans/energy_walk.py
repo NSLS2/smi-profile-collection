@@ -11,7 +11,7 @@ feedback:
 2. **brake-confirmed energy move** to ``target_eV`` (uses the Part A ``InsertionDevice.move`` fix
    under the hood via ``bps.mv(energy, ...)``), then **verify** the energy actually moved;
 3. **flux gate** -- BPM3 sum must exceed an *energy-dependent* threshold (``<8 keV`` -> ``>10``;
-   ``8-10 keV`` -> ``>5``; ``10-14 keV`` -> ``>1``; ``>=14 keV`` -> ``>0.1``).  On failure: make
+   ``8-10 keV`` -> ``>5``; ``10-12 keV`` -> ``>1``; ``>=12 keV`` -> ``>0.1``).  On failure: make
    sure the axes are in position, dwell a
    second, **revert to the previous energy**, and raise (a signal that smaller steps are needed);
 4. **feedback ON**;

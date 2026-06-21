@@ -57,8 +57,8 @@ from ophyd import EpicsSignal, EpicsSignalRO, EpicsMotor
 DEFAULT_FLUX_TABLE = [
     (8.0, 10.0),     # E < 8 keV    -> sum must be > 10
     (10.0, 5.0),     # 8 <= E < 10  -> sum must be > 5
-    (14.0, 1.0),     # 10 <= E < 14 -> sum must be > 1
-    (float("inf"), 0.1),   # E >= 14 keV -> sum must be > 0.1
+    (12.0, 1.0),     # 10 <= E < 12 -> sum must be > 1
+    (float("inf"), 0.1),   # E >= 12 keV -> sum must be > 0.1
 ]
 
 
