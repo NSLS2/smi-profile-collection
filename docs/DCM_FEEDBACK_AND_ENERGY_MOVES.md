@@ -201,6 +201,20 @@ verify centred at target; leave feedback ON
 * Direction & magnitude of the coarse move come from the **m67/m68 → OVAL calibration** measured
   in Phase 0 (see §6). Getting the sign wrong drives the piezo *into* the rail and loses the
   beam — this is the single most safety-critical number.
+* **Per-energy BPM3 range (gain).** As each sub-step lands — *before* the flux gate and recentre —
+  `energy_walk` sets the BPM3 electrometer range to match the new energy band and confirms it via
+  `Range_RBV`, so the sum/position are on the right scale (low energy = more flux = coarser range;
+  high energy = less flux = finer range):
+
+  | photon energy | BPM3 range | enum index (0-based) |
+  |---|---|---|
+  | `< 10 keV`   | 1000 µA | 3 |
+  | `10–12 keV`  | 100 µA  | 2 |
+  | `>= 12 keV`  | 10 µA   | 1 |
+
+  Index map confirmed on the live IOC ("100 µA" reads back as `2`). PVs: `…{EM:BPM3}Range` (mbbo,
+  write) / `…Range_RBV` (mbbi, read). Table lives in `DEFAULT_RANGE_TABLE`
+  (`dcm_diag.range_index`); disable with `energy_walk(..., set_bpm3_range=False)`.
 
 ### 4.2 Replacing the Part-A2 "blind settle"
 
@@ -213,7 +227,20 @@ centred and bright, with a max timeout and a minimum dwell. This is the per-step
 
 ## 5. Proposed code architecture (for Part B)
 
-> Nothing below is implemented yet. These are the intended change sites.
+> **As built (status).** Part B shipped along a lighter path than the `DCMFeedback` device proposed
+> below, and is now the **default**:
+> * `smi_beamline.plans.dcm_diag.DCMDiag` holds the feedback/OVAL/BPM3/coarse-motor signals + the
+>   measured signs, rails, recenter windows, and the flux / BPM3-range tables (rather than a new
+>   `DCMFeedback` ophyd device).
+> * `smi_beamline.plans.energy_walk.energy_walk` is the managed move (the §4.1 choreography,
+>   including per-energy BPM3 range).
+> * `smi_beamline.plans.energy_move_preprocessor` routes >500 eV plan moves through it; **installed
+>   by default at startup** (`startup.py` → `smibase.energy.enable_managed_energy_moves()`), with a
+>   console `disable_managed_energy_moves()` escape hatch.
+> * Calibration still lives in code constants for now (the Redis `_config` seam in §5.3 remains the
+>   intended next home — see Open items).
+>
+> The original proposal is kept below as the fuller design / future-refactor target.
 
 ### 5.1 New device: `DCMFeedback`
 
@@ -290,23 +317,27 @@ Add a logger that records `fast_pidX/Y.{VAL,CVAL,OVAL}`, `xbpm3.sum{X,Y}`/`pos{X
 detuning curve, `OVAL`-per-eV, and the **m67/m68 → OVAL sign + gain** calibration; safe threshold
 values. Persist them via `_config`.
 
-**Phase 1 — Ship Part A.** Implement the IVU brake-confirm + verify/retry fix and its tests.
+**Phase 1 — Ship Part A. ✅ DONE.** Implement the IVU brake-confirm + verify/retry fix and its tests.
 Independent, low risk, immediately improves energy-move reliability.
 
 **Phase 2 — `DCMFeedback` device + passive centring check.** Add the device; after each move,
 *log* whether the beam is centred and the piezo headroom — **take no action**. Validates the
 thresholds against reality. Optionally replace the `Energy.set` settle with wait-until-centred.
+*(Shipped as the read-only `DCMDiag` snapshot/`measure_gain`/supervised `recenter` rather than a
+new device.)*
 
-**Phase 3 — `recenter_piezo()` single step (supervised).** Operator-invoked plan that, with
-feedback ON, drives m67/m68 to push `OVAL` toward 0. Test at one energy with beam, operator
-watching, abort ready. This validates the most safety-critical calibration (#1).
+**Phase 3 — `recenter_piezo()` single step (supervised). ✅ DONE** (`DCMDiag.recenter`). Operator-
+invoked plan that, with feedback ON, drives m67/m68 to push `OVAL` toward 0. Validated the most
+safety-critical calibration (#1) at the console.
 
-**Phase 4 — `energy_walk` (automated progression).** Chain steps + recentre on the extended sim
-IOC first; then dedicated commissioning shifts with beam over progressively larger energy spans,
-each supervised with an abort ready.
+**Phase 4 — `energy_walk` (automated progression). ✅ DONE.** Chained steps + recentre on the
+extended sim IOC first; then with beam over progressively larger spans. **Live-validated 8 keV ↔
+16.1 keV, up and down.**
 
-**Phase 5 — Integrate & expose.** Fold into `move_energy` / a new `large_move`, update
-queueserver permissions, and document operator usage.
+**Phase 5 — Integrate & expose. ✅ DONE (default).** Folded in via the managed-move preprocessor —
+installed by default at startup so every plan's >500 eV energy move uses `energy_walk`; console
+`disable_managed_energy_moves()` opts out.  *Remaining:* move calibration to the Redis `_config`
+seam, and the §10 OAV setpoint-calibration phase.
 
 ---
 
@@ -317,7 +348,12 @@ queueserver permissions, and document operator usage.
   beyond. True limits TBD in Phase 0; act with margin until then.
 * Coarse re-centring uses the **in-vacuum DCM motors m67 (pitch) / m68 (roll)**.
 * Part A (IVU brake fix) is **independent** and shipped first.
-* This document is **plan only**; no repo code has been changed.
+* **Per-energy BPM3 range (gain)** is set inside `energy_walk` per sub-step (table in §4.1).
+* The managed-move preprocessor is **installed by default** at startup (`>500 eV` plan moves use
+  `energy_walk`; smaller moves stay plain); `disable_managed_energy_moves()` is the escape hatch.
+* **Live-validated** end-to-end **8 keV ↔ 16.1 keV, up and down** (managed move + per-energy range).
+* Calibration (signs/rails/windows/flux table/range table) currently lives in code constants; the
+  Redis `_config` seam (§5.3) is the intended next home.
 
 ## 9. Open items for Phase 0
 
@@ -353,6 +389,8 @@ that produces a stored offset-vs-energy curve applied to all subsequent energy m
 5. Optionally also record/choose the **BPM3 electrometer range/gain** per energy band for best
    responsiveness: `XF:12IDB-BI:2{EM:BPM3}Range_RBV` (read) / its setpoint (write) — a coarser gain
    at low flux, finer at high, so the loop is responsive across the range.
+   *(Implemented as a standard step of `energy_walk` — see §4.1; this calibration would only refine
+   the bands, not add the mechanism.)*
 
 **Storage & application.**
 * Persist the offset-vs-energy table (and the range-vs-energy bands) via the existing Redis

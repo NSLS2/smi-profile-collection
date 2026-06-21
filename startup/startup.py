@@ -96,3 +96,20 @@ except Exception as _exc:  # noqa: BLE001 -- never let the busy signal block the
     print(f"\u2717 RE-busy signal preprocessor NOT installed: "
           f"{type(_exc).__name__}: {_exc}")
 
+# --- Managed energy-move preprocessor (feedback-managed large energy moves). ---
+# Append a preprocessor so EVERY plan energy move (scans, bps.mv(energy, E), queued multi-edge
+# plans) larger than 500 eV is routed through the feedback-managed ``energy_walk`` in 500 eV
+# sub-steps -- feedback off -> brake-confirmed move -> per-energy BPM3 range -> flux gate ->
+# feedback on -> OVAL settle -> coarse-pitch/roll recentre -- while small moves (<=500 eV, e.g.
+# fine scan steps) stay fast as a plain ``set``.  One warning line per large move; silent
+# otherwise; leaves feedback ON on any exit.  Live-validated 8 -> 16.1 keV up and down.
+# Guarded so a BPM3 CA hiccup never blocks the session; ``disable_managed_energy_moves()`` removes
+# it at the console.  See smi_beamline.plans.energy_move_preprocessor / smibase.energy.
+try:
+    from smibase.energy import enable_managed_energy_moves as _enable_managed_energy_moves
+
+    _enable_managed_energy_moves()   # prints its own "energy-move preprocessor installed" line
+except Exception as _exc:  # noqa: BLE001 -- never let managed energy moves block the session
+    print(f"\u2717 managed energy-move preprocessor NOT installed: "
+          f"{type(_exc).__name__}: {_exc}")
+

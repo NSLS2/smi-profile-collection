@@ -89,10 +89,10 @@ def move_energy(target_energy):
 
 
 # ---------------------------------------------------------------------------------------------
-# Feedback-managed energy move (Part B) -- exposed for commissioning, NOT yet the default path.
-# Use ``RE(energy_walk(E))`` to test the full choreography (feedback off -> brake-confirmed move
-# -> flux gate -> feedback on -> OVAL settle -> recenter coarse pitch/roll if |OVAL|>3000).  Once
-# proven on beam, route move_energy() through it.
+# Feedback-managed energy move (Part B).  The full choreography (feedback off -> brake-confirmed
+# move -> per-energy BPM3 range -> flux gate -> feedback on -> OVAL settle -> recenter coarse
+# pitch/roll if |OVAL|>3000).  Run a single move explicitly with ``RE(energy_walk(E))``; >500 eV
+# moves in any plan go through this automatically via the managed-move preprocessor (below).
 # ---------------------------------------------------------------------------------------------
 from smi_beamline.plans.energy_walk import energy_walk as _energy_walk_plan
 
@@ -116,7 +116,8 @@ def energy_walk(target_eV, **kwargs):
     ``energy`` positioner and a (lazily-built, cached) ``DCMDiag``.  See that function for the full
     choreography and parameters.  Run as ``RE(energy_walk(E))``.
 
-    Commissioning helper -- not yet wired into ``move_energy``/the default energy move.
+    The managed-move preprocessor (installed by default) already routes >500 eV moves in any plan
+    through this; call this directly to run a single managed move explicitly at the console.
     """
     diag = kwargs.pop("diag", None) or _get_dcm_diag()
     return (yield from _energy_walk_plan(target_eV, diag=diag, energy=energy, **kwargs))
@@ -130,8 +131,9 @@ def dcm_diag():
 
 # ---------------------------------------------------------------------------------------------
 # Managed-energy-move PREPROCESSOR -- makes large energy moves in ANY plan (scans, bps.mv(energy,E),
-# queued multi-edge plans) go through energy_walk in 500 eV steps; small moves stay plain.  NOT
-# installed automatically -- enable it once the full managed move is proven on beam.
+# queued multi-edge plans) go through energy_walk in 500 eV steps; small moves stay plain.
+# Installed by default at startup (startup.py calls enable_managed_energy_moves()); call
+# disable_managed_energy_moves() at the console to turn it off for a session.
 # ---------------------------------------------------------------------------------------------
 def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     """Install the energy-move preprocessor on ``RE``: every plan energy move with
@@ -139,8 +141,8 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     ``step_eV`` sub-steps (silent unless it errors, with one warning line per large move); smaller
     moves pass through as plain ``set`` (fine scan steps stay fast).
 
-    Call this when you are ready to make managed moves the default.  Idempotent (re-installing
-    de-dups).  ``disable_managed_energy_moves()`` removes it.
+    Installed by default at startup; call this again to change ``threshold_eV``/``step_eV``.
+    Idempotent (re-installing de-dups).  ``disable_managed_energy_moves()`` removes it.
     """
     from smi_beamline.plans.energy_move_preprocessor import install_energy_move_preprocessor
     RE = _smiclasses_context.get_re()
