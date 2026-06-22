@@ -17,7 +17,10 @@ from smi_beamline.plans.dcm_diag import (  # noqa: E402
 @pytest.mark.parametrize(
     "energy_keV, expected",
     [
-        (5.0, 10.0),      # < 8 keV
+        (2.1, 5.0),       # < 2.2 keV  (very low end)
+        (2.199, 5.0),
+        (2.2, 10.0),      # 2.2 <= E < 8
+        (5.0, 10.0),
         (7.999, 10.0),
         (8.0, 5.0),       # 8 <= E < 10
         (9.5, 5.0),
@@ -31,12 +34,17 @@ def test_flux_threshold_bands(energy_keV, expected):
     assert flux_threshold(energy_keV) == expected
 
 
-def test_flux_threshold_boundaries_are_strict_lt():
-    """Boundary energy falls into the *next* (lower-flux) band: comparison is ``<``."""
-    for max_e, _ in DEFAULT_FLUX_TABLE[:-1]:
-        below = flux_threshold(max_e - 1e-6)
-        at = flux_threshold(max_e)
-        assert at <= below          # crossing up an energy boundary never *raises* the requirement
+def test_flux_threshold_boundary_belongs_to_next_band():
+    """Comparison is strict ``<``: a boundary energy reads the NEXT row's value, not the prior one."""
+    for i, (max_e, _) in enumerate(DEFAULT_FLUX_TABLE[:-1]):
+        next_val = DEFAULT_FLUX_TABLE[i + 1][1]
+        assert flux_threshold(max_e) == next_val            # at the boundary -> next band
+        assert flux_threshold(max_e - 1e-6) == DEFAULT_FLUX_TABLE[i][1]   # just below -> this band
+
+
+def test_flux_threshold_very_low_end_is_5():
+    assert flux_threshold(2.1) == 5.0
+    assert flux_threshold(2.2) == 10.0
 
 
 # --------------------------------------------------------------------------- BPM3 range index

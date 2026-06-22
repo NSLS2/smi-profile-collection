@@ -19,7 +19,51 @@ from ophyd import Signal  # noqa: E402
 from ophyd.sim import SynAxis  # noqa: E402
 
 from smi_beamline.plans.energy_walk import energy_walk, recenter_axis_plan, settle_oval_plan  # noqa: E402
+from smi_beamline.plans.energy_walk import substep_size, substep_targets  # noqa: E402
 from _fakes import FakeDiag, FakeOval  # noqa: E402,F401  (shared fake DCM-feedback model)
+
+
+# --------------------------------------------------------------------------- band-aware sub-steps
+def test_substep_size_switches_below_2500():
+    assert substep_size(5000.0, 500.0) == 500.0
+    assert substep_size(2600.0, 500.0) == 500.0
+    assert substep_size(2500.0, 500.0) == 50.0      # boundary is inclusive of the fine band
+    assert substep_size(2200.0, 500.0) == 50.0
+    # never larger than the nominal step
+    assert substep_size(2000.0, 30.0) == 30.0
+    # disabled stepping passes through
+    assert substep_size(2000.0, 0.0) == 0.0
+
+
+def test_substep_targets_down_uses_500_then_50_below_2500():
+    """The user's example: 5000 -> 2100 steps 500 eV down to 2500, then 50 eV to 2100."""
+    t = substep_targets(5000.0, 2100.0, 500.0)
+    assert t[0] == 4500.0
+    assert 2500.0 in t                       # lands exactly on the boundary
+    boundary = t.index(2500.0)
+    # above the boundary: 500 eV steps
+    above = t[:boundary + 1]
+    assert above == [4500.0, 4000.0, 3500.0, 3000.0, 2500.0]
+    # below the boundary: 50 eV steps down to 2100
+    below = t[boundary + 1:]
+    assert below[0] == 2450.0 and below[-1] == 2100.0
+    assert all(abs((a - b) - (-50.0)) < 1e-6 for a, b in zip(below[1:], below[:-1]))
+
+
+def test_substep_targets_up_uses_50_then_500():
+    """Going up from 2100: 50 eV steps to 2500, then 500 eV steps."""
+    t = substep_targets(2100.0, 4000.0, 500.0)
+    assert t[0] == 2150.0                     # 50 eV first (below 2500)
+    assert 2500.0 in t
+    b = t.index(2500.0)
+    assert t[b - 1] == 2450.0 and t[b + 1] == 3000.0   # switches to 500 eV after the boundary
+    assert t[-1] == 4000.0
+
+
+def test_substep_targets_short_move_is_single_step():
+    assert substep_targets(9000.0, 9100.0, 500.0) == [9100.0]
+    # a small low-energy move still sub-divides at 50 eV
+    assert substep_targets(2400.0, 2200.0, 500.0) == [2350.0, 2300.0, 2250.0, 2200.0]
 
 
 @pytest.fixture

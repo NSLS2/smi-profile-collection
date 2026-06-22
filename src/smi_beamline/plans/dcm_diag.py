@@ -55,7 +55,8 @@ from ophyd import EpicsSignal, EpicsSignalRO, EpicsMotor
 #: in order; the first row whose ``max_energy_keV`` the current energy is **below** applies.  Last
 #: row is the high-energy floor.  Edit here (or pass ``flux_table=`` to :class:`DCMDiag`).
 DEFAULT_FLUX_TABLE = [
-    (8.0, 10.0),     # E < 8 keV    -> sum must be > 10
+    (2.2, 5.0),      # E < 2.2 keV  -> sum must be > 5  (very low end: less flux on BPM3)
+    (8.0, 10.0),     # 2.2 <= E < 8 -> sum must be > 10
     (10.0, 5.0),     # 8 <= E < 10  -> sum must be > 5
     (12.0, 1.0),     # 10 <= E < 12 -> sum must be > 1
     (float("inf"), 0.1),   # E >= 12 keV -> sum must be > 0.1

@@ -40,7 +40,63 @@ import bluesky.preprocessors as bpp
 from smi_beamline.plans.dcm_diag import flux_threshold, range_index
 
 
-__all__ = ["energy_walk", "recenter_axis_plan", "settle_oval_plan"]
+__all__ = ["energy_walk", "recenter_axis_plan", "settle_oval_plan", "substep_size", "substep_targets"]
+
+
+#: Below this photon energy (eV), the managed walk sub-steps in :data:`LOW_ENERGY_STEP_eV`-sized
+#: increments instead of the nominal ``step_eV`` -- the DCM/IVU need finer progression at the very
+#: low end (validated to the 2100 eV beamline minimum).  Crossing the boundary lands exactly on it.
+LOW_ENERGY_STEP_BELOW_eV = 2500.0
+#: Sub-step size (eV) used at or below :data:`LOW_ENERGY_STEP_BELOW_eV`.
+LOW_ENERGY_STEP_eV = 50.0
+
+
+def substep_size(energy_eV, nominal_step_eV, *,
+                 low_below=LOW_ENERGY_STEP_BELOW_eV, low_step=LOW_ENERGY_STEP_eV):
+    """The sub-step size (eV) to use *from* ``energy_eV``: the nominal ``step_eV`` normally, but the
+    finer ``low_step`` at or below ``low_below`` (never larger than the nominal step)."""
+    if not nominal_step_eV or nominal_step_eV <= 0:
+        return nominal_step_eV
+    if energy_eV <= low_below:
+        return min(low_step, nominal_step_eV)
+    return nominal_step_eV
+
+
+def substep_targets(start_eV, final_eV, nominal_step_eV, *,
+                    low_below=LOW_ENERGY_STEP_BELOW_eV, low_step=LOW_ENERGY_STEP_eV):
+    """The sequence of intermediate energies from ``start`` to ``final``, marching in band-aware
+    increments (nominal ``step_eV`` above ``low_below``, ``low_step`` at/below it), **landing exactly
+    on the ``low_below`` boundary when crossing it** and exactly on ``final``.  Returns ``[final]``
+    if the step is disabled (``nominal_step_eV`` falsy/<=0) or the whole span fits one step."""
+    if not nominal_step_eV or nominal_step_eV <= 0:
+        return [final_eV]
+    direction = 1.0 if final_eV > start_eV else -1.0
+    targets = []
+    cur = start_eV
+    # guard against pathological infinite loops (tiny steps / float noise)
+    for _ in range(100000):
+        if abs(final_eV - cur) <= 1e-9:
+            break
+        # Fine (low-energy) stepping applies strictly *below* the boundary; going down, the boundary
+        # itself counts as the start of the fine region so the steps off it are fine.
+        in_fine = cur < low_below or (direction < 0 and cur <= low_below)
+        s = low_step if (in_fine and nominal_step_eV and low_step < nominal_step_eV) else nominal_step_eV
+        nxt = cur + direction * s
+        if direction < 0:
+            # going down: never below the final target; if crossing into the low band, stop on it
+            nxt = max(nxt, final_eV)
+            if cur > low_below >= final_eV and nxt < low_below:
+                nxt = low_below
+        else:
+            # going up: never above the final target; if crossing out of the low band, stop on it
+            nxt = min(nxt, final_eV)
+            if cur < low_below <= final_eV and nxt > low_below:
+                nxt = low_below
+        targets.append(nxt)
+        cur = nxt
+    if not targets or abs(targets[-1] - final_eV) > 1e-9:
+        targets.append(final_eV)
+    return targets
 
 
 # ---------------------------------------------------------------- small message-pure helpers
@@ -259,9 +315,12 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
     step_eV : float
         Maximum energy sub-step (eV).  The move is progressed to ``target_eV`` in increments of at
         most ``step_eV`` (default 500), running the full per-step choreography (feedback off ->
-        brake-confirmed move -> flux gate -> feedback on -> settle -> recenter) at each.  Set
-        ``None``/0 to move straight to the target in one step.  On a flux failure mid-walk it
-        reverts to the **previous (last good) sub-step energy**, not all the way to the start.
+        brake-confirmed move -> flux gate -> feedback on -> settle -> recenter) at each.  **Below
+        ``LOW_ENERGY_STEP_BELOW_eV`` (2500 eV) the sub-step is automatically reduced to
+        ``LOW_ENERGY_STEP_eV`` (50 eV)** -- the DCM/IVU need finer progression at the very low end --
+        and a boundary-crossing move lands exactly on 2500 eV before switching.  Set ``None``/0 to
+        move straight to the target in one step.  On a flux failure mid-walk it reverts to the
+        **previous (last good) sub-step energy**, not all the way to the start.
     flux_settle : float
         Dwell (s) before the flux re-check / before reverting on flux failure.
     oval_settle_s, oval_settle_window : float
@@ -363,24 +422,16 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
         return now_eV
 
     def _substep_targets(start_eV, final_eV):
-        """The sequence of intermediate energies from ``start`` to ``final`` in <= ``step_eV``
-        increments (landing exactly on ``final``).  If ``step_eV`` is None/<=0 or the span fits in
-        one step, just ``[final]``."""
-        span = final_eV - start_eV
-        if not step_eV or step_eV <= 0 or abs(span) <= step_eV:
-            return [final_eV]
-        import math
-        n = int(math.ceil(abs(span) / step_eV))
-        direction = 1.0 if span > 0 else -1.0
-        edges = [start_eV + direction * step_eV * k for k in range(1, n + 1)]
-        edges[-1] = final_eV                                # land exactly on target
-        return edges
+        """Band-aware sub-step sequence: nominal ``step_eV`` normally, finer ``LOW_ENERGY_STEP_eV``
+        at/below ``LOW_ENERGY_STEP_BELOW_eV`` (lands exactly on the boundary and on ``final``)."""
+        return substep_targets(start_eV, final_eV, step_eV)
 
     def _body():
         start_eV = _now()
         targets = _substep_targets(start_eV, float(target_eV))
         _emit(f"energy_walk: {start_eV:.2f} -> {float(target_eV):.2f} eV "
-              f"({len(targets)} step(s) of <= {step_eV} eV)")
+              f"({len(targets)} step(s); <= {step_eV} eV, {LOW_ENERGY_STEP_eV:g} eV below "
+              f"{LOW_ENERGY_STEP_BELOW_eV:g} eV)")
         prev = start_eV
         for i, sub in enumerate(targets, 1):
             _emit(f"  step {i}/{len(targets)} -> {sub:.2f} eV")
