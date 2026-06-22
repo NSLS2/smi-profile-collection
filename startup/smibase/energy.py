@@ -139,7 +139,9 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     """Install the energy-move preprocessor on ``RE``: every plan energy move with
     ``|target-current| > threshold_eV`` is routed through the feedback-managed ``energy_walk`` in
     ``step_eV`` sub-steps (silent unless it errors, with one warning line per large move); smaller
-    moves pass through as plain ``set`` (fine scan steps stay fast).
+    moves pass through as plain ``set`` (fine scan steps stay fast), but a small move that has let
+    pitch/roll OVAL drift past its recentre window triggers an opportunistic coarse recentre
+    (feedback stays ON) so fine-step scans can't creep into the piezo rail.
 
     Installed by default at startup; call this again to change ``threshold_eV``/``step_eV``.
     Idempotent (re-installing de-dups).  ``disable_managed_energy_moves()`` removes it.
@@ -151,7 +153,7 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     walk_kwargs.setdefault("diag", diag)
     return install_energy_move_preprocessor(
         RE, energy, threshold_eV=threshold_eV, step_eV=step_eV,
-        walk_kwargs=walk_kwargs, verbose=True, **kwargs)
+        diag=diag, walk_kwargs=walk_kwargs, verbose=True, **kwargs)
 
 
 def disable_managed_energy_moves():

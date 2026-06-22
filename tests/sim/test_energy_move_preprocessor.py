@@ -73,19 +73,19 @@ def test_large_move_emits_one_warning(energy):
     diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 50.0, "pitch": 50.0})
     RE = RunEngine({})
     _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
-    with pytest.warns(UserWarning, match="managed large move"):
+    with pytest.warns(UserWarning, match="managed move"):
         RE(bps.mv(energy, 10000.0))
 
 
-def test_below_8keV_warns_but_runs(energy):
-    energy.set(7000.0)
-    # below 8 keV the flux threshold is >10, so use a flux clearly above it
-    diag = FakeDiag(energy, sumY=15.0, oval0={"roll": 50.0, "pitch": 50.0})
+def test_below_validated_floor_warns_but_runs(energy):
+    energy.set(2400.0)
+    # very low end: flux threshold is 5 below 2.2 keV, so keep flux above it
+    diag = FakeDiag(energy, sumY=12.0, oval0={"roll": 50.0, "pitch": 50.0})
     RE = RunEngine({})
     _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
-    with pytest.warns(UserWarning, match="validated only >= 8 keV"):
-        RE(bps.mv(energy, 7800.0))           # 800 eV move, below 8 keV
-    assert abs(float(energy.position) - 7800.0) < 1.0
+    with pytest.warns(UserWarning, match="below the validated feedback range"):
+        RE(bps.mv(energy, 2000.0))           # ends below the 2100 eV validated floor
+    assert abs(float(energy.position) - 2000.0) < 1.0
 
 
 def test_no_infinite_recursion_on_large_move(energy):
@@ -120,3 +120,98 @@ def test_scan_fine_steps_stay_plain_but_first_jump_managed(energy):
     assert abs(float(energy.position) - 11020.0) < 1.0
     # feedback was toggled (managed walk happened for the big jump) and ended ON
     assert "1" in fb_writes and str(diag.fb_disable["roll"].get()) == "0"
+
+
+# --------------------------------------------------------------------------- small-move drift guard
+def _track_motor(diag, axis):
+    moves = []
+    diag.motor[axis].subscribe(lambda value, **k: moves.append(round(float(value), 6)), run=False)
+    return moves
+
+
+def test_small_move_recenters_when_oval_drifted(energy):
+    """A small move that finds pitch OVAL past its window recentres the coarse motor (back under
+    target) and warns -- without ever toggling feedback."""
+    energy.set(9000.0)
+    # pitch OVAL parked well past its 4000 window (but not at the 8191 rail); roll fine.
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 50.0, "pitch": 5000.0})
+    RE = RunEngine({})
+    _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
+
+    pitch_moves = _track_motor(diag, "pitch")
+    fb_writes = []
+    diag.fb_disable["pitch"].subscribe(lambda value, **k: fb_writes.append(str(value)), run=False)
+    with pytest.warns(UserWarning, match="pitch OVAL .* drifted past its window"):
+        RE(bps.mv(energy, 9100.0))               # 100 eV: plain set, then drift recentre
+
+    assert abs(float(energy.position) - 9100.0) < 1.0
+    assert pitch_moves, "pitch coarse motor was not stepped to recentre the drifted OVAL"
+    assert abs(float(diag.oval["pitch"].get())) < 400.0   # pulled back under target
+    assert fb_writes == [], "drift recentre must keep feedback ON (no fb_disable writes)"
+
+
+def test_small_move_no_recenter_when_in_window(energy):
+    """A small move with OVAL inside the window does nothing extra (no motor motion, no warning)."""
+    energy.set(9000.0)
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 50.0, "pitch": 50.0})
+    RE = RunEngine({})
+    _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
+
+    roll_moves = _track_motor(diag, "roll")
+    pitch_moves = _track_motor(diag, "pitch")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")           # any warning would fail the test
+        RE(bps.mv(energy, 9100.0))
+    assert abs(float(energy.position) - 9100.0) < 1.0
+    assert roll_moves == [] and pitch_moves == [], "in-window small move should not move the motors"
+
+
+def test_small_move_drift_check_can_be_disabled(energy):
+    """check_drift=False leaves small moves entirely plain even when OVAL has drifted."""
+    energy.set(9000.0)
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 50.0, "pitch": 5000.0})
+    RE = RunEngine({})
+    _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0, check_drift=False)
+
+    pitch_moves = _track_motor(diag, "pitch")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        RE(bps.mv(energy, 9100.0))
+    assert abs(float(energy.position) - 9100.0) < 1.0
+    assert pitch_moves == [], "check_drift=False must not recentre"
+
+
+# --------------------------------------------------------------------------- low-energy enforcement
+def test_low_energy_small_move_is_managed_and_substepped(energy):
+    """Below 2500 eV the 50 eV rule is enforced even for a <=threshold move: a 200 eV move at low
+    energy goes through the managed walk (feedback toggles) and stops at 50 eV sub-steps."""
+    energy.set(2600.0)
+    diag = FakeDiag(energy, sumY=12.0, oval0={"roll": 50.0, "pitch": 50.0})
+    RE = RunEngine({})
+    _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
+
+    visited = []
+    energy.subscribe(lambda value, **k: visited.append(round(float(value), 1)), run=False)
+    fb_writes = []
+    diag.fb_disable["roll"].subscribe(lambda value, **k: fb_writes.append(str(value)), run=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        RE(bps.mv(energy, 2400.0))           # 200 eV, <= threshold, but below 2500 -> managed @50 eV
+
+    assert abs(float(energy.position) - 2400.0) < 1.0
+    assert "1" in fb_writes, "low-energy small move should have been managed (feedback toggled)"
+    assert any(abs(v - 2450.0) < 1.0 for v in visited), visited   # hit a 50 eV sub-step below 2500
+    assert str(diag.fb_disable["roll"].get()) == "0"
+
+
+def test_low_energy_single_50ev_move_stays_plain(energy):
+    """A move equal to the low-energy sub-step (50 eV) is one step -> stays a plain set."""
+    energy.set(2300.0)
+    diag = FakeDiag(energy, sumY=12.0, oval0={"roll": 50.0, "pitch": 50.0})
+    RE = RunEngine({})
+    _install(RE, energy, diag, threshold_eV=500.0, step_eV=500.0)
+    fb_writes = []
+    diag.fb_disable["roll"].subscribe(lambda value, **k: fb_writes.append(str(value)), run=False)
+    RE(bps.mv(energy, 2250.0))               # exactly 50 eV -> plain
+    assert abs(float(energy.position) - 2250.0) < 1.0
+    assert fb_writes == [], "a single 50 eV low-energy move should stay plain"
