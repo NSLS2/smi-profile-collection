@@ -1,11 +1,11 @@
 # DCM beam-position feedback & reliable energy moves — design and commissioning plan
 
 **Status:** Part A (IVU brake fix) and Part B (managed `energy_walk` + per-energy BPM3 range,
-installed by default via the energy-move preprocessor) are **implemented and live-validated 8 ↔
-16.1 keV** — see the §7 phase markers and §8 for what shipped vs the original proposal. Still open:
-the Pilatus-threshold finishing touches (§11), moving calibration to the Redis `_config` seam, and
-the OAV setpoint-calibration phase (§10). The architecture in §5 is kept as the original proposal /
-future-refactor target.
+installed by default via the energy-move preprocessor) are **implemented and live-validated 2.1 ↔
+16.1 keV** (2.1 keV = beamline minimum) — see the §7 phase markers and §8 for what shipped vs the
+original proposal. Still open: the Pilatus-threshold finishing touches (§11), moving calibration to
+the Redis `_config` seam, and the OAV setpoint-calibration phase (§10). The architecture in §5 is
+kept as the original proposal / future-refactor target.
 
 **Scope.** Two related problems:
 
@@ -204,6 +204,14 @@ verify centred at target; leave feedback ON
 * Direction & magnitude of the coarse move come from the **m67/m68 → OVAL calibration** measured
   in Phase 0 (see §6). Getting the sign wrong drives the piezo *into* the rail and loses the
   beam — this is the single most safety-critical number.
+* **Wrong-way abort, with a noise tolerance.** The recentre judges the *settled* OVAL direction; a
+  step that moves OVAL *away* from 0 aborts **immediately only if it is large**
+  (`|dOVAL| >= wrong_way_oval`, default 500) — a genuine sign/coupling error. A *small* wrong-way
+  move is treated as OVAL noise / motor hysteresis (the pitch loop in particular is jumpy) and
+  **forgiven up to `wrong_way_max` (default 2) times in a row** — a correct step resets the count,
+  and a bigger corrective step usually wins on the retry. This stopped spurious aborts like
+  `pitch: settled OVAL +4528 → +4648 (dOVAL +120)` seen on small steps, while still bailing out
+  fast on a real sign error.
 * **Per-energy BPM3 range (gain).** As each sub-step lands — *before* the flux gate and recentre —
   `energy_walk` sets the BPM3 electrometer range to match the new energy band and confirms it via
   `Range_RBV`, so the sum/position are on the right scale (low energy = more flux = coarser range;
@@ -218,6 +226,17 @@ verify centred at target; leave feedback ON
   Index map confirmed on the live IOC ("100 µA" reads back as `2`). PVs: `…{EM:BPM3}Range` (mbbo,
   write) / `…Range_RBV` (mbbi, read). Table lives in `DEFAULT_RANGE_TABLE`
   (`dcm_diag.range_index`); disable with `energy_walk(..., set_bpm3_range=False)`.
+* **Low-energy specialisation (validated to the 2100 eV beamline minimum).** Two things change at the
+  very low end:
+  * **Sub-step size:** `step_eV` is the nominal 500 eV down to `LOW_ENERGY_STEP_BELOW_eV` (2500 eV),
+    then **50 eV** (`LOW_ENERGY_STEP_eV`) below it; a boundary-crossing move **lands exactly on
+    2500 eV** before switching.  E.g. `5000 → 2100`: 500 eV steps to 2500, then 50 eV steps to 2100.
+    The preprocessor also routes a move through `energy_walk` (not a plain set) whenever it sits
+    in/enters the `< 2500 eV` region with a span larger than 50 eV, so the fine stepping is enforced
+    even for otherwise-"small" low-energy moves.
+  * **Flux gate floor:** the BPM3-sum threshold drops to **5** below **2.2 keV** (there is simply
+    less flux on BPM3 there); the bands are now `<2.2 keV → 5`, `2.2–8 → 10`, `8–10 → 5`,
+    `10–12 → 1`, `≥12 → 0.1` (`DEFAULT_FLUX_TABLE`).
 
 ### 4.2 Replacing the Part-A2 "blind settle"
 
@@ -239,7 +258,10 @@ centred and bright, with a max timeout and a minimum dwell. This is the per-step
 >   including per-energy BPM3 range).
 > * `smi_beamline.plans.energy_move_preprocessor` routes >500 eV plan moves through it; **installed
 >   by default at startup** (`startup.py` → `smibase.energy.enable_managed_energy_moves()`), with a
->   console `disable_managed_energy_moves()` escape hatch.
+>   console `disable_managed_energy_moves()` escape hatch.  It also runs a **small-move drift guard**:
+>   after a small (≤ threshold) move it checks each axis' OVAL against its recentre window and, if a
+>   run of small moves has crept it toward the rail, recentres that axis (feedback ON) — so
+>   fine-step scans can't silently walk pitch/roll into the piezo rail.
 > * Calibration still lives in code constants for now (the Redis `_config` seam in §5.3 remains the
 >   intended next home — see Open items).
 >
@@ -334,8 +356,9 @@ invoked plan that, with feedback ON, drives m67/m68 to push `OVAL` toward 0. Val
 safety-critical calibration (#1) at the console.
 
 **Phase 4 — `energy_walk` (automated progression). ✅ DONE.** Chained steps + recentre on the
-extended sim IOC first; then with beam over progressively larger spans. **Live-validated 8 keV ↔
-16.1 keV, up and down.**
+extended sim IOC first; then with beam over progressively larger spans. **Live-validated 2.1 keV ↔
+16.1 keV, up and down** (2.1 keV = beamline minimum; with the small-wrong-way recentre tolerance and
+the low-energy 50 eV stepping / flux floor below).
 
 **Phase 5 — Integrate & expose. ✅ DONE (default).** Folded in via the managed-move preprocessor —
 installed by default at startup so every plan's >500 eV energy move uses `energy_walk`; console
@@ -352,11 +375,22 @@ installed by default at startup so every plan's >500 eV energy move uses `energy
 * Coarse re-centring uses the **in-vacuum DCM motors m67 (pitch) / m68 (roll)**.
 * Part A (IVU brake fix) is **independent** and shipped first.
 * **Per-energy BPM3 range (gain)** is set inside `energy_walk` per sub-step (table in §4.1).
+* **Recentre wrong-way abort tolerates small noise:** abort immediately only on a *large* wrong-way
+  step (`|dOVAL| >= wrong_way_oval`, default 500); forgive up to `wrong_way_max` (default 2) small
+  ones in a row (pitch loop is jumpy / hysteretic). See §4.1.
+* **Small-move drift guard:** the preprocessor recentres pitch/roll after a small move if OVAL has
+  drifted past its window, so successions of small moves can't creep into the rail. See §5.
+* **Low-energy specialisation:** 50 eV sub-steps below 2500 eV (lands on the boundary first) and a
+  BPM3 flux floor of 5 below 2.2 keV; the preprocessor enforces the fine stepping for low-energy
+  moves even when ≤500 eV. See §4.1.
 * The managed-move preprocessor is **installed by default** at startup (`>500 eV` plan moves use
-  `energy_walk`; smaller moves stay plain); `disable_managed_energy_moves()` is the escape hatch.
-* **Live-validated** end-to-end **8 keV ↔ 16.1 keV, up and down** (managed move + per-energy range).
-* Calibration (signs/rails/windows/flux table/range table) currently lives in code constants; the
-  Redis `_config` seam (§5.3) is the intended next home.
+  `energy_walk`; smaller moves stay plain, with the low-energy enforcement above);
+  `disable_managed_energy_moves()` is the escape hatch.
+* **Live-validated** end-to-end **2.1 keV ↔ 16.1 keV, up and down** (2.1 keV = beamline minimum;
+  managed move + 500/50 eV stepping + per-energy range; small wrong-way noise no longer trips the
+  recentre).
+* Calibration (signs/rails/windows/flux table/range table/step bands) currently lives in code
+  constants; the Redis `_config` seam (§5.3) is the intended next home.
 
 ## 9. Open items for Phase 0
 
