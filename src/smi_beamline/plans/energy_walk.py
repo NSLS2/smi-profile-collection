@@ -84,6 +84,7 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
                        max_steps=200, max_step=0.002, oval_abort=None, deadband=10.0,
                        sample_interval=0.15, adapt=True, verbose=True,
                        rail_step_factor=10.0, rail_max_steps=10,
+                       wrong_way_oval=500.0, wrong_way_max=2,
                        flux_drop_frac=0.5, flux_drop_consec=2, flux_floor=None):
     """Message-pure version of ``DCMDiag.recenter``: step the coarse motor for ``axis`` until
     ``|OVAL[axis]| < target``, judging on the **settled** OVAL direction (waits ``settle`` s so a
@@ -100,9 +101,15 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
     for ``flux_drop_consec`` consecutive rail steps (i.e. it *fell and stayed down*), the recenter
     **aborts** (the rail-stepping is losing the beam).
 
-    Raises ``RuntimeError`` on a *settled* wrong-way step, on ``|OVAL|`` reading *beyond* the axis
-    hardware rail, on a sustained flux drop while rail-stepping, or if ``max_steps`` /
-    ``rail_max_steps`` is hit without progress.
+    Wrong-way handling: a settled step that moves OVAL *away* from 0 aborts **immediately** only if it
+    is large (``|dOVAL| >= wrong_way_oval``, default 500) -- a real sign/coupling error.  A *small*
+    wrong-way move is treated as OVAL noise / motor hysteresis (the loop is jumpy) and forgiven up to
+    ``wrong_way_max`` (default 2) times in a row (a correct step resets the count); a bigger
+    corrective step usually wins on the retry.
+
+    Raises ``RuntimeError`` on a *large* settled wrong-way step (or too many small ones in a row), on
+    ``|OVAL|`` reading *beyond* the axis hardware rail, on a sustained flux drop while rail-stepping,
+    or if ``max_steps`` / ``rail_max_steps`` is hit without progress.
     """
     # Default abort = the axis rail + margin (per-axis: roll ~+/-4095, pitch ~+/-8191).  Being AT
     # the rail is allowed -- that's when stepping toward 0 matters; only a reading clearly beyond
@@ -117,6 +124,7 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
     mot = diag.motor[axis]
     cur_step = abs(step)
     rail_steps = 0          # how many enlarged "at the rail" steps we've taken
+    wrong_way_run = 0       # consecutive SMALL wrong-way settled steps (noise/hysteresis tolerance)
     flux_low_run = 0        # consecutive rail steps with flux below the floor (fell & stayed down)
     flux_baseline = None    # flux at entry (set on the first rail step we take)
 
@@ -174,11 +182,29 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
             print(f"{axis}: OVAL {before:+.1f} -> {after:+.1f} settled "
                   f"(dOVAL={delta_oval:+.1f}, gain~{gain:+.0f} OVAL/EGU, "
                   f"{'toward 0' if correct else 'WRONG WAY'})")
-        if not correct:
-            raise RuntimeError(
-                f"{axis}: settled OVAL moved the WRONG way ({before:+.1f} -> {after:+.1f}) after "
-                f"a {motor_delta:+.5f} step on {mot.name} -- sign/coupling not as assumed; "
-                "aborting before the piezo is driven into the rail.")
+        if correct:
+            wrong_way_run = 0
+        else:
+            # A wrong-way settled step.  A LARGE one is a real sign/coupling error -> abort now,
+            # before the piezo is driven into the rail.  A SMALL one is most likely OVAL noise /
+            # motor hysteresis (the loop is jumpy), so forgive up to wrong_way_max of them in a row
+            # (a correct step resets the count) -- a bigger corrective step usually wins next.
+            if abs(delta_oval) >= wrong_way_oval:
+                raise RuntimeError(
+                    f"{axis}: settled OVAL moved the WRONG way ({before:+.1f} -> {after:+.1f}, "
+                    f"dOVAL={delta_oval:+.1f} >= {wrong_way_oval:.0f}) after a {motor_delta:+.5f} "
+                    f"step on {mot.name} -- sign/coupling not as assumed; aborting before the piezo "
+                    "is driven into the rail.")
+            wrong_way_run += 1
+            if wrong_way_run > wrong_way_max:
+                raise RuntimeError(
+                    f"{axis}: settled OVAL kept moving the WRONG way for {wrong_way_run} small "
+                    f"steps (last {before:+.1f} -> {after:+.1f}, dOVAL={delta_oval:+.1f}) -- not "
+                    "noise/hysteresis; aborting before the piezo is driven into the rail.")
+            if verbose:
+                print(f"    small wrong-way move (dOVAL={delta_oval:+.1f} < {wrong_way_oval:.0f}); "
+                      f"likely noise/hysteresis -- forgiving {wrong_way_run}/{wrong_way_max} and "
+                      "retrying.")
 
         # Beam-intensity guard while rail-stepping: the enlarged coarse moves can briefly perturb
         # the beam, so tolerate a single-step dip, but abort if the (settled) flux FELL AND STAYED

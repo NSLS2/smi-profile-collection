@@ -120,6 +120,70 @@ def test_recenter_aborts_on_wrong_sign(energy):
                               deadband=10.0, verbose=False))
 
 
+class _JumpyOval(Signal):
+    """OVAL coupled to a motor (correct sign) but with a small ONE-SHOT wrong-way blip on the first
+    ``n_bad`` motor steps -- models the jumpy/hysteretic pitch loop (small noise the wrong way that a
+    bigger corrective step then overcomes)."""
+    def __init__(self, name, motor, gain, value, n_bad=1, blip=120.0, rail=8191.0):
+        super().__init__(name=name, value=float(value))
+        self._motor = motor
+        self._gain = gain
+        self._blip = blip
+        self._bad_left = n_bad
+        self._rail = rail
+        self._last = float(motor.position)
+
+    def get(self):
+        cur_m = float(self._motor.position)
+        dm = cur_m - self._last
+        if dm:
+            self._last = cur_m
+            base = float(super().get()) + self._gain * dm
+            if self._bad_left > 0:
+                self._bad_left -= 1
+                # push the WRONG way (away from 0) by a small amount, overriding this step's coupling
+                base = float(super().get()) + (self._blip if super().get() >= 0 else -self._blip)
+            base = max(-self._rail, min(self._rail, base))
+            super().put(base)
+        return super().get()
+
+
+def test_recenter_forgives_a_small_wrongway_blip(energy):
+    """A single small wrong-way settled step (noise/hysteresis) is forgiven; the loop then converges
+    instead of aborting."""
+    diag = FakeDiag(energy, oval0={"roll": 0.0, "pitch": 4500.0})
+    # replace pitch OVAL with a jumpy one: 1 small wrong-way blip, then correct coupling.
+    diag.oval["pitch"] = _JumpyOval("oval_pitch", diag.motor["pitch"],
+                                    gain=-600000.0, value=4500.0, n_bad=1, blip=120.0)
+    RE = RunEngine({})
+    RE(recenter_axis_plan(diag, "pitch", target=400.0, settle=0.05, sample_interval=0.02,
+                          deadband=10.0, wrong_way_oval=500.0, wrong_way_max=2, verbose=False))
+    assert abs(diag.oval["pitch"].get()) < 400.0
+
+
+def test_recenter_still_aborts_on_a_large_wrongway_step(energy):
+    """A LARGE wrong-way step (real sign error, |dOVAL| >= wrong_way_oval) aborts immediately even
+    with the small-blip tolerance enabled."""
+    diag = FakeDiag(energy, gains={"roll": -600000.0, "pitch": -600000.0},
+                    oval0={"roll": 3000.0})
+    RE = RunEngine({})
+    with pytest.raises(RuntimeError, match="WRONG way"):
+        RE(recenter_axis_plan(diag, "roll", target=400.0, settle=0.05, sample_interval=0.02,
+                              deadband=10.0, wrong_way_oval=500.0, wrong_way_max=2, verbose=False))
+
+
+def test_recenter_aborts_after_too_many_small_wrongway_steps(energy):
+    """If the small wrong-way moves persist past wrong_way_max (not noise), abort."""
+    diag = FakeDiag(energy, oval0={"roll": 0.0, "pitch": 4500.0})
+    # many wrong-way blips in a row -> exceeds the tolerance -> abort
+    diag.oval["pitch"] = _JumpyOval("oval_pitch", diag.motor["pitch"],
+                                    gain=-600000.0, value=4500.0, n_bad=99, blip=120.0)
+    RE = RunEngine({})
+    with pytest.raises(RuntimeError, match="WRONG way"):
+        RE(recenter_axis_plan(diag, "pitch", target=400.0, settle=0.05, sample_interval=0.02,
+                              deadband=10.0, wrong_way_oval=500.0, wrong_way_max=2, verbose=False))
+
+
 def test_settle_oval_returns_true_when_stable(energy):
     diag = FakeDiag(energy, oval0={"roll": 100.0, "pitch": 100.0})
     RE = RunEngine({})
