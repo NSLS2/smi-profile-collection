@@ -628,10 +628,32 @@ class SAXS_Detector(Pilatus):
         base_pd_x  = mdsave.get('saxs_pd_offset_x_mm', -227.0)
         base_pd_y  = mdsave.get('saxs_pd_offset_y_mm', 6.8)
 
-        self.rod_offset_x_mm.set(base_rod_x - delta_x)
-        self.rod_offset_y_mm.set(base_rod_y - delta_y)
-        self.pd_offset_x_mm.set(base_pd_x - delta_x)
-        self.pd_offset_y_mm.set(base_pd_y - delta_y)
+        # =====================================================================
+        # TEMPORARY (beamstop restore over-correction) - 2026-06-23
+        # The z-wobble delta was over-correcting the SAXS beamstop restore so
+        # restore_beamstop()/modeMeasurement() landed off the saved position.
+        # While debugging, use the saved nominal value DIRECTLY (no delta), so
+        # the beamstop restores to EXACTLY the value saved via save_beamstop().
+        # NOTE: this only affects where the beamstop is parked; the beam-center
+        # calculation above still uses the full wobble correction.
+        #
+        # ROOT CAUSE + PROPER FIX: see docs/SAXS_BEAMSTOP_WOBBLE.md.  In short,
+        # save_beamstop() stores the absolute FINAL position at that distance
+        # (wobble already baked in), but calc_offsets re-applies the wobble delta
+        # on restore -> the delta is double-counted.
+        #
+        # TO REVERT: delete these 4 lines and uncomment the 4 ORIGINAL lines
+        # (the "- delta_x"/"- delta_y" versions) below.
+        self.rod_offset_x_mm.set(base_rod_x)
+        self.rod_offset_y_mm.set(base_rod_y)
+        self.pd_offset_x_mm.set(base_pd_x)
+        self.pd_offset_y_mm.set(base_pd_y)
+        # ORIGINAL (wobble-corrected) - RESTORE WHEN DONE DEBUGGING:
+        # self.rod_offset_x_mm.set(base_rod_x - delta_x)
+        # self.rod_offset_y_mm.set(base_rod_y - delta_y)
+        # self.pd_offset_x_mm.set(base_pd_x - delta_x)
+        # self.pd_offset_y_mm.set(base_pd_y - delta_y)
+        # =====================================================================
 
         # Apply linear correction for sample_offset_z
         linear_coeffs = mdsave.get("saxs_sample_offset_z_linear", None)
