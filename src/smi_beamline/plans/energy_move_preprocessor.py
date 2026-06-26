@@ -26,8 +26,9 @@ Behaviour
   But if a ``diag`` is available, after the move each axis' settled ``OVAL`` is checked against its
   recentre window and, if a run of small moves has let it **drift toward the piezo rail**, the
   coarse motor is recentred (feedback stays ON) -- so fine-step scans can't creep into the rail.
-* below 8 keV (start or target): still runs, but prints a **warning** that the feedback
-  signs/gains/rails were characterised only >= 8 keV.
+* below the validated floor (``low_energy_warn_eV``, default 2100 eV = the beamline minimum; start
+  or target): still runs, but prints a **warning**.  The managed move is live-validated across the
+  full 2.1 -> 16.1 keV range, so this normally never fires.
 * the ``energy_walk`` sub-plan's own internal energy moves are <= ``step_eV`` (== threshold), so
   they pass straight through and never re-trigger this preprocessor (a re-entry guard backs this
   up regardless).
@@ -48,8 +49,8 @@ from smi_beamline.plans.energy_walk import (
 __all__ = ["energy_move_preprocessor", "install_energy_move_preprocessor"]
 
 #: Warn (but still run) when a managed move starts/ends below this (eV).  The managed move is
-#: live-validated down to the 2100 eV beamline minimum, so this is effectively "below the validated
-#: floor" and normally never fires.
+#: live-validated across the full 2.1 -> 16.1 keV range down to the 2100 eV beamline minimum, so
+#: this is effectively "below the validated floor" and normally never fires.
 LOW_ENERGY_WARN_eV = 2100.0
 
 
@@ -84,8 +85,9 @@ def energy_move_preprocessor(plan, energy, *, threshold_eV=500.0, step_eV=500.0,
     step_eV : float
         Sub-step size handed to ``energy_walk`` (default 500).
     low_energy_warn_eV : float
-        Warn (but still run) when the start or target is below this (default 8000 eV; the feedback
-        calibration is validated only >= 8 keV).
+        Warn (but still run) when the start or target is below this (default 2100 eV = the beamline
+        minimum).  The managed move is live-validated across the full 2.1 -> 16.1 keV range, so this
+        is effectively "below the validated floor" and normally never fires.
     walk_kwargs : dict, optional
         Extra kwargs forwarded to ``energy_walk`` (e.g. ``oval_window``, ``recenter_settle``).
     verbose_walk : bool

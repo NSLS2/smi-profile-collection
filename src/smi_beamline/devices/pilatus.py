@@ -341,70 +341,31 @@ class WAXS_Motors(Device):
     
     # when moving the waxs detector, the beamstop must be moved to a new position
     # the beamstop is moved to a new position based on the angle of the waxs detector
-    # =========================================================================
-    # TEMPORARY (beamstop X motor unplugged) - 2026-06-23
-    # The waxs beamstop x motor has been unplugged because it is not functioning
-    # correctly.  While unplugged, do NOT move the beamstop motor at all.
-    # The beamstop is physically in position only for waxs arc = 0 deg.
-    # Valid arc positions are therefore: exactly 0 deg (+/- 0.1 mm buffer), or
-    # 14.5 deg and above (beamstop out of the way of beam/scattering).
-    # Anything in between is invalid and must error out cleanly *without*
-    # commanding the (unplugged) beamstop motor.
-    #
-    # TO REVERT: delete this temporary block and uncomment the ORIGINAL block
-    # below (and likewise restore the original stop()).
     def set(self, arc_value):
-        bs_in_pos_angle = 0.0   # arc angle (deg) where the beamstop is in position
-        bs_in_pos_buffer = 0.1  # buffer (mm/deg) around the in-position angle
-        bs_out_min_angle = 14.5 # min arc angle (deg) where the beamstop is safely out
+        st_arc = self.arc.set(arc_value)
+        # start moving the arc stage and return the status
 
-        if not (
-            abs(arc_value - bs_in_pos_angle) <= bs_in_pos_buffer
-            or arc_value >= bs_out_min_angle
-        ):
+        if self.arc.limits[0] <= arc_value <= 10.1:
+            calc_value = self.calc_waxs_bsx(arc_value)
+            # calculate the position of the beamstop based on the angle of the waxs detector
+        elif 10.1 < arc_value <= 13:
+            # the beamstop cannot be moved to block the beam
+            # this move is not safe
             raise ValueError(
                 f"The waxs detector cannot be moved to {arc_value} deg \n"
-                "The waxs beamstop x motor is temporarily unplugged.\n"
-                f"Only arc = {bs_in_pos_angle} deg (+/- {bs_in_pos_buffer}) or "
-                f"arc >= {bs_out_min_angle} deg are allowed right now."
+                "Do NOT take data between 10.1 and 13 degrees WAXS arc"   
             )
+        else:
+            calc_value = self.bsx_safe_pos # out of the path of the beam and scattering
 
-        # beamstop motor is unplugged - move the arc only, do NOT touch bs_x
-        st_arc = self.arc.set(arc_value)
-        return st_arc
-
+        st_x = self.bs_x.set(calc_value)
+        # move the beamstop to the new position
+        return st_arc & st_x # return both statuses
     def stop(self, *args, **kwargs):
-        # beamstop motor is unplugged - stop the arc only
+        # stop the arc stage and the beamstop
         st_arc = self.arc.stop()
-        return st_arc
-    # =========================================================================
-    # ORIGINAL set()/stop() - RESTORE THIS WHEN THE BEAMSTOP X MOTOR IS FIXED
-    # def set(self, arc_value):
-    #     st_arc = self.arc.set(arc_value)
-    #     # start moving the arc stage and return the status
-    #
-    #     if self.arc.limits[0] <= arc_value <= 10.1:
-    #         calc_value = self.calc_waxs_bsx(arc_value)
-    #         # calculate the position of the beamstop based on the angle of the waxs detector
-    #     elif 10.1 < arc_value <= 13:
-    #         # the beamstop cannot be moved to block the beam
-    #         # this move is not safe
-    #         raise ValueError(
-    #             f"The waxs detector cannot be moved to {arc_value} deg \n"
-    #             "Do NOT take data between 10.1 and 13 degrees WAXS arc"
-    #         )
-    #     else:
-    #         calc_value = self.bsx_safe_pos # out of the path of the beam and scattering
-    #
-    #     st_x = self.bs_x.set(calc_value)
-    #     # move the beamstop to the new position
-    #     return st_arc & st_x # return both statuses
-    # def stop(self, *args, **kwargs):
-    #     # stop the arc stage and the beamstop
-    #     st_arc = self.arc.stop()
-    #     st_x = self.bs_x.stop()
-    #     return st_arc & st_x
-    # =========================================================================
+        st_x = self.bs_x.stop()
+        return st_arc & st_x
     # calculate the position of the beamstop based on the angle of the waxs detector
     # the beamstop is on the arc stage, so as the angle of the waxs detector changes, the position of the beamstop must also change
     def calc_waxs_bsx(self, arc_value):

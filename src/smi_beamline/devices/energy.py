@@ -187,6 +187,9 @@ class Energy(PseudoPositioner):
         if not self.harmonic.get() % 2:
             raise RuntimeError("Harmonic must be odd.")
 
+        # Hard guardrails (a few eV outside the operational/validated 2.1 -> 16.1 keV range): the
+        # validated floor / low-energy warn threshold is 2100 eV (the beamline minimum), and this
+        # 2050 eV ValueError is the absolute backstop just below it.
         if energy <= 2050:
             raise ValueError("Minimum energy is 2050 eV.")
 
