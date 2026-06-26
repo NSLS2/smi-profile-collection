@@ -60,6 +60,14 @@ r = redis.Redis(
   the TTL (`DEFAULT_TTL`, 30 s) never lapses during a running plan.
 * **Absent key == RunEngine idle == the GUI may move.** This is the safe default.
 
+> **Some plans deliberately do not publish this flag.** A few long maintenance
+> plans hold the RunEngine for many minutes but never drive the sample-alignment
+> motors — e.g. `pump_waxs` / `vent_waxs` (chamber pump/vent). These **opt out**, so
+> the key stays absent and the GUI stays free to align *while they run*. That is by
+> design: from the GUI's side it is indistinguishable from "idle", and that is the
+> intended behavior. (Mechanism: the plan yields `no_re_busy_lock()` first, and/or is
+> named in `DEFAULT_SKIP_PLANS`; see `re_status.py`.)
+
 ### Why a TTL (important for the GUI)
 
 The flag can never get **stuck on**. If the RunEngine process dies in a way it

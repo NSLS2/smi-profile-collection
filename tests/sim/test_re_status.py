@@ -115,6 +115,9 @@ def test_flag_payload_has_context_fields():
     captured = {}
 
     def _probe():
+        # Read AFTER the first RE-executed message: the preprocessor peeks the leading message to
+        # check for the opt-out marker, so the flag is asserted just before the first message runs.
+        yield from bps.null()
         captured["doc"] = _busy_doc(client)
         yield from bps.null()
 
@@ -227,6 +230,7 @@ def test_installed_preprocessor_publishes_through_RE():
     captured = {}
 
     def _probe():
+        yield from bps.null()                 # first message -> flag asserted by now
         captured["doc"] = _busy_doc(client)
         yield from bps.null()
 
@@ -252,6 +256,190 @@ def test_read_and_clear_helpers():
 def test_read_clear_with_no_client():
     assert rs.read_re_busy(status_store=None) is None
     assert rs.clear_re_busy(status_store=None) is False
+
+
+# ===================================================================== per-plan opt-out (GUI free)
+# Plans that hold the RE but never move the alignment motors (e.g. pump_waxs) opt out of the busy
+# flag so the GUI stays free.  These cover both opt-out paths and guard the non-opt-out path's
+# correctness (send-forwarding) and the "marker must be first" rule.
+
+def test_marker_opt_out_never_publishes_on_a_no_run_plan():
+    """A bare message-generator plan (no open_run) that yields no_re_busy_lock() first never sets
+    the flag -- this is exactly the pump_waxs shape (no run, no metadata)."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    seen = {}
+
+    def pump_like():
+        yield from rs.no_re_busy_lock()       # opt out FIRST
+        # ... a long maintenance body that opens no run and moves no alignment motors:
+        seen["mid"] = _busy_doc(client)
+        yield from bps.sleep(0.05)
+        seen["end"] = _busy_doc(client)
+
+    RE(rs.re_busy_signal(pump_like(), status_store=client, ttl=5, interval=0.01))
+
+    # Flag was never published at any point, and nothing was written to Redis.
+    assert seen["mid"] is None and seen["end"] is None
+    assert _busy_doc(client) is None
+    assert client.setex_calls == []          # heartbeat never started
+    # (no SETEX at all -> the GUI sees "idle" the whole time and may align)
+
+
+def test_marker_opt_out_propagates_exceptions():
+    """An error inside an opted-out plan must still surface (the marker only suppresses the flag)."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    class Boom(Exception):
+        pass
+
+    def pump_like():
+        yield from rs.no_re_busy_lock()
+        raise Boom("kaboom")
+
+    with pytest.raises(Boom):
+        RE(rs.re_busy_signal(pump_like(), status_store=client, ttl=5, interval=10))
+    assert client.setex_calls == []          # never locked
+    assert _busy_doc(client) is None
+
+
+
+    """Through the real installed preprocessor, the marker still suppresses the flag."""
+    client = FakeRedis()
+    RE = RunEngine({})
+    rs.install_re_busy_signal(RE, status_store=client, ttl=5, interval=0.01)
+
+    captured = {}
+
+    def pump_like():
+        yield from rs.no_re_busy_lock()
+        captured["mid"] = _busy_doc(client)
+        yield from bps.null()
+
+    RE(pump_like())
+    assert captured["mid"] is None
+    assert client.setex_calls == []
+
+
+def test_name_skip_list_opts_out_without_body_change():
+    """A plan whose generator function name is in skip_plans opts out with no body change."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    seen = {}
+
+    def pump_waxs():                          # name matches the skip-list below
+        seen["mid"] = _busy_doc(client)       # NOTE: no no_re_busy_lock() in the body
+        yield from bps.sleep(0.05)
+
+    RE(rs.re_busy_signal(pump_waxs(), status_store=client, ttl=5, interval=0.01,
+                         skip_plans={"pump_waxs"}))
+    assert seen["mid"] is None
+    assert _busy_doc(client) is None
+    assert client.setex_calls == []
+
+
+def test_default_skip_plans_contains_pump_and_vent():
+    assert "pump_waxs" in rs.DEFAULT_SKIP_PLANS
+    assert "vent_waxs" in rs.DEFAULT_SKIP_PLANS
+
+
+def test_non_opted_out_plan_still_publishes():
+    """Regression guard: an ordinary plan (no marker, not in skip-list) is still locked."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    seen = {}
+
+    def normal():
+        yield from bps.null()                 # first message -> flag asserted by now
+        seen["mid"] = _busy_doc(client)
+        yield from bps.null()
+
+    RE(rs.re_busy_signal(normal(), status_store=client, ttl=5, interval=10,
+                         skip_plans={"pump_waxs"}))
+    assert seen["mid"] is not None and seen["mid"]["busy"] is True
+    assert _busy_doc(client) is None          # cleared after
+    assert client.setex_calls                  # the flag WAS published
+
+
+def test_non_opt_out_preserves_message_responses():
+    """The leading-message peek must not drop the RE's response to the FIRST message: a plan that
+    reads back values gets them all (send-forwarding through the wrapper is correct)."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    from bluesky.utils import Msg
+
+    # A command whose handler returns a known value, so the plan can observe its response.
+    async def _echo(msg):
+        return ("ECHO", msg.args[0])
+    RE.register_command("echo", _echo)
+
+    got = []
+
+    def reader():
+        r1 = yield Msg("echo", None, 1)       # FIRST message (the one that gets peeked)
+        got.append(r1)
+        r2 = yield Msg("echo", None, 2)
+        got.append(r2)
+
+    RE(rs.re_busy_signal(reader(), status_store=client, ttl=5, interval=10))
+    # Both responses delivered, including the first message's -- proves no response was dropped.
+    assert got == [("ECHO", 1), ("ECHO", 2)]
+
+
+def test_marker_only_counts_as_first_message():
+    """A no_re_busy_lock() marker that appears LATER (not first) does NOT opt out -- the plan is
+    locked as usual (only the leading message is inspected)."""
+    client = FakeRedis()
+    RE = RunEngine({})
+
+    seen = {}
+
+    def late_marker():
+        yield from bps.null()                 # a real first message -> NOT the marker
+        seen["mid"] = _busy_doc(client)
+        yield from rs.no_re_busy_lock()       # too late to opt out
+        yield from bps.null()
+
+    RE(rs.re_busy_signal(late_marker(), status_store=client, ttl=5, interval=10))
+    assert seen["mid"] is not None and seen["mid"]["busy"] is True
+    assert client.setex_calls                  # still locked
+
+
+def test_no_re_busy_lock_is_a_harmless_noop_message():
+    """no_re_busy_lock() yields a single null message the RE executes without error."""
+    RE = RunEngine({})
+    cmds = []
+
+    def plan():
+        yield from rs.no_re_busy_lock()
+        yield from bps.null()
+
+    # Spy on the messages the RE sees by running through a trivial msg collector.
+    from bluesky.preprocessors import msg_mutator
+
+    def _collect(msg):
+        cmds.append(msg.command)
+        return msg
+
+    RE(msg_mutator(plan(), _collect))
+    assert cmds[0] == "null"                   # the marker is a null no-op
+    # and it carried the sentinel kwarg the preprocessor keys on
+    # (re-derive directly from the stub to assert the contract)
+    m = next(rs.no_re_busy_lock())
+    assert m.command == "null"
+    assert m.kwargs.get(rs.NO_RE_BUSY_MARKER) is True
+
+
+def test_install_forwards_skip_plans_and_tags_pp():
+    client = FakeRedis()
+    RE = RunEngine({})
+    pp = rs.install_re_busy_signal(RE, status_store=client, skip_plans={"pump_waxs", "vent_waxs"})
+    assert getattr(pp, "_smi_skip_plans") == {"pump_waxs", "vent_waxs"}
 
 
 # ============================================================================= beam_down flag

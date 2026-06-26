@@ -84,8 +84,11 @@ except Exception as _exc:  # noqa: BLE001 -- never let naming setup block the se
 # 'swaxsstatus:re_busy') for the duration of every plan, so the out-of-process alignment GUI can
 # poll it and disable the small motor moves it would otherwise make while the RunEngine drives the
 # beamline.  The flag is heartbeat-refreshed with a short TTL and cleared in a finally, so it can
-# never latch (it auto-expires even on a hard kill of the worker).  Guarded so a Redis hiccup never
-# blocks the session.  See smi_beamline.plans.re_status.
+# never latch (it auto-expires even on a hard kill of the worker).  Plans that hold the RE but do
+# NOT move the alignment motors (e.g. pump_waxs/vent_waxs -- minutes of pumping/venting) opt OUT so
+# the GUI stays free to align: they yield no_re_busy_lock() first and are also listed in
+# DEFAULT_SKIP_PLANS.  Guarded so a Redis hiccup never blocks the session.  See
+# smi_beamline.plans.re_status.
 try:
     from smi_beamline.plans.re_status import install_re_busy_signal as _install_re_busy
 

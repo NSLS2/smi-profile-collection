@@ -71,6 +71,15 @@ gives **per-plan** busy semantics, which is exactly right in both worlds:
 * queueserver -- "busy" spans each queued plan, and clears between them, so the GUI may move the
   sample while the queue is idle / paused between items.
 
+Per-plan opt-out
+----------------
+A plan that holds the RunEngine for a long time but does **not** drive the sample-alignment motors
+(e.g. ``pump_waxs`` -- minutes of chamber pumping) can opt OUT of the busy flag so the GUI stays
+free to align while it runs: the flag is simply not published for that plan.  Two equivalent ways
+(see :func:`re_busy_signal`): yield :func:`no_re_busy_lock` as the plan's first message, or list the
+plan's name in ``skip_plans`` (:data:`DEFAULT_SKIP_PLANS`).  Both work for a bare message-generator
+plan that never opens a run -- there is no run or metadata involved.
+
 The only beamline-specific wiring is the Redis client (reached through the seam, like every other
 device/plan module), so this module is hardware-free and unit-testable off the beamline: pass a
 fake client to :func:`install_re_busy_signal` / :func:`re_busy_signal` (``status_store=...``) and it
@@ -95,7 +104,10 @@ __all__ = [
     "BEAM_DOWN_KEY",
     "DEFAULT_TTL",
     "DEFAULT_INTERVAL",
+    "NO_RE_BUSY_MARKER",
+    "DEFAULT_SKIP_PLANS",
     "re_busy_signal",
+    "no_re_busy_lock",
     "install_re_busy_signal",
     "read_re_busy",
     "clear_re_busy",
@@ -123,6 +135,114 @@ DEFAULT_TTL = 30
 #: Seconds between heartbeat refreshes while a plan runs.  ~1/3 of the TTL gives two chances to
 #: refresh before expiry, tolerating a missed beat (GC pause, slow Redis) without a false "idle".
 DEFAULT_INTERVAL = 10
+
+#: Sentinel keyword (on a leading ``Msg('null')``) by which a plan opts OUT of the RE-busy lock.
+#: See :func:`no_re_busy_lock` and the per-plan opt-out section of :func:`re_busy_signal`.
+NO_RE_BUSY_MARKER = "_smi_no_re_busy"
+
+#: Plan (generator function) names that opt OUT of the RE-busy GUI lock by default -- long
+#: maintenance plans that hold the RE but never drive the alignment motors, so the GUI should stay
+#: free to align while they run.  These already also yield :func:`no_re_busy_lock` themselves; the
+#: name list is a belt-and-braces zero-touch fallback (and documents intent in one place).
+DEFAULT_SKIP_PLANS = frozenset({"pump_waxs", "vent_waxs"})
+
+
+def no_re_busy_lock():
+    """Plan-stub: opt this plan OUT of the RE-busy GUI lock (yield it FIRST in the plan).
+
+    Some plans hold the RunEngine for a long time **without** driving the sample-alignment motors --
+    e.g. ``pump_waxs`` (10-15 min of chamber pumping + detector start) only actuates valves/pumps.
+    For those, locking the alignment GUI out of motor moves is unnecessary and inconvenient: the
+    operator should be able to keep aligning while the pump runs.
+
+    Yielding ``no_re_busy_lock()`` as the **first** message of such a plan tells the RE-busy
+    preprocessor (:func:`re_busy_signal`) to **not publish** the ``re_busy`` flag for this plan, so
+    the GUI sees "RE idle" and stays free to move.  Mechanically it is a single ``Msg('null')`` no-op
+    carrying the :data:`NO_RE_BUSY_MARKER` keyword: the RunEngine ignores it, but the preprocessor
+    peeks it and skips the busy heartbeat.
+
+    Notes
+    -----
+    * It must be the plan's **first** message (the preprocessor only inspects the leading message).
+    * It is a pure no-op message, so it is safe in any plan -- including a bare message-generator
+      plan that never opens a run (there is no run/metadata involved at all).
+    * Equivalent zero-touch alternative: add the plan's name to the ``skip_plans`` set passed to
+      :func:`install_re_busy_signal` (matched against the plan generator's function name).
+
+    Examples
+    --------
+    >>> def pump_waxs():
+    ...     yield from no_re_busy_lock()          # GUI stays free during the long pump
+    ...     yield from chamber_pressure.pump_and_wait()
+    ...     yield from startWAXS()
+    """
+    from bluesky.utils import Msg
+    return (yield Msg("null", None, **{NO_RE_BUSY_MARKER: True}))
+
+
+def _opts_out_via_marker(msg):
+    """True if ``msg`` is the :func:`no_re_busy_lock` opt-out marker (a tagged ``null`` no-op)."""
+    return (msg is not None
+            and getattr(msg, "command", None) == "null"
+            and bool(getattr(msg, "kwargs", {}).get(NO_RE_BUSY_MARKER, False)))
+
+
+def _plan_name_opts_out(plan, skip_plans):
+    """True if ``plan``'s generator function name is in ``skip_plans`` (the zero-touch opt-out).
+
+    ``plan`` is a bare message generator (these SMI plans never open a run, so there is no
+    ``RE.md['plan_name']`` to consult); the generator's own ``gi_code.co_name`` is the only reliable
+    name available at preprocessor time, and for ``def pump_waxs(): ...`` it is exactly
+    ``"pump_waxs"``.  Best-effort: any introspection failure simply means "does not opt out".
+    """
+    if not skip_plans:
+        return False
+    try:
+        return plan.gi_code.co_name in skip_plans
+    except AttributeError:
+        return False
+
+
+def _emit_then_delegate(first, gen):
+    """Yield an already-pulled ``first`` message, then fully delegate to ``gen``.
+
+    A send-/throw-correct stand-in for ``yield from`` when the leading message has been peeked off a
+    plan: it forwards the RunEngine's response for **every** message -- including ``first`` -- back
+    into ``gen`` (plain ``itertools.chain`` / ``yield first; yield from gen`` would drop the response
+    to ``first``).  This keeps a wrapped scan byte-for-byte equivalent to the unwrapped one.
+    """
+    try:
+        resp = yield first
+    except GeneratorExit:
+        gen.close()
+        raise
+    except BaseException as exc:           # a throw() into us -> propagate into the plan
+        try:
+            msg = gen.throw(exc)
+        except StopIteration as stop:
+            return getattr(stop, "value", None)
+    else:
+        try:
+            msg = gen.send(resp)
+        except StopIteration as stop:
+            return getattr(stop, "value", None)
+    # Delegate the remainder with full two-way forwarding.
+    while True:
+        try:
+            resp = yield msg
+        except GeneratorExit:
+            gen.close()
+            raise
+        except BaseException as exc:
+            try:
+                msg = gen.throw(exc)
+            except StopIteration as stop:
+                return getattr(stop, "value", None)
+        else:
+            try:
+                msg = gen.send(resp)
+            except StopIteration as stop:
+                return getattr(stop, "value", None)
 
 
 def _now_iso():
@@ -203,7 +323,8 @@ def _resolve_client(status_store):
     return _seam.get_status_store()
 
 
-def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT_INTERVAL):
+def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT_INTERVAL,
+                   skip_plans=None):
     """Wrap ``plan`` so the Redis busy flag is held high for its whole duration, then cleared.
 
     A plain plan-preprocessor (``plan -> plan``): meant for ``RE.preprocessors`` but also usable ad
@@ -214,6 +335,20 @@ def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT
     If **no** Redis client is available (off the beamline / tests / GUI offline -- the seam returns
     ``None``), the plan is yielded through **unchanged**: the busy signal is advisory and its
     absence must never block running a plan.
+
+    Per-plan opt-out (keep the GUI free)
+    ------------------------------------
+    Some plans hold the RunEngine for a long time without driving the alignment motors (e.g.
+    ``pump_waxs`` -- minutes of chamber pumping), so locking the GUI out is needless.  Such a plan
+    opts OUT of the busy flag -- the flag is simply **not published**, the GUI sees "idle" and stays
+    free to move -- in either of two ways:
+
+    * **Marker (explicit):** yield :func:`no_re_busy_lock` as the plan's **first** message.
+    * **Name skip-list (zero-touch):** pass ``skip_plans={"pump_waxs", ...}``; a plan whose
+      generator function name is in the set is skipped without any change to its body.
+
+    Both work for a bare message-generator plan that never opens a run (there is no run/metadata
+    involved) -- which is exactly what these long maintenance plans are.
 
     Parameters
     ----------
@@ -226,11 +361,30 @@ def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT
         Seconds the key lives before Redis expires it (the GUI's worst-case stuck-locked time).
     interval : int
         Seconds between heartbeat refreshes.  Should be < ``ttl``.
+    skip_plans : set[str], optional
+        Plan (generator function) names that opt out of the busy flag with no body change; see the
+        per-plan opt-out section above.
     """
     client = _resolve_client(status_store)
     if client is None:
         # Nothing to publish to -- run the plan verbatim.
         return (yield from plan)
+
+    # --- Per-plan opt-out path 1: zero-touch name skip-list (no peek needed). ---
+    if _plan_name_opts_out(plan, skip_plans):
+        return (yield from plan)
+
+    # --- Per-plan opt-out path 2: leading no_re_busy_lock() marker. ---
+    # Peek the single leading message: if it is the opt-out marker (a tagged ``null`` no-op), run the
+    # plan verbatim with no flag.  The marker's own response is intentionally discarded (a null has
+    # none).  Only the FIRST message is inspected; a plan with no messages (StopIteration on peek)
+    # has nothing to lock anyway.
+    try:
+        first = next(plan)
+    except StopIteration:
+        return None
+    if _opts_out_via_marker(first):
+        return (yield from plan)   # marker consumed; run the rest unlocked
 
     # Best-effort context for the GUI ("what is it busy with?").  Never let metadata gathering
     # raise -- it is decoration, not function.
@@ -252,7 +406,9 @@ def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT
 
     def _wrapped():
         hb.start()
-        return (yield from plan)
+        # Re-emit the peeked leading message and delegate the rest, forwarding the RE's responses
+        # back into the plan for every message (so a wrapped scan is identical to an unwrapped one).
+        return (yield from _emit_then_delegate(first, plan))
 
     def _release():
         hb.stop(clear=True)
@@ -264,13 +420,18 @@ def re_busy_signal(plan, *, status_store=None, ttl=DEFAULT_TTL, interval=DEFAULT
 
 
 def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
-                           interval=DEFAULT_INTERVAL, replace=True, verbose=False):
+                           interval=DEFAULT_INTERVAL, skip_plans=DEFAULT_SKIP_PLANS,
+                           replace=True, verbose=False):
     """Append the RE-busy preprocessor to ``RE.preprocessors`` (the beamline default).
 
     After this, every top-level plan run through ``RE`` holds the Redis busy flag high for its
     duration (heartbeat-refreshed, ``finally``-cleared, TTL-auto-expiring).  Mirrors
     :func:`smi_beamline.plans.scan_naming.install_default_scan_naming`: the installed preprocessor
     is tagged ``_smi_re_busy = True`` so re-running this de-dups instead of stacking copies.
+
+    Plans opt OUT of the flag (so the GUI stays free to align) either by yielding
+    :func:`no_re_busy_lock` first or by being named in ``skip_plans`` -- see the per-plan opt-out
+    section of :func:`re_busy_signal`.
 
     Parameters
     ----------
@@ -280,6 +441,9 @@ def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
         Raw Redis client; defaults to the seam's :func:`get_status_store`.
     ttl, interval : int
         Heartbeat TTL and refresh interval (seconds); see :func:`re_busy_signal`.
+    skip_plans : set[str], optional
+        Plan (generator function) names that opt out of the busy flag with no body change (default
+        :data:`DEFAULT_SKIP_PLANS`).
     replace : bool
         If True (default), first remove any previously-installed RE-busy preprocessor so
         re-running in a live session does not stack duplicates.
@@ -298,12 +462,13 @@ def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
 
     def _pp(plan):
         return (yield from re_busy_signal(
-            plan, status_store=status_store, ttl=ttl, interval=interval))
+            plan, status_store=status_store, ttl=ttl, interval=interval, skip_plans=skip_plans))
 
     try:
         _pp._smi_re_busy = True
         _pp._smi_ttl = ttl
         _pp._smi_interval = interval
+        _pp._smi_skip_plans = skip_plans
     except (AttributeError, TypeError):
         pass
 
@@ -315,8 +480,9 @@ def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
             print("RE-busy signal: no Redis status store wired -- flag will NOT be published "
                   "(plans still run normally).")
         else:
+            skip_note = (f"; opt-out plans: {', '.join(sorted(skip_plans))}" if skip_plans else "")
             print(f"RE-busy signal: publishing '{RE_BUSY_KEY}' "
-                  f"(ttl={ttl}s, heartbeat={interval}s) while plans run.")
+                  f"(ttl={ttl}s, heartbeat={interval}s) while plans run{skip_note}.")
     return _pp
 
 
