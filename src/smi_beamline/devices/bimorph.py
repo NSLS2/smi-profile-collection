@@ -96,18 +96,59 @@ class _BimorphChannels:
 
         ``voltages`` must have length ``N_BIMORPH_CH``.  Staging is safe -- it never actuates;
         the move only happens on :meth:`apply`.
+
+        The CAENels controller serializes target updates internally.  Live testing showed that
+        sending all channels as one batch can leave later channels stale, so this writes one
+        channel, waits for its GET-VTRGT readback to settle, then continues to the next channel.
         """
+        yield from self.set_targets_sequential(voltages)
+
+    def set_targets_sequential(
+        self,
+        voltages,
+        *,
+        timeout=10.0,
+        poll=0.5,
+        tolerance=0.5,
+        stable_reads=3,
+        attempts=3,
+    ):
+        """PLAN: stage targets one channel at a time with GET-VTRGT verification."""
+        import time as _time
+
         voltages = list(voltages)
         if len(voltages) != N_BIMORPH_CH:
             raise ValueError("expected {} voltages, got {}".format(N_BIMORPH_CH, len(voltages)))
-        args = []
         for i, v in enumerate(voltages):
-            args += [getattr(self, "ch{}_trg".format(i)), float(v)]
-        # suppress the controller's spurious "Channel write request failed" CA warnings (the put
-        # lands; only the put-callback fails).  The toggle is process-global and the RunEngine
-        # runs in this process, so it stays in effect while the RE executes the yielded mv.
-        with _quiet_ca_messages():
-            yield from bps.mv(*args)
+            target = float(v)
+            write_sig = getattr(self, "ch{}_trg".format(i))
+            read_sig = getattr(self, "ch{}_trg_rb".format(i))
+
+            last = None
+            for attempt in range(1, int(attempts) + 1):
+                with _quiet_ca_messages():
+                    yield from bps.abs_set(write_sig, target, wait=False)
+
+                deadline = _time.monotonic() + float(timeout)
+                stable = 0
+                while True:
+                    last = float(read_sig.get())
+                    if abs(last - target) <= float(tolerance):
+                        stable += 1
+                        if stable >= int(stable_reads):
+                            break
+                    else:
+                        stable = 0
+                    if _time.monotonic() > deadline:
+                        break
+                    yield from bps.sleep(float(poll))
+                if stable >= int(stable_reads):
+                    break
+            else:
+                raise TimeoutError(
+                    "{}: ch{} target readback did not reach {:.3f} after {} attempts "
+                    "of {:.1f}s (last GET-VTRGT={:.3f})".format(
+                        self.name, i, target, int(attempts), float(timeout), last))
 
     def sync_targets_to_outputs(self):
         """PLAN: copy each live OUTPUT into its TARGET (targets only -- never moves the mirror).
@@ -252,4 +293,3 @@ class VFM_voltage(_BimorphChannels, Device):
         yield from self.set_target(mode=mode)
         yield from bps.sleep(5)
         yield from self.move_target()
-

@@ -332,7 +332,7 @@ def test_lakeshore_d_gain_points_at_d_pv():
     assert output_lakeshore.D.suffix != output_lakeshore.I.suffix
 
 
-def _drain_set_targets(gen):
+def _drain_set_targets(gen, dev=None):
     """Walk a (RunEngine-free) plan, applying 'set' messages to the fake signals; return what was
     sent keyed by signal name."""
     sent = {}
@@ -340,6 +340,9 @@ def _drain_set_targets(gen):
         if msg.command == "set":
             msg.obj.put(msg.args[0])
             sent[msg.obj.name] = msg.args[0]
+            if dev is not None and msg.obj.name.endswith("_trg"):
+                attr = msg.obj.name[len(dev.name) + 1:] + "_rb"
+                getattr(dev, attr).sim_put(msg.args[0])
     return sent
 
 
@@ -352,7 +355,7 @@ def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
     hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
     assert hfm.default_hfm_v.kind.name == "config"
     assert hfm.lowdiv_offset_v.kind.name == "config"
-    sent = _drain_set_targets(hfm.set_target("SWAXS"))
+    sent = _drain_set_targets(hfm.set_target("SWAXS"), hfm)
     # ch0 = offset + default[0] = -80 + (-151) = -231 ; ch15 = -80 + 36 = -44
     assert sent["hfm_ch0_trg"] == -231
     assert sent["hfm_ch15_trg"] == -44
@@ -360,14 +363,14 @@ def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
     vfm = make_fake(VFM_voltage, name="vfm", prefix="VFM:")
     assert vfm.default_vfm_v.kind.name == "config"
     assert vfm.default_vfm_opls_v.kind.name == "config"
-    sent_swaxs = _drain_set_targets(vfm.set_target("SWAXS"))
+    sent_swaxs = _drain_set_targets(vfm.set_target("SWAXS"), vfm)
     assert sent_swaxs["vfm_ch0_trg"] == 39        # default_vfm_v[0]
-    sent_opls = _drain_set_targets(vfm.set_target("OPLS"))
+    sent_opls = _drain_set_targets(vfm.set_target("OPLS"), vfm)
     assert sent_opls["vfm_ch0_trg"] == -206       # default_vfm_opls_v[0]
 
     # the table really drives it: change the offset, the commanded voltage follows
     hfm.lowdiv_offset_v.put(0)
-    sent2 = _drain_set_targets(hfm.set_target("SWAXS"))
+    sent2 = _drain_set_targets(hfm.set_target("SWAXS"), hfm)
     assert sent2["hfm_ch0_trg"] == -151           # now 0 + (-151)
 
 
@@ -388,6 +391,8 @@ def test_bimorph_stage_then_apply_mechanism(make_fake):
 
     # staging must NOT touch the apply signal
     hfm.apply_sig.sim_put(0)
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(float(i))
     RE(hfm.set_targets([float(i) for i in range(N_BIMORPH_CH)]))
     assert int(hfm.apply_sig.get()) == 0          # not applied yet
     assert int(hfm.ch5_trg.get()) == 5            # staged
@@ -405,6 +410,69 @@ def test_bimorph_stage_then_apply_mechanism(make_fake):
     threading.Timer(0.4, _settle).start()
     RE(hfm.apply_and_wait(settle=0.1, timeout=5))
     assert not hfm.is_busy()
+
+
+def test_bimorph_set_targets_waits_for_each_target_readback(make_fake):
+    """Regression for CAENels behavior: do not batch-write later channels before ch0 latches."""
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(-999)
+
+    gen = hfm.set_targets_sequential(
+        [float(i) for i in range(N_BIMORPH_CH)],
+        timeout=2,
+        poll=0.01,
+        stable_reads=1,
+    )
+
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    hfm.ch0_trg_rb.sim_put(0.0)
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch1_trg"
+
+
+def test_bimorph_set_targets_retries_same_channel_before_failing(make_fake):
+    """The controller sometimes needs the same SET-VTRGT resent before GET-VTRGT latches."""
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(-999)
+
+    gen = hfm.set_targets_sequential(
+        [float(i) for i in range(N_BIMORPH_CH)],
+        timeout=0.0,
+        poll=0.01,
+        stable_reads=1,
+        attempts=2,
+    )
+
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    for _ in range(10):
+        msg = next(gen)
+        if msg.command == "set":
+            break
+    else:
+        raise AssertionError("did not retry ch0 SET-VTRGT")
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    hfm.ch0_trg_rb.sim_put(0.0)
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch1_trg"
 
 
 def test_bimorph_apply_and_wait_times_out_if_stuck_busy(make_fake):
