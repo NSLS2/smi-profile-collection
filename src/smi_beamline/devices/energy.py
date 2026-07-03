@@ -3,6 +3,7 @@ import time as ttime
 import os
 import math
 import logging
+import threading
 import numpy as np
 from ophyd import (
     PVPositioner,
@@ -24,8 +25,49 @@ import bluesky.preprocessors as bpp
 import epics.ca as ca
 from .machine import InsertionDevice
 from . import _config
+from . import _context
 
 logger = logging.getLogger("bluesky")
+
+#: A direct console ``energy.move(E)`` / ``energy.set(E)`` of at least this size (eV) that is NOT
+#: running through the RunEngine bypasses the managed-move preprocessor (feedback-managed
+#: ``energy_walk``).  A one-line ``warnings.warn`` is emitted in that case (see ``Energy.move``).
+#: Kept in sync with the preprocessor's ``threshold_eV`` default (``energy_move_preprocessor``) so
+#: the note fires exactly when the managed path *would* have engaged.  Small moves stay silent --
+#: they are not managed anyway -- so setup nudges are never nagged.
+UNMANAGED_MOVE_WARN_eV = 500.0
+
+
+def _running_under_run_engine():
+    """Best-effort: are we executing on the RunEngine's plan thread?
+
+    The RunEngine runs its plan on a dedicated background thread (``RE._th``, created by
+    ``bluesky.run_engine._ensure_event_loop_running`` and named ``"bluesky-run-engine"``) and
+    processes ``Msg('set', energy, target)`` by calling ``energy.set(...)`` *from that thread*.
+    A bare console ``energy.move(E)`` / ``energy.set(E)`` instead runs on the caller's thread
+    (normally the IPython main thread).  So comparing the current thread to the RE's thread tells
+    us whether this ``set`` is going through the RunEngine (and therefore the managed-move
+    preprocessor) or is a direct, unmanaged move.
+
+    Returns ``True`` (assume managed / stay quiet) whenever the answer is unknown -- no live RE is
+    wired into the seam (tests / off-beamline / a plain import), or the private ``_th`` attribute
+    is unavailable.  When an RE is wired but exposes no ``_th``, falls back to matching the RE
+    loop-thread *name* (``"bluesky-run-engine"``).  Never raises -- this only gates a courtesy
+    warning, so any surprise means "stay quiet".
+    """
+    try:
+        re = _context.get_re()
+        if re is None:
+            # Off-beamline / tests / bare import: no managed path exists, so don't warn.
+            return True
+        current = threading.current_thread()
+        re_thread = getattr(re, "_th", None)
+        if re_thread is not None:
+            return current is re_thread
+        # RE wired but no ``_th`` (unexpected): fall back to the well-known RE loop-thread name.
+        return current.name == "bluesky-run-engine"
+    except Exception:
+        return True
 
 
 class DCMInternals(Device):
@@ -241,22 +283,64 @@ class Energy(PseudoPositioner):
         return self.PseudoPosition(energy=float(energy))
 
     @pseudo_position_argument
-    def set(self, position):
+    def move(self, position, wait=True, timeout=None, moved_cb=None):
         """Move the energy, disabling DCM pitch/roll feedback for the duration of the move.
 
         Feedback is disabled up front (a couple of quick CA puts), the move is started, and the
         feedback is re-enabled from the move's completion callback.  The returned ``Status``
         completes when the move finishes; the re-enable is wired to that same completion so it is
-        **guaranteed** to run on success or failure (unlike the previous version, which used an
-        accumulating ``_SUB_REQ_DONE`` subscription and swallowed errors).
+        **guaranteed** to run on success or failure.
 
-        This keeps the public behavior identical for ``energy.move(E)`` (blocking convenience)
-        and ``bps.mv(energy, E)`` (RunEngine message).  The feedback writes use ``put`` (not
-        ``set``) so they are robust when the completion callback runs on a pyepics worker thread.
+        This is overridden on ``move`` (not ``set``) on purpose: ophyd's ``PositionerBase.set``
+        calls ``self.move`` (and ``PseudoPositioner.set`` -> ``super().set`` -> ``self.move``), so
+        **every** entry point funnels through ``move`` -- a bare console ``energy.move(E)``, a direct
+        ``energy.set(E)``, and ``bps.mv(energy, E)`` / the RunEngine (whose ``_set`` calls
+        ``energy.set`` -> ``move``).  Overriding only ``set`` (as before) missed the bare
+        ``energy.move(E)`` path entirely, so that console move skipped the feedback choreography.
+        The feedback writes use ``put`` (not ``set``) so they are robust when the completion
+        callback runs on a pyepics worker thread.
+
+        Unmanaged-move courtesy warning
+        -------------------------------
+        A **large** move (``>= UNMANAGED_MOVE_WARN_eV``) made *directly* (``energy.move(E)`` /
+        ``energy.set(E)`` at the console, not through the RunEngine) bypasses the managed-move
+        preprocessor -- i.e. it does NOT get the feedback-managed ``energy_walk`` (stepped move,
+        BPM3 ranging, flux gate, OVAL settle/recentre).  In that case a single ``warnings.warn``
+        line is emitted as a gentle reminder to use ``RE(move_energy(E))`` / ``RE(energy_walk(E))``
+        for the managed path.  (``warnings.warn`` -- not the "bluesky" logger, which is file-only in
+        this deployment -- so the reminder is visible on the console, like the managed-move warning
+        in ``energy_move_preprocessor``.)  This is intentionally quiet and only fires for large,
+        direct moves: during setup (feedback not yet working) managed movement is meaningless, and
+        small nudges aren't managed anyway, so neither is nagged.  The move still proceeds normally.
         """
         (energy,) = position
         if np.abs(energy - self.position[0]) < 0.01:
             return MoveStatus(self, energy, success=True, done=True)
+
+        # Courtesy reminder: a LARGE move made directly (not via the RunEngine) skips the managed
+        # ``energy_walk``.  Only warn for large, direct moves (see UNMANAGED_MOVE_WARN_eV) so setup
+        # nudges and normal RE-driven moves stay silent.  Use ``warnings.warn`` (not the "bluesky"
+        # logger, which is file-only here) so the reminder is actually visible on the console --
+        # matching the managed-move warning in energy_move_preprocessor.  Force it through the
+        # warnings de-dup filter (``simplefilter("always")`` in a scoped ``catch_warnings`` so the
+        # global filter state is untouched) so an operator who repeats the same move still gets the
+        # reminder every time.  Never let this gate the actual move.
+        try:
+            if (abs(energy - self.position[0]) >= UNMANAGED_MOVE_WARN_eV
+                    and not _running_under_run_engine()):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    warnings.warn(
+                        "energy: direct move {:.1f} -> {:.1f} eV (>= {:.0f} eV) is NOT going "
+                        "through the RunEngine, so it skips the feedback-managed energy_walk "
+                        "(stepping, BPM3 ranging, flux gate, OVAL recentre).  Use "
+                        "RE(move_energy(E)) or RE(energy_walk(E)) for the managed move.  (Fine "
+                        "during setup when feedback isn't running -- managed movement is a no-op "
+                        "then.)".format(self.position[0], energy, UNMANAGED_MOVE_WARN_eV),
+                        stacklevel=2,
+                    )
+        except Exception:
+            pass
 
         # Disable feedback up front and WAIT for the puts to complete (on the calling thread,
         # where a CA context exists) so feedback is provably off before the move begins -- a
@@ -264,15 +348,24 @@ class Energy(PseudoPositioner):
         self.pitch_feedback_disabled.put("1", wait=True)
         self.roll_feedback_disabled.put("1", wait=True)
 
+        # Re-enable feedback when the move finishes (success OR failure).  Wire the callback BEFORE
+        # calling ``super().move`` so it is attached even if ``wait=True`` blocks here until done
+        # (ophyd fires an add_callback immediately if the status is already finished).  ``position``
+        # is already a validated PseudoPosition (``@pseudo_position_argument``), so pass it straight
+        # through to the ophyd machinery.
         try:
-            move_status = super().set([float(_) for _ in position])
+            move_status = super().move(position, wait=False, timeout=timeout, moved_cb=moved_cb)
         except Exception:
             # Move failed to even start -> re-enable feedback and re-raise.
             self._reenable_feedback()
             raise
 
-        # Re-enable feedback when the move finishes (success OR failure), via the move's Status.
         move_status.add_callback(self._reenable_feedback)
+
+        if wait:
+            # Preserve the blocking-convenience contract of ``energy.move(E)`` / ``super().move``
+            # with wait=True: block here until the motion (and thus the feedback re-enable) is done.
+            move_status.wait()
         return move_status
 
     def _reenable_feedback(self, *args, **kwargs):
