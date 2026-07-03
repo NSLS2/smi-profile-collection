@@ -44,6 +44,7 @@ DEVICE_MODULES = [
     ("alignment",      "smi_beamline.plans.alignment"),
     ("config",         "smi_beamline.plans.config"),
     ("scan naming",    "smi_beamline.plans.scan_naming"),
+    ("beam snapshots", "smi_beamline.plans.beam_snapshot"),
     ("blade coater",   "smibase.bladecoater"),
     ("humidity cell",  "smi_beamline.plans.humidity_cell"),
     ("linkam",         "smibase.linkam"),
