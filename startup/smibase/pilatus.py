@@ -171,6 +171,15 @@ pil2M.cam.file_number.kind = 'config'
 pil2M.cam.ensure_nonblocking()
 pil2M.active_beamstop.kind='config'
 pil2M.motor.kind='normal'
+# The SAXS detector position motors (x/y/z) are read into every scan's primary stream (for the SDD
+# filename token via the scan-naming preprocessor).  Keep them RECORDED but NOT auto-plotted: an
+# EpicsMotor's user_readback defaults to kind='hinted', so setting the container to 'normal' is not
+# enough -- strip the hint on each readback (same as the WAXS arc/bs_x/bs_y block above).  When the
+# z (SDD) motor is actually scanned it still plots, because BEC takes the x-axis from the scanned
+# motor, not from kind.
+pil2M.motor.x.user_readback.kind = 'normal'
+pil2M.motor.y.user_readback.kind = 'normal'
+pil2M.motor.z.user_readback.kind = 'normal'
 pil2M.beamstop.kind='config'
 pil2M.beam_center_x_px.kind='config'
 pil2M.beam_center_y_px.kind='config'

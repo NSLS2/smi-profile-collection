@@ -396,9 +396,16 @@ class WAXS_Detector(Pilatus):
     
 
 class DetMotor(Device):
+    # x/y/z are recorded (kind='normal') but NOT auto-plotted.  They are read into every scan's
+    # primary stream (for the SDD/filename token) via the scan-naming preprocessor, so hinting any
+    # of them would clutter the BestEffortCallback plot with the detector position in every scan.
+    # (An EpicsMotor's user_readback defaults to kind='hinted', so 'normal' here is also applied to
+    # each user_readback at instance time -- see startup/smibase/pilatus.py.)  When the SDD z motor
+    # is actually scanned it still plots, because BEC takes the x-axis from the scanned motor
+    # (start_doc 'motors'/'dimensions'), not from kind.
     x = Cpt(EpicsMotor, "X}Mtr",kind="normal")
     y = Cpt(EpicsMotor, "Y}Mtr",kind="normal")
-    z = Cpt(EpicsMotor, "Z}Mtr",kind="hinted")
+    z = Cpt(EpicsMotor, "Z}Mtr",kind="normal")
 
 
 class SAXS_Detector(Pilatus):

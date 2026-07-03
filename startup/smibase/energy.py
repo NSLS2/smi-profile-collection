@@ -28,13 +28,14 @@ dcm_config = DCMInternals("", name="dcm_config")
 bragg.read_attrs = ["user_readback"]
 
 
-# Hinting: plot ONLY the photon energy.  By default the EpicsMotor `user_readback` of bragg/ivugap
-# (and the PseudoSingle energy) are all kind='hinted', which gives the device 3 hinted fields and
-# makes the BestEffortCallback raise "we do not know how to pick out a single value".  Make the
-# synthetic `energy` axis the sole hinted field; keep bragg/ivugap/dcmgap readbacks and `harmonic`
-# recorded but kind='normal' (in every event, just not auto-plotted).  Do this AFTER the
-# `bragg.read_attrs = [...]` reassignment above (which would otherwise re-hint bragg.user_readback).
-energy.energy.kind = "hinted"
+# Hinting: keep energy and the real-axis readbacks RECORDED but NOT auto-plotted.  The scan-naming
+# preprocessor reads ``energy`` into every primary stream for the filename token, so hinting
+# ``energy.energy`` makes BestEffortCallback plot ``energy_energy`` in every scan.  Energy scans
+# still get energy as the x-axis from the scan's dimensions/motors metadata, not from this hint.
+# Do this AFTER the ``bragg.read_attrs = [...]`` reassignment above (which would otherwise re-hint
+# bragg.user_readback).
+energy.energy.kind = "normal"
+energy.energy.readback.kind = "normal"
 energy.bragg.user_readback.kind = "normal"
 energy.ivugap.user_readback.kind = "normal"
 energy.dcmgap.user_readback.kind = "normal"

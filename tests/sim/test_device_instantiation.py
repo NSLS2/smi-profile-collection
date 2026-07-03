@@ -195,6 +195,61 @@ def test_saxs_detector_full_instantiation(make_fake):
     assert det.active_beamstop.get() == "none"
 
 
+def test_saxs_detector_det_motor_z_is_not_hinted_by_default(make_fake):
+    """The SAXS detector position motors (DetMotor x/y/z) are read into every scan's primary stream
+    for the SDD filename token, so none of them may be hinted at the CLASS level -- otherwise the
+    detector position clutters the BestEffortCallback plot in every scan.  ``z`` used to be
+    ``kind='hinted'``; it must now be ``normal`` like ``x``/``y`` (i.e. the ``hinted`` bit clear).
+
+    Then, applying the live-profile instance tuning (``startup/smibase/pilatus.py``: strip the
+    ``hinted`` default off each ``user_readback``), the whole motor group contributes NO hinted
+    fields -- so BEC records x/y/z but plots none of them -- while ``read()`` still reports all
+    three (recorded).  When z (SDD) is actually scanned it still plots, because BEC takes the x-axis
+    from the scanned motor, not from ``kind``.
+    """
+    from smi_beamline.devices.pilatus import DetMotor
+    from ophyd import Kind
+
+    hinted_only = Kind.hinted & ~Kind.normal   # the bit that means "plot me" (0b100)
+    m = make_fake(DetMotor, name="pil2M_motor")
+
+    # 1) class-body default: none of x/y/z carries the hinted bit on its Cpt.
+    for ax in ("x", "y", "z"):
+        assert not (getattr(m, ax).kind & hinted_only), (
+            f"DetMotor.{ax} Cpt must not be hinted (recorded, not plotted); got "
+            f"{getattr(m, ax).kind!r}")
+
+    # 2) end-to-end: after the documented instance tuning, the group hints nothing but still reads
+    #    all three positions.
+    for ax in ("x", "y", "z"):
+        getattr(m, ax).user_readback.kind = "normal"
+    assert m.hints == {"fields": []}, m.hints
+    read_keys = set(m.read())
+    for ax in ("x", "y", "z"):
+        assert f"pil2M_motor_{ax}" in read_keys, (ax, read_keys)
+
+
+def test_xbpm_sums_recorded_not_plotted_after_instance_tuning(make_fake):
+    """The BPM2/BPM3 flux sums (sumX/sumY) must be RECORDED but NOT auto-plotted: the live profile
+    (``startup/smibase/electrometers.py``) sets them ``kind='normal'``.  Verify that with that kind
+    the XBPM contributes no hinted fields (nothing plotted) yet the sums are still in ``read()``,
+    and -- since the checkpoint plans pass ``xbpm3.sumY`` directly as a detector -- that the lone
+    signal also hints nothing (so BEC won't plot it) while still reading its value.
+    """
+    from smi_beamline.devices.electrometers import XBPM
+
+    x = make_fake(XBPM, name="xbpm3")
+    x.sumX.kind = "normal"
+    x.sumY.kind = "normal"
+
+    assert x.hints == {"fields": []}, x.hints
+    read_keys = set(x.read())
+    assert {"xbpm3_sumX", "xbpm3_sumY"} <= read_keys, read_keys
+    # passed as a bare detector: empty hints -> BEC plots nothing, but the value is still recorded
+    assert x.sumY.hints == {"fields": []}, x.sumY.hints
+    assert "xbpm3_sumY" in x.sumY.read()
+
+
 def test_factory_seed_sets_fake_signal_values(make_fake):
     """The factory ``seed=`` applies values *after* construction (e.g. to put a
     device in a known state before a plan).  Verify a seeded readback reads back.
