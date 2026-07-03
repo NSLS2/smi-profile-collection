@@ -25,6 +25,84 @@ class close_plots(QtAwareCallback):
         # close plots on a stop document plotting
 
 
+@sample_name_decorator("knife_edge")
+@bpp.finalize_decorator(smi.modeMeasurement)
+def knife_edge_scan(
+    motor,
+    distance=1.0,
+    steps=51,
+    position=None,
+    exposure_time=0.3,
+    move_to_edge=False,
+    plot=True,
+    show=True,
+):
+    """Scan a knife edge through the direct beam and fit the edge with ``pf``.
+
+    Parameters
+    ----------
+    motor : Positioner
+        Knife-edge motor to scan.
+    distance : float, optional
+        Total scan width in motor units, centered on ``position`` or the current
+        motor position.
+    steps : int, optional
+        Number of scan points.
+    position : float, optional
+        Center of the relative scan. Defaults to the current motor position.
+    exposure_time : float or None, optional
+        Pilatus exposure/acquire time. Set to ``None`` to leave unchanged.
+    move_to_edge : bool, optional
+        If True, move the motor to the fitted edge center after the scan.
+        Otherwise return to the scan center.
+    plot, show : bool, optional
+        Passed through to ``pf``.
+    """
+    if steps < 2:
+        raise ValueError("steps must be at least 2")
+    if distance <= 0:
+        raise ValueError("distance must be positive")
+
+    scan_center = motor.position if position is None else position
+
+    if position is not None:
+        yield from bps.mv(motor, position)
+
+    if exposure_time is not None:
+        yield from det_exposure_time(exposure_time, exposure_time)
+
+    yield from smi.modeAlignment(technique="gisaxs")
+    yield from smi.setDirectBeamROI()
+
+    half_distance = distance / 2
+    yield from bp.rel_scan([pil2M], motor, -half_distance, half_distance, steps)
+
+    from smi_plans import pf
+
+    result = pf(model="erf", plot=plot, show=show, db=_context.get_db())
+    print(f"Knife edge center: {pf.cen}")
+    print(f"Knife edge FWHM: {pf.fwhm}")
+
+    if move_to_edge:
+        yield from bps.mv(motor, pf.cen)
+    else:
+        yield from bps.mv(motor, scan_center)
+
+    return result
+
+
+def knife_edge_x(distance=1.0, steps=51, position=None, **kwargs):
+    """Knife-edge scan using ``piezo.x``."""
+    return (yield from knife_edge_scan(
+        piezo.x, distance=distance, steps=steps, position=position, **kwargs))
+
+
+def knife_edge_y(distance=1.0, steps=51, position=None, **kwargs):
+    """Knife-edge scan using ``piezo.y``."""
+    return (yield from knife_edge_scan(
+        piezo.y, distance=distance, steps=steps, position=position, **kwargs))
+
+
 def align_gisaxs_height(rang=0.3, point=31, der=False):
     """
     Align GISAXS height using a relative scan.
