@@ -174,6 +174,19 @@ def align_gisaxs_th(rang=0.3, point=31):
     yield from bps.mv(piezo.th, ps.peak)
 
 
+def align_gisaxs_ch(rang=0.3, point=31):
+    """
+    Align GISAXS theta using a relative scan.
+
+    Parameters:
+        rang (float): Range for the scan.
+        point (int): Number of points in the scan.
+    """
+    yield from bp.rel_scan([pil2M], piezo.ch, -rang, rang, point)
+    ps(plot=False)
+    yield from bps.mv(piezo.ch, ps.peak)
+
+
 
 def align_bdm_th(rang=0.3, point=31):
     """
@@ -299,6 +312,49 @@ def alignment_gisaxs(angle=0.15):
 
     # Return angle
     yield from bps.mv(piezo.th, piezo.th.position-angle)
+    yield from smi.modeMeasurement()
+
+    # Deactivate the automated derivative calculation
+    bec._calc_derivative_and_stats = False
+
+@sample_name_decorator("alignment_gisaxs")
+def alignment_gisaxs_90deg(angle=0.15):
+    """
+    Regular alignment routine for GISAXS and GIWAXS. but using the ch motor instead of theta
+
+    Parameters:
+        angle (float): Angle at which the alignment on the reflected beam will be done.
+    """
+    
+
+    # Activate the automated derivative calculation
+    bec._calc_derivative_and_stats = True
+
+    yield from det_exposure_time(0.3, 0.3)
+
+    yield from smi.modeAlignment(technique="gisaxs")
+
+    # Set direct beam ROI
+    yield from smi.setDirectBeamROI()
+
+    # Scan theta and height
+    yield from align_gisaxs_height(800, 21, der=True)
+    yield from align_gisaxs_ch(1.5, 27)
+
+    # move to theta 0 + value
+    yield from bps.mv(piezo.ch, ps.peak + angle)
+
+    # Set reflected ROI
+    yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs")
+
+    # Scan theta and height
+    yield from align_gisaxs_ch(0.2, 21)
+    yield from align_gisaxs_height_rb(150, 16)    
+    cb=close_plots()
+    yield from bpp.subs_wrapper(align_gisaxs_ch(0.1, 31), cb)  
+
+    # Return angle
+    yield from bps.mv(piezo.ch, piezo.ch.position-angle)
     yield from smi.modeMeasurement()
 
     # Deactivate the automated derivative calculation
@@ -1066,7 +1122,7 @@ def alignment_bdm(angle=0.1, sample_z_offset_mm=185):
 
 
 @sample_name_decorator("alignment_gisaxs_finer_for_bdm")
-def alignment_gisaxs_finer_for_bdm(angle=0.1):
+def alignment_gisaxs_finer_for_bdm(angle=0.1, sample_z_offset_mm=-50):
     """
     Regular alignment routine for GISAXS and GIWAXS. First, scan the sample height and incident angle on the direct beam.
     Then scan the incident angle, height, and incident angle again on the reflected beam.
@@ -1094,7 +1150,7 @@ def alignment_gisaxs_finer_for_bdm(angle=0.1):
     yield from bps.mv(piezo.th, ps.peak + angle)
 
     # Set reflected ROI
-    yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs")
+    yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs", sample_z_offset_mm=sample_z_offset_mm)
 
     # Scan theta and height
     yield from align_gisaxs_th(0.2, 21)
