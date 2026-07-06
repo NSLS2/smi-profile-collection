@@ -237,16 +237,14 @@ def scan_name_preprocessor(
         return "" if b is None else str(b)
 
     # Per-run state.
-    #   ``inject`` : the token devices to read into each primary bundle of THIS run -- decided at
-    #                ``open_run`` from the run's *final* name (so a user-supplied ``{token}`` name
-    #                records its own tokens), MINUS any device the plan already reads itself (the
-    #                ``detectors``/``motors`` named on the open_run), so we never read one object
-    #                twice in an Event (which raises in the RunEngine).
-    # The reads are inserted as a **tail after** ``create('primary')`` (the same proven pattern as
-    # ``bluesky.preprocessors.baseline_wrapper``), so this preprocessor NEVER intercepts ``save``
-    # and cannot disturb the bundle accounting of the run or of any other interleaved preprocessor
-    # (e.g. the ``baseline`` stream from SupplementalData).
-    state = {"inject": list(default_inject)}
+    #   ``inject`` : candidate token devices to read into each primary bundle of THIS run --
+    #                decided at ``open_run`` from the run's *final* name (so a user-supplied
+    #                ``{token}`` name records its own tokens), MINUS any device the plan declares in
+    #                ``open_run``.  Some hand-written plans open the run with no detector metadata
+    #                and only reveal their reads later via ``trigger_and_read``; for those, we also
+    #                track described keys inside each primary bundle and inject only missing,
+    #                non-colliding token devices just before ``save``.
+    state = {"inject": list(default_inject), "in_primary": False, "seen_keys": set()}
 
     def _related_names(dev):
         """All device names in ``dev``'s tree that could share recorded keys with it:
@@ -276,6 +274,26 @@ def scan_name_preprocessor(
                 pass
         return names
 
+    def _describe_keys(dev):
+        """Recorded data keys produced by ``dev``, best-effort.
+
+        This is used only as an extra collision guard.  Bluesky's duplicate-field error is based
+        on data keys, and some live objects do not expose a reliable parent/child chain even though
+        their keys clearly show they belong to a declared detector (e.g. ``pil2M_motor_z`` under
+        ``pil2M``).
+        """
+        describe = getattr(dev, "describe", None)
+        if not callable(describe):
+            return set()
+        try:
+            return set(describe())
+        except Exception:
+            return set()
+
+    def _key_belongs_to_declared_device(key, names):
+        """True if ``key`` looks like a field from one of the already-declared devices."""
+        return any(key == name or key.startswith(f"{name}_") for name in names)
+
     def _inject_set(name, msg):
         """Token devices to inject for a run named ``name`` whose open_run is ``msg`` -- excluding
         any device the plan reads itself (so no duplicate read in a bundle).
@@ -292,7 +310,13 @@ def scan_name_preprocessor(
         already |= set(msg.kwargs.get("motors", []) or [])
         if not already:
             return list(devs)
-        return [d for d in devs if not (_related_names(d) & already)]
+        return [
+            d for d in devs
+            if not (
+                (_related_names(d) & already)
+                or any(_key_belongs_to_declared_device(k, already) for k in _describe_keys(d))
+            )
+        ]
 
     def _mutate(msg):
         cmd = msg.command
@@ -336,17 +360,39 @@ def scan_name_preprocessor(
             return _renamed_open_run(), None
 
         if cmd == "create" and msg.kwargs.get("name", primary_stream) == primary_stream:
-            # Inject the token reads right AFTER the create (as a tail), so they land inside the
-            # just-opened primary bundle.  ``inject`` already excludes anything the plan reads
-            # itself, so there is no duplicate-read collision and we never touch ``save``.
-            if not state["inject"]:
+            state["in_primary"] = True
+            state["seen_keys"] = set()
+            return None, None
+
+        if cmd == "read" and state["in_primary"]:
+            state["seen_keys"].update(_describe_keys(msg.obj))
+            return None, None
+
+        if cmd == "drop" and state["in_primary"]:
+            state["in_primary"] = False
+            state["seen_keys"] = set()
+            return None, None
+
+        if cmd == "save" and state["in_primary"]:
+            # Inject token reads at the end of the primary bundle, after observing the plan's own
+            # reads.  This handles manual ``run_decorator`` + ``trigger_and_read`` plans whose
+            # ``open_run`` message does not declare detectors, while still keeping all token fields
+            # in the same Event before it is saved.
+            to_inject = [
+                dev for dev in state["inject"]
+                if not (_describe_keys(dev) & state["seen_keys"])
+            ]
+            state["in_primary"] = False
+            state["seen_keys"] = set()
+            if not to_inject:
                 return None, None
 
-            def _inject_after_create():
-                for dev in state["inject"]:
+            def _inject_before_save():
+                for dev in to_inject:
                     yield Msg("read", dev)
+                yield msg
 
-            return None, _inject_after_create()
+            return _inject_before_save(), None
 
         return None, None
 

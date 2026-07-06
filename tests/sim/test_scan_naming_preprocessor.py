@@ -350,6 +350,53 @@ def test_parent_detector_with_child_token_does_not_collide():
     assert "energy" in prim[0] and "det" in prim[0]
 
 
+def test_manual_run_with_late_parent_read_does_not_collide(energy_dev, waxs_dev):
+    """Regression for user-script plans using run_decorator + trigger_and_read.
+
+    ``run_decorator`` opens the run without ``detectors`` metadata, so collision avoidance must
+    observe the event's actual reads before injecting token devices.  This reproduces the live
+    ``pil2M``/``pil2M.motor`` collision with a lightweight parent/child device.
+    """
+    import bluesky.preprocessors as bpp
+    import bluesky.plan_stubs as bps
+    from ophyd import Component as Cpt, Device, Signal
+
+    class _Motor(Device):
+        z = Cpt(Signal, value=8300.0)
+
+    class _Pil2MLike(Device):
+        motor = Cpt(_Motor, kind="normal")
+        image = Cpt(Signal, value=1)
+
+    pil2M = _Pil2MLike(name="pil2M")
+    pil2m_pos = pil2M.motor
+    pil2m_pos.z.name = "pil2M_motor_z"
+    target_file_name = Signal(name="target_file_name", value="")
+    incident_angle = Signal(name="incident_angle", value=0)
+
+    RE = RunEngine({})
+    RE.md["sample_name"] = "u"
+    sn.install_default_scan_naming(RE, energy=energy_dev, waxs=waxs_dev, pil2m_pos=pil2M.motor)
+
+    @bpp.run_decorator(md={"file_name": "{target_file_name}", "scan_name": "Si substrate"})
+    def manual_plan():
+        target_file_name.put("XRR_directbeam_0.000deg")
+        incident_angle.put(0)
+        yield from bps.create()
+        yield from bps.read(pil2M)
+        yield from bps.read(target_file_name)
+        yield from bps.read(incident_angle)
+        yield from bps.save()
+
+    cb, names, events = _collect()
+    RE(manual_plan(), cb)
+
+    assert len(events) == 1
+    assert list(events[-1]).count("pil2M_motor_z") == 1
+    assert "energy_energy" in events[-1] and "waxs_arc" in events[-1]
+    assert "target_file_name" in events[-1] and "incident_angle" in events[-1]
+
+
 # --------------------------------------------------------------------------- only-referenced reads
 def test_only_referenced_devices_are_injected():
     """A template that names only energy must not force a WAXS/SDD read."""
@@ -499,4 +546,3 @@ def test_skip_if_tokens_false_always_appends():
     # consequence of opting out of skip_if_tokens)
     assert names[-1].endswith("_{energy:.1f}eV")
     assert names[-1] != "user_{energy}raw"
-
