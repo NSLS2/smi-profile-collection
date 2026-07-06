@@ -535,19 +535,19 @@ class SAXS_Detector(Pilatus):
             return
         self.calc_offsets(self.motor.z.position) # account for the wobble in the track
         # use the offsets and the motor positions to update the virtual beam center in mm, and then convert to pixels
-        self.beam_center_x_mm.set(
+        self.beam_center_x_mm.put(
             -self.motor.x.position - self.beam_offset_x_mm.get()
         )
-        self.beam_center_y_mm.set(
+        self.beam_center_y_mm.put(
             -self.motor.y.position - self.beam_offset_y_mm.get()
         )
-        self.sample_distance_mm.set(
+        self.sample_distance_mm.put(
             self.motor.z.position + self.sample_offset_z_mm.get()
         )
-        self.beam_center_x_px.set(
+        self.beam_center_x_px.put(
             np.abs(self.beam_center_x_mm.get()) / self.pixel_size_mm.get()
         )
-        self.beam_center_y_px.set(
+        self.beam_center_y_px.put(
             np.abs(self.beam_center_y_mm.get()) / self.pixel_size_mm.get()
         )
         ...
@@ -570,10 +570,13 @@ class SAXS_Detector(Pilatus):
             raise ValueError("beamstop must be either 'rod' or 'pin'")
         
     def remove_beamstop(self):
-        if self.active_beamstop.get() == 'rod':
+        active_beamstop = self.active_beamstop.get()
+        if active_beamstop == 'rod':
             yield from self.remove_rod()
-        elif self.active_beamstop.get() == 'pin':
+        elif active_beamstop == 'pin':
             yield from self.remove_pin()
+        elif active_beamstop in ('rod_removed', 'pin_removed'):
+            return
         else:
             raise ValueError('beamstop is not in place')
 
@@ -651,7 +654,7 @@ class SAXS_Detector(Pilatus):
             "beam_offset_y":   self.beam_offset_y_mm,
         }
         for key, sig in attr_map.items():
-            sig.set(self._interpolate_offset(distance, key))
+            sig.put(self._interpolate_offset(distance, key))
 
         # Beamstop must also track the wobble so it stays centered on the beam.
         # The beamstop is on the same carriage but at a different z from the
@@ -690,10 +693,10 @@ class SAXS_Detector(Pilatus):
         #
         # TO REVERT: delete these 4 lines and uncomment the 4 ORIGINAL lines
         # (the "- delta_x"/"- delta_y" versions) below.
-        self.rod_offset_x_mm.set(base_rod_x)
-        self.rod_offset_y_mm.set(base_rod_y)
-        self.pd_offset_x_mm.set(base_pd_x)
-        self.pd_offset_y_mm.set(base_pd_y)
+        self.rod_offset_x_mm.put(base_rod_x)
+        self.rod_offset_y_mm.put(base_rod_y)
+        self.pd_offset_x_mm.put(base_pd_x)
+        self.pd_offset_y_mm.put(base_pd_y)
         # ORIGINAL (wobble-corrected) - RESTORE WHEN DONE DEBUGGING:
         # self.rod_offset_x_mm.set(base_rod_x - delta_x)
         # self.rod_offset_y_mm.set(base_rod_y - delta_y)
@@ -705,9 +708,9 @@ class SAXS_Detector(Pilatus):
         linear_coeffs = mdsave.get("saxs_sample_offset_z_linear", None)
         if linear_coeffs is not None:
             slope, intercept = linear_coeffs
-            self.sample_offset_z_mm.set(slope * distance + intercept)
+            self.sample_offset_z_mm.put(slope * distance + intercept)
         else:
-            self.sample_offset_z_mm.set(
+            self.sample_offset_z_mm.put(
                 self._interpolate_offset(distance, "sample_offset_z")
             )
 

@@ -195,6 +195,34 @@ def test_saxs_detector_full_instantiation(make_fake):
     assert det.active_beamstop.get() == "none"
 
 
+def test_saxs_detector_remove_beamstop_is_noop_when_already_removed(make_fake):
+    from bluesky import RunEngine
+
+    from smi_beamline.devices.pilatus import SAXS_Detector
+
+    RE = RunEngine({})
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
+
+    for state in ("rod_removed", "pin_removed"):
+        det.active_beamstop.put(state)
+        RE(det.remove_beamstop())
+        assert det.active_beamstop.get() == state
+
+
+def test_saxs_detector_remove_beamstop_raises_when_beamstop_unknown(make_fake):
+    import pytest
+    from bluesky import RunEngine
+
+    from smi_beamline.devices.pilatus import SAXS_Detector
+
+    RE = RunEngine({})
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
+
+    det.active_beamstop.put("none")
+    with pytest.raises(ValueError, match="beamstop is not in place"):
+        RE(det.remove_beamstop())
+
+
 def test_saxs_detector_det_motor_z_is_not_hinted_by_default(make_fake):
     """The SAXS detector position motors (DetMotor x/y/z) are read into every scan's primary stream
     for the SDD filename token, so none of them may be hinted at the CLASS level -- otherwise the

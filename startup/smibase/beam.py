@@ -63,6 +63,13 @@ class SMIBeam(object):
         return current_state
 
     def _determineFoils(self):
+        """Return the test alignment attenuation factor for the new attenuation object."""
+        return 1e6
+
+        """
+        Previous fixed individual-foil table, kept inactive while testing the
+        energy-aware attenuation object.
+
         if self.dcm.energy.position < 2000:
             target_state = [att1_12]
         elif 2000 < self.dcm.energy.position < 2300:
@@ -122,8 +129,19 @@ class SMIBeam(object):
         elif 20000 < self.dcm.energy.position < 23001: #added 1 here -Tom Chaney
             target_state = [att1_1, att1_2, att1_3]
         return target_state
+        """
 
     def insertFoils(self, num_foils):
+        if num_foils == "Measurement":
+            yield from bps.mv(attenuation, 1)
+        else:
+            yield from bps.mv(attenuation, self._determineFoils())
+        return
+
+        """
+        Previous individual-foil actuation path, kept inactive while testing the
+        energy-aware attenuation object.
+
         if num_foils == "Measurement":
             target_state = []
         else:
@@ -147,6 +165,7 @@ class SMIBeam(object):
             print("WARNING: Foils did not actuate correctly")
             print("current state: {}".format(current_state))
             print("target state: {}".format(target_state))
+        """
 
     def _actuateFoil(self, foil, state, wait_time=2.0, max_retries=5):
         itry = 0
@@ -207,6 +226,9 @@ class SMI_Beamline(Beamline): # used in alignment
         # self.crl_state()
         self.pressure_measurments()
 
+        self._pil2m_gap_restore_y = None
+        self._pil2m_gap_y_pixel_shift = 0.0
+
         self.update_md()
 
     def modeAlignment(self, technique="gisaxs"):
@@ -224,8 +246,8 @@ class SMI_Beamline(Beamline): # used in alignment
         # Move the waxs beamstop up for safety. If tender, covers up to 1deg ai, if hard, covers up to 0.4deg ai
         yield from SMIBeam().calc_bswaxs_posy()
 
-        self.setReflectedBeamROI(technique=technique)
-        self.setDirectBeamROI()
+        yield from self.setReflectedBeamROI(technique=technique)
+        yield from self.setDirectBeamROI()
 
         if technique == "gisaxs":
             # Move the waxs detector out of the way
@@ -288,17 +310,90 @@ class SMI_Beamline(Beamline): # used in alignment
             yield from bps.mv(pil900KW.roi1.size.y, int(size[0]))
 
 
+    @staticmethod
+    def _roi_overlaps_gap(roi_min, roi_size, gaps):
+        roi_max = roi_min + roi_size
+        return any(roi_min < gap_max and roi_max > gap_min for gap_min, gap_max in gaps)
+
+    @classmethod
+    def _roi_gap_clear_shift(cls, roi_min, roi_size, gaps, margin=4):
+        """Pixel shift needed to move an ROI fully out of the detector gap."""
+        roi_max = roi_min + roi_size
+        candidates = []
+
+        for gap_min, gap_max in gaps:
+            if roi_min < gap_max and roi_max > gap_min:
+                candidates.append(gap_min - margin - roi_max)
+                candidates.append(gap_max + margin - roi_min)
+
+        for shift in sorted(candidates, key=abs):
+            if not cls._roi_overlaps_gap(roi_min + shift, roi_size, gaps):
+                return shift
+
+        return 0
+
+    @staticmethod
+    def _pil2m_motor_y_delta_for_pixel_shift(pixel_shift, pixel_size):
+        """Convert desired detector-pixel Y shift to a pil2M Y-motor move."""
+        beam_y_mm = pil2M.beam_center_y_mm.get()
+        sign = -1 if beam_y_mm > 0 else 1
+        return sign * pixel_shift * pixel_size
+
+    def _restore_pil2m_gap_offset_if_clear(self, natural_y_pos, roi_height):
+        if self._pil2m_gap_restore_y is None:
+            return False
+
+        if self._roi_overlaps_gap(natural_y_pos, roi_height, self.SAXS.detector_gap_y):
+            return False
+
+        yield from bps.mv(pil2M.motor.y, self._pil2m_gap_restore_y)
+        self._pil2m_gap_restore_y = None
+        self._pil2m_gap_y_pixel_shift = 0.0
+        self.SAXS.getPositions()
+        return True
+
+    def _avoid_pil2m_reflected_y_gap(self, y_pos, roi_height):
+        if not self._roi_overlaps_gap(y_pos, roi_height, self.SAXS.detector_gap_y):
+            return
+
+        shift_pix = self._roi_gap_clear_shift(y_pos, roi_height, self.SAXS.detector_gap_y)
+        if shift_pix == 0:
+            return
+
+        original_motor_y = pil2M.motor.y.position
+        original_beam_y = self.SAXS.direct_beam[1]
+        motor_delta = self._pil2m_motor_y_delta_for_pixel_shift(
+            shift_pix, self.SAXS.pixel_size)
+
+        if self._pil2m_gap_restore_y is None:
+            self._pil2m_gap_restore_y = original_motor_y
+
+        print(
+            "Reflected beam ROI would land in the Pilatus 2M Y gap; "
+            f"moving pil2M Y by {motor_delta:.3f} mm."
+        )
+        yield from bps.mv(pil2M.motor.y, original_motor_y + motor_delta)
+        self.SAXS.getPositions()
+        self._pil2m_gap_y_pixel_shift += self.SAXS.direct_beam[1] - original_beam_y
+
+
     def setReflectedBeamROI(self, total_angle=0.16, technique="gisaxs", size=[48, 8],
-                            roi=pil2M.roi1,sample_z_offset_mm=0, sample_y_offset_mm=0):
+                            roi=pil2M.roi1,sample_z_offset_mm=0, sample_y_offset_mm=0,
+                            avoid_gaps=False):
         """
         Update the ROI (pil2m.roi3) for the reflected beam on the SAXS detector.
         total_ange: float: incident angle of the alignement in degrees
         size: tuple: size in pixels) of the ROI [width, height]
+        avoid_gaps: if True, move pil2M Y when needed so the reflected ROI avoids
+            Pilatus 2M module gaps. False preserves historical ROI-only behavior.
         """
+
+        self.SAXS.getPositions()
 
         # These positions are updated based on current detector position
         x0 = self.SAXS.direct_beam[0]
         y0 = self.SAXS.direct_beam[1]
+         
         d = self.SAXS.distance + sample_z_offset_mm  # mm
         pixel_size = self.SAXS.pixel_size  # mm
 
@@ -307,6 +402,28 @@ class SMI_Beamline(Beamline): # used in alignment
             y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
             y_offset_pix = y_offset_mm / pixel_size
             y_pos = int(y0 - size[1] / 2 - y_offset_pix)
+
+            restored = False
+            if avoid_gaps:
+                natural_y_pos = y_pos - self._pil2m_gap_y_pixel_shift
+                restored = yield from self._restore_pil2m_gap_offset_if_clear(
+                    natural_y_pos, size[1])
+            if restored:
+                x0 = self.SAXS.direct_beam[0]
+                y0 = self.SAXS.direct_beam[1]
+                d = self.SAXS.distance + sample_z_offset_mm
+                y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+                y_offset_pix = y_offset_mm / pixel_size
+                y_pos = int(y0 - size[1] / 2 - y_offset_pix)
+
+            if avoid_gaps:
+                yield from self._avoid_pil2m_reflected_y_gap(y_pos, size[1])
+                x0 = self.SAXS.direct_beam[0]
+                y0 = self.SAXS.direct_beam[1]
+                d = self.SAXS.distance + sample_z_offset_mm
+                y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+                y_offset_pix = y_offset_mm / pixel_size
+                y_pos = int(y0 - size[1] / 2 - y_offset_pix)
 
             # Define the reflected beam ROI on the pilatus 2M detector
             yield from bps.mv(roi.min_xyz.min_x, int(x0 - size[0] / 2))
@@ -352,6 +469,30 @@ class SMI_Beamline(Beamline): # used in alignment
             # y_pos = int(y0 - size[1] / 2 - y_offset_pix)
             sample_y_offset_pix = sample_y_offset_mm / pixel_size
             y_pos = int(y0 - size[1] / 2 - y_offset_pix + sample_y_offset_pix)
+
+            restored = False
+            if avoid_gaps:
+                natural_y_pos = y_pos - self._pil2m_gap_y_pixel_shift
+                restored = yield from self._restore_pil2m_gap_offset_if_clear(
+                    natural_y_pos, size[1])
+            if restored:
+                x0 = self.SAXS.direct_beam[0]
+                y0 = self.SAXS.direct_beam[1]
+                d = self.SAXS.distance + sample_z_offset_mm
+                y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+                y_offset_pix = y_offset_mm / pixel_size
+                sample_y_offset_pix = sample_y_offset_mm / pixel_size
+                y_pos = int(y0 - size[1] / 2 - y_offset_pix + sample_y_offset_pix)
+
+            if avoid_gaps:
+                yield from self._avoid_pil2m_reflected_y_gap(y_pos, size[1])
+                x0 = self.SAXS.direct_beam[0]
+                y0 = self.SAXS.direct_beam[1]
+                d = self.SAXS.distance + sample_z_offset_mm
+                y_offset_mm = np.tan(np.radians(2 * total_angle)) * d
+                y_offset_pix = y_offset_mm / pixel_size
+                sample_y_offset_pix = sample_y_offset_mm / pixel_size
+                y_pos = int(y0 - size[1] / 2 - y_offset_pix + sample_y_offset_pix)
 
             # Define the reflected beam ROI on the pilatus 2M detector
             yield from bps.mv(roi.min_xyz.min_x, int(x0 - size[0] / 2))
@@ -444,9 +585,18 @@ def interpolate_sdds():
 class SMI_SAXS_Det(object):
     def __init__(self, **kwargs):
 
-        # ToDo: add here the position of the gap
-        self.detector_gap_x = [[830, 850], [617, 637], [405, 425], [193, 213]]
-        self.detector_gap_y = [[485, 495]]
+        # Pilatus 2M: 3 columns x 8 rows of 487 x 195 px modules.
+        # Inter-module dead areas are 7 px in X and 17 px in Y.
+        self.detector_gap_x = [[487, 494], [981, 988]]
+        self.detector_gap_y = [
+            [195, 212],
+            [407, 424],
+            [619, 636],
+            [831, 848],
+            [1043, 1060],
+            [1255, 1272],
+            [1467, 1484],
+        ]
 
         self.pixel_size = 0.172
         self.getPositions()
