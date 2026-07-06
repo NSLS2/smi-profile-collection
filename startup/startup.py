@@ -28,6 +28,15 @@ if '__IPYTHON__' in globals():
 from smibase.base import *
 from smibase.base_dev import *
 
+# --- User metadata cleanup helper (manual only; does not run automatically). ---
+try:
+    from smi_beamline.plans.metadata_cleanup import RE_MD_WHITELIST, clean_re_md
+
+    print("✓ RE.md cleanup helper exposed (clean_re_md)")
+except Exception as _exc:  # noqa: BLE001 -- never let an optional console helper block startup
+    print(f"✗ RE.md cleanup helper NOT exposed: "
+          f"{type(_exc).__name__}: {_exc}")
+
 # --- Factory: build the beamline devices, with a timed per-module load report (Option C). ---
 # make_devices imports the device modules in dependency order, times each, reports ok/fail, and
 # returns the namespace they export.  We merge that into globals() so all the device instances and
@@ -116,3 +125,31 @@ except Exception as _exc:  # noqa: BLE001 -- never let managed energy moves bloc
     print(f"\u2717 managed energy-move preprocessor NOT installed: "
           f"{type(_exc).__name__}: {_exc}")
 
+# --- Human-run EPU lookup-table calibration plan. ---
+# Expose explicitly so terminal users and queueserver introspection can find it.  The plan writes a
+# dated candidate table to mdsave only; it never overwrites the production IVU lookup-table config.
+try:
+    from smi_beamline.plans.epu_calibration import calibrate_epu_lookup, EPUCalibrationLivePlot
+
+    print("\u2713 EPU calibration plan exposed (calibrate_epu_lookup)")
+except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning plan block startup
+    print(f"\u2717 EPU calibration plan NOT exposed: "
+          f"{type(_exc).__name__}: {_exc}")
+
+# --- Human-run attenuator effective-thickness calibration plan. ---
+try:
+    from smi_beamline.plans.attenuator_calibration import attenuator_thickness_calibration
+
+    print("\u2713 Attenuator calibration plan exposed (attenuator_thickness_calibration)")
+except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning plan block startup
+    print(f"\u2717 Attenuator calibration plan NOT exposed: "
+          f"{type(_exc).__name__}: {_exc}")
+
+# --- Optional OAV before/after snapshot wrapper. ---
+try:
+    from smi_beamline.plans.oav_snapshot import oav_snapshot, with_oav_snapshots
+
+    print("\u2713 OAV snapshot helpers exposed (oav_snapshot, with_oav_snapshots)")
+except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers block startup
+    print(f"\u2717 OAV snapshot helpers NOT exposed: "
+          f"{type(_exc).__name__}: {_exc}")
