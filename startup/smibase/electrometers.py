@@ -1,5 +1,5 @@
 
-from smi_beamline.devices.electrometers import XBPM, new_LakeShore, Keithly2450
+from smi_beamline.devices.electrometers import XBPM, new_LakeShore, Keithly2450, PinDiodeTetrAMM
 from ophyd import EpicsSignal
 from nslsii.ad33 import QuadEMV33
 
@@ -41,6 +41,10 @@ hfmcurrent = EpicsSignal("XF:12IDA{dmm:2}:K2450:1:reading", name="hfmcurrent")
 pin_diode = QuadEMV33("XF:12ID:2{EM:Tetr1}", name="pin_diode")
 pin_diode.stage_sigs["conf.port_name"] = "TetrAMM"
 pin_diode.stage_sigs["acquire_mode"] = 2
+
+# Experimental alternate view of the same TetrAMM.  This does not replace the
+# existing ``pin_diode`` object; use it to test useful readout/configuration PVs.
+pin_diode_ext = PinDiodeTetrAMM("XF:12ID:2{EM:Tetr1}", name="pin_diode_ext")
 
 for i in (1, 2, 3, 4):
     getattr(pin_diode, f"current{i}").mean_value.kind = "normal"
