@@ -46,6 +46,7 @@ from bluesky_tiled_plugins import TiledWriter
 from databroker import Broker
 from IPython.terminal.prompts import Prompts
 import matplotlib.pyplot as plt
+from pygments.token import Token as _PromptToken
 from redis_json_dict import RedisJSONDict
 from tiled.client import from_profile, from_uri
 
@@ -152,8 +153,8 @@ class ProposalIDPrompt(Prompts):
             data_session = data_session[len("pass-"):]
         project_name = str(RE.md.get("project_name", "N/A"))
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return [(None, f"SMI {data_session} {project_name} {now} "
-                       f"[{self.shell.execution_count}]: ")]
+        return [(_PromptToken.Prompt, f"SMI {data_session} {project_name} {now} "
+                                      f"[{self.shell.execution_count}]: ")]
 
 
 if ipython is not None and not IS_QS_WORKER:
