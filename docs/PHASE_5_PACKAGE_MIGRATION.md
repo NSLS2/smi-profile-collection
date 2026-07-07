@@ -10,8 +10,8 @@ Finish moving real beamline source out of `startup/` and into the installable/te
 
 - `src/smi_beamline/` owns device classes, live instance construction, plans, helpers, and tests.
 - `startup/` is only the profile execution/bootstrap layer for IPython and QServer.
-- `startup/smibase/*.py` files become temporary compatibility shims and are deleted once internal
-  imports no longer depend on them.
+- The legacy `startup/smibase/` package is removed; conventional `base.py` / `base_dev.py`
+  responsibilities are documented inline in `startup/startup.py` for DSSI/operator upkeep.
 
 ## Completed Today
 
@@ -125,20 +125,35 @@ pixi run test-sim
 # 181 passed
 ```
 
-## Remaining `smibase` Bootstrap Layer
+## Bootstrap Consolidation
 
-The migrated `startup/smibase/*.py` compatibility shims have been deleted. The remaining
-`startup/smibase` modules are bootstrap/support modules, not factory-owned device groups:
+The migrated `startup/smibase/*.py` compatibility shims were deleted first. The remaining bootstrap
+support modules were then consolidated so the `startup/smibase/` package is gone entirely:
 
-- `base`
-- `base_dev`
-- `zz_smi_plans`
+- The old `base.py` responsibilities now live in `startup/startup.py` under the section
+  `Session Bootstrap (formerly startup/smibase/base.py)`.
+- The old `base_dev.py` responsibilities now live in `startup/startup.py` under the section
+  `Supplemental Tiled Writer (formerly startup/smibase/base_dev.py)`.
+- The old `zz_smi_plans.py` helper now lives in `startup/__init__.py` as `wire_smi_plans()`.
+- `startup/README` documents this mapping for maintainers used to conventional NSLS-II profiles.
+
+Verification after removing `startup/smibase/` entirely:
+
+```bash
+pixi run test-unit
+# 110 passed
+
+pixi run test-sim
+# 181 passed
+
+pixi run -e qs qs-list
+# The list of existing plans and devices was created successfully.
+```
 
 ## Next Step
 
-The full instance-module migration is now live-smoke-confirmed and the temporary compatibility shims
-have been removed. Before merging this branch back, rerun the live smoke after pulling the latest
-commit:
+The full instance-module migration is now live-smoke-confirmed and `startup/smibase/` has been
+removed. Before merging this branch back, rerun the live smoke after pulling the latest commit:
 
 ```bash
 pixi run test-hardware

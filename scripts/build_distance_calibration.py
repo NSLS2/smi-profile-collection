@@ -1,6 +1,16 @@
 import os
 import numpy as np
-from smibase.base import mdsave
+
+
+def _get_mdsave():
+    import redis
+    from redis_json_dict import RedisJSONDict
+
+    with open("/etc/bluesky/redis.secret", "r") as f:
+        redis_secret = f.read().strip()
+    client = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=1, ssl=True, port=6380,
+                         password=redis_secret)
+    return RedisJSONDict(client, "swaxsmetadata")
 
 CAL_DIR = "/nsls2/data/smi/shared/config/bluesky/profile_collection/startup/agb_z_calibration_results"
 PIXEL_SIZE_MM = 0.172
@@ -72,6 +82,7 @@ def build_calibration(z_bin_mm=2.0, write=False, verbose=True):
                   f"sz={entry['sample_offset_z']:.3f}")
 
     if write:
+        mdsave = _get_mdsave()
         mdsave["distance_calibration"] = cal
         print(f"Wrote {len(cal)} calibration points to mdsave['distance_calibration'].")
     return cal

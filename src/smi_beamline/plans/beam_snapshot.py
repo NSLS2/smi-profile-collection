@@ -447,7 +447,8 @@ def list_beam_position_snapshots(*, namespace=None, store=None):
 # The factory imports this module before startup.py updates the IPython namespace.  Pulling the
 # live objects from package instance modules here makes the public functions usable directly at the prompt.
 try:
-    from smibase.base import mdsave  # noqa: F401
+    from smi_beamline.devices._context import get_config as _get_config
+    mdsave = _get_config()
     from smi_beamline.instances.slits import wbs, ssa, eslit, cslit  # noqa: F401
     from smi_beamline.instances.energy import energy, dcm_config  # noqa: F401
     from smi_beamline.instances.xbpms import xbpm2_pos, xbpm3_pos  # noqa: F401

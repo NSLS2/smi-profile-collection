@@ -1,8 +1,7 @@
 
-# Phase 4: put the smi_beamline package (src/) on the import path so the smibase modules can reach
-# the relocated device classes via the smiclasses shim.  startup.py lives in <repo>/startup/, so
-# the package is at <repo>/src.  (Works whether this file is run by IPython --profile-dir=. or
-# exec'd by the queueserver; falls back to the profile dir / cwd if __file__ is unavailable.)
+# Put the smi_beamline package (src/) on the import path.  startup.py lives in <repo>/startup/, so
+# the package is at <repo>/src.  Works whether this file is run by IPython --profile-dir=. or exec'd
+# by the queueserver; falls back to the profile dir / cwd if __file__ is unavailable.
 import os as _os
 import sys as _sys
 try:
@@ -10,6 +9,8 @@ try:
 except NameError:
     _repo = _os.path.dirname(_os.path.abspath(_os.getcwd()))
 _src = _os.path.join(_repo, "src")
+if _repo not in _sys.path:
+    _sys.path.insert(0, _repo)
 if _os.path.isdir(_src) and _src not in _sys.path:
     _sys.path.insert(0, _src)
 
@@ -20,13 +21,194 @@ if '__IPYTHON__' in globals():
     ipython.magic('load_ext autoreload')
     ipython.magic('autoreload 2')
 
-# --- Bootstrap: create the session (RE/sd/bec/db/mdsave) and wire the device-class seam. ---
-# These two modules ARE the bootstrap: importing them creates RE/db/bec/sd via
-# nslsii.configure_base, opens Tiled/Redis, sets the prompt, and configures
-# smi_beamline.devices._context with RE/sd/bec/db.  They run first (before the factory) and expose
-# the session objects (RE, sd, bec, db, mdsave, ...) into this namespace via ``import *``.
-from smibase.base import *
-from smibase.base_dev import *
+# --- Session Bootstrap (formerly startup/smibase/base.py) ---
+#
+# In many NSLS-II profile collections this work lives in a separate ``base.py``.  SMI keeps it
+# inline here so startup has a single Python entry point and no legacy ``smibase`` package.  This
+# section creates the session-level objects and services that downstream startup code expects:
+#
+# - RE / sd / bec via ``nslsii.configure_base``
+# - persistent Redis-backed config/sample stores: mdsave, samplestore
+# - ephemeral Redis status store used by GUI/RunEngine liveness helpers
+# - primary Tiled writer and optional interactive Tiled reader/databroker
+# - olog/prompt/plot defaults for interactive IPython sessions
+# - the ``smi_beamline.devices._context`` seam used by package device/instance modules
+import copy
+import datetime
+import logging
+import os
+import time
+
+import nslsii
+import redis
+from bluesky.callbacks.buffer import BufferingWrapper
+from bluesky_tiled_plugins import TiledWriter
+from databroker import Broker
+from IPython.terminal.prompts import Prompts, Token
+import matplotlib.pyplot as plt
+from redis_json_dict import RedisJSONDict
+from tiled.client import from_profile, from_uri
+
+try:
+    from bluesky_queueserver import is_re_worker_active
+    IS_QS_WORKER = bool(is_re_worker_active())
+except Exception:
+    IS_QS_WORKER = False
+
+# In terminal IPython, configure_base populates the live user namespace.  In the queueserver worker
+# there is no real IPython namespace, so use a plain dict and then expose RE/sd/bec/db as globals.
+if ipython is not None and not IS_QS_WORKER:
+    _user_ns = ipython.user_ns
+else:
+    _user_ns = {}
+
+with open("/etc/bluesky/redis.secret", "r") as f:
+    redis_secret = f.read().strip()
+
+mdclient = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=1, ssl=True, port=6380,
+                       password=redis_secret)
+mdsave = RedisJSONDict(mdclient, "swaxsmetadata")
+
+sampleclient = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=2, ssl=True, port=6380,
+                           password=redis_secret)
+samplestore = RedisJSONDict(sampleclient, "swaxssamples")
+
+# Raw Redis client for ephemeral GUI/status keys such as swaxsstatus:re_busy.
+statusclient = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=3, ssl=True, port=6380,
+                           password=redis_secret)
+
+tiled_writing_client = from_profile(
+    "nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
+tiled_writing_client.context.http_client.headers["tiled-qos"] = "acquisition"
+
+
+class TiledInserter:
+    def insert(self, name, doc):
+        attempts = 20
+        error = None
+        for _ in range(attempts):
+            try:
+                tiled_writing_client.post_document(name, doc)
+            except Exception as exc:
+                print("Document saving failure:", repr(exc))
+                error = exc
+            else:
+                break
+            time.sleep(2)
+        else:
+            raise error
+
+
+tiled_inserter = TiledInserter()
+
+nslsii.configure_base(
+    _user_ns,
+    broker_name="smi",
+    bec_derivative=True,
+    publish_documents_with_kafka=True,
+    magics=not IS_QS_WORKER,
+    mpl=not IS_QS_WORKER,
+    redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
+    redis_port=6380,
+    redis_ssl=True,
+)
+
+RE = _user_ns["RE"]
+bec = _user_ns["bec"]
+sd = _user_ns["sd"]
+RE.unsubscribe(0)
+RE.subscribe(tiled_inserter.insert)
+
+from smi_beamline.devices import _context as _seam
+
+_seam.configure(run_engine=RE, config_dict=mdsave, sd=sd, bec=bec,
+                sample_store=samplestore, status_store=statusclient)
+
+if not IS_QS_WORKER:
+    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
+    tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
+    tiled_reading_client.context.http_client.headers["tiled-qos"] = "acquisition"
+    db = Broker(tiled_reading_client)
+else:
+    tiled_reading_client = None
+    db = None
+_seam.configure(db=db)
+
+plt.rcParams["figure.dpi"] = 200
+assets_path = f"/nsls2/data/smi/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets/"
+bec.disable_baseline()
+
+if ipython is not None and not IS_QS_WORKER:
+    nslsii.configure_olog(ipython.user_ns, subscribe=True)
+
+logger = logging.getLogger("bluesky")
+logger.setLevel("INFO")
+
+
+class ProposalIDPrompt(Prompts):
+    def in_prompt_tokens(self, cli=None):
+        data_session = str(RE.md.get("data_session", "N/A"))
+        if data_session.startswith("pass-"):
+            data_session = data_session[len("pass-"):]
+        project_name = str(RE.md.get("project_name", "N/A"))
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return [
+            (Token.OutPromptNum, "SMI "),
+            (Token.Prompt, f"{data_session} "),
+            (Token.Name.Class, f"{project_name} "),
+            (Token.Comment, f"{now} "),
+            (Token.Prompt, "["),
+            (Token.PromptNum, str(self.shell.execution_count)),
+            (Token.Prompt, "]: "),
+        ]
+
+
+if ipython is not None and not IS_QS_WORKER:
+    ipython.prompts = ProposalIDPrompt(ipython)
+
+# --- Supplemental Tiled Writer (formerly startup/smibase/base_dev.py) ---
+#
+# This is the old ``base_dev.py`` payload kept inline for DSSI/operator readability.  It installs a
+# second Tiled writer targeting the migration tree and applies the resource/descriptor patches needed
+# for SMI detector documents.  It also sets the Tiled access tag from the current data session.  The
+# optional interactive reader below is skipped in queueserver workers to avoid a Duo-auth hang.
+RE.md["tiled_access_tags"] = [RE.md["data_session"]]
+
+
+def patch_descriptor(doc):
+    # This was labeled "<f8" but it is actually "<i4".
+    if "pil1M_image" in doc["data_keys"]:
+        doc["data_keys"]["pil1M_image"]["dtype_str"] = "<i4"
+    return doc
+
+
+def patch_resource(doc):
+    doc = copy.deepcopy(doc)
+    kwargs = doc.get("resource_kwargs", {})
+    root = doc.get("root", "")
+    if not doc["resource_path"].startswith(root):
+        doc["resource_path"] = os.path.join(root, doc["resource_path"])
+    doc["root"] = ""
+    doc["resource_path"] = doc["resource_path"].replace("/nsls2/data1/smi", "/nsls2/data/smi")
+    if frame_per_point := kwargs.pop("frame_per_point", None):
+        kwargs["multiplier"] = frame_per_point
+    if doc.get("spec") in ["AD_TIFF"]:
+        kwargs["template"] = "/" + kwargs["template"].lstrip("/")
+        kwargs["join_method"] = "concat"
+    return doc
+
+
+tiled_writing_client_sql = from_uri(
+    "https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"]
+)["smi/migration"]
+tw = TiledWriter(tiled_writing_client_sql, batch_size=10000,
+                 patches={"resource": patch_resource, "descriptor": patch_descriptor})
+tw = BufferingWrapper(tw)
+RE.subscribe(tw)
+
+if not IS_QS_WORKER:
+    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
+    tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
 
 # --- User metadata cleanup helper (manual only; does not run automatically). ---
 try:
@@ -40,7 +222,7 @@ except Exception as _exc:  # noqa: BLE001 -- never let an optional console helpe
 # --- Factory: build the beamline devices, with a timed per-module load report (Option C). ---
 # make_devices imports the device modules in dependency order, times each, reports ok/fail, and
 # returns the namespace they export.  We merge that into globals() so all the device instances and
-# plans land in the IPython user namespace exactly as the old flat ``from smibase.X import *`` did.
+# plans land in the IPython user namespace for console use and queueserver introspection.
 from smi_beamline.devices import _context as _seam
 from smi_beamline.instances import make_devices as _make_devices
 
@@ -56,7 +238,7 @@ globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith(
 # the terminal user can call them.  Runs AFTER the factory so the device globals exist; guarded so
 # a missing smi-plans package never blocks startup.  See smi-plans/docs/QSERVER_WIRING.md.
 try:
-    from smibase.zz_smi_plans import wire as _wire_smi_plans
+    from startup import wire_smi_plans as _wire_smi_plans
 
     _smi_plans_ns = _wire_smi_plans(globals(), verbose=True)
     globals().update(_smi_plans_ns)
