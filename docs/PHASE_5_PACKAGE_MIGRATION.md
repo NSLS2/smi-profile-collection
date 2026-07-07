@@ -113,16 +113,22 @@ pixi run test-hardware
 The `bsui` console has also been confirmed working well on the beamline after the full instance
 module migration.
 
-## Remaining `smibase` Compatibility Layer
+After confirming external user scripts use namespace devices rather than `smibase.*` imports, the
+temporary migrated-module compatibility shims were deleted from `startup/smibase/`. Offline tests were
+rerun after deleting the shims:
 
-The migrated `startup/smibase/*.py` files are now compatibility shims of the form:
+```bash
+pixi run test-unit
+# 110 passed
 
-```python
-from smi_beamline.instances.<module> import *
+pixi run test-sim
+# 181 passed
 ```
 
-The remaining non-shim `startup/smibase` modules are bootstrap/support modules, not factory-owned
-device groups:
+## Remaining `smibase` Bootstrap Layer
+
+The migrated `startup/smibase/*.py` compatibility shims have been deleted. The remaining
+`startup/smibase` modules are bootstrap/support modules, not factory-owned device groups:
 
 - `base`
 - `base_dev`
@@ -130,12 +136,12 @@ device groups:
 
 ## Next Step
 
-The full instance-module migration is now live-smoke-confirmed. The next structural cleanup is to
-decide whether any remaining shims are still needed by out-of-tree user scripts before deleting or
-formally deprecating them. Re-run before removing shims:
+The full instance-module migration is now live-smoke-confirmed and the temporary compatibility shims
+have been removed. Before merging this branch back, rerun the live smoke after pulling the latest
+commit:
 
 ```bash
-pixi run test-unit
-pixi run test-sim
 pixi run test-hardware
 ```
+
+Also launch `bsui` once from the updated branch as a final console startup check.

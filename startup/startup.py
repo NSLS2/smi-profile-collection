@@ -116,9 +116,9 @@ except Exception as _exc:  # noqa: BLE001 -- never let the busy signal block the
 # fine scan steps) stay fast as a plain ``set``.  One warning line per large move; silent
 # otherwise; leaves feedback ON on any exit.  Live-validated 2.1 -> 16.1 keV up and down.
 # Guarded so a BPM3 CA hiccup never blocks the session; ``disable_managed_energy_moves()`` removes
-# it at the console.  See smi_beamline.plans.energy_move_preprocessor / smibase.energy.
+# it at the console.  See smi_beamline.plans.energy_move_preprocessor / smi_beamline.instances.energy.
 try:
-    from smibase.energy import enable_managed_energy_moves as _enable_managed_energy_moves
+    from smi_beamline.instances.energy import enable_managed_energy_moves as _enable_managed_energy_moves
 
     _enable_managed_energy_moves()   # prints its own "energy-move preprocessor installed" line
 except Exception as _exc:  # noqa: BLE001 -- never let managed energy moves block the session
