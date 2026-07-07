@@ -445,13 +445,13 @@ def list_beam_position_snapshots(*, namespace=None, store=None):
 
 
 # The factory imports this module before startup.py updates the IPython namespace.  Pulling the
-# live objects from smibase modules here makes the public functions usable directly at the prompt.
+# live objects from package instance modules here makes the public functions usable directly at the prompt.
 try:
     from smibase.base import mdsave  # noqa: F401
-    from smibase.slits import wbs, ssa, eslit, cslit  # noqa: F401
-    from smibase.energy import energy, dcm_config  # noqa: F401
-    from smibase.xbpms import xbpm2_pos, xbpm3_pos  # noqa: F401
-    from smibase.mirrors import hfm, vfm, vdm, hfm_voltage, vfm_voltage  # noqa: F401
+    from smi_beamline.instances.slits import wbs, ssa, eslit, cslit  # noqa: F401
+    from smi_beamline.instances.energy import energy, dcm_config  # noqa: F401
+    from smi_beamline.instances.xbpms import xbpm2_pos, xbpm3_pos  # noqa: F401
+    from smi_beamline.instances.mirrors import hfm, vfm, vdm, hfm_voltage, vfm_voltage  # noqa: F401
 except Exception:
     # Keep import-clean for tests/offline use; callers can pass namespace/store explicitly.
     pass

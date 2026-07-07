@@ -14,7 +14,7 @@ import bluesky.preprocessors as bpp
 from ophyd import Signal
 
 from smi_beamline.devices import attenuator_data as _ad
-from smibase.beam import SMI as smi
+from smi_beamline.instances.beam import SMI as smi
 
 
 __all__ = ["attenuator_thickness_calibration", "attenuator_two_pass_calibration"]

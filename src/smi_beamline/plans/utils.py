@@ -9,9 +9,9 @@ from lmfit import Model
 from scipy.special import erf
 import datetime
 import matplotlib.pyplot as plt
-from smibase.energy import energy
-from smibase.pilatus import pil2m_pos, waxs
-from smibase.electrometers import xbpm2
+from smi_beamline.instances.energy import energy
+from smi_beamline.instances.pilatus import pil2m_pos, waxs
+from smi_beamline.instances.electrometers import xbpm2
 
 from IPython import get_ipython  # still used by hardware_check() for the live user namespace
 from smi_beamline.devices import _context

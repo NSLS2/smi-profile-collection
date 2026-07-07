@@ -62,7 +62,8 @@ def test_default_device_modules_excludes_bootstrap():
     names = [m for _, m in instances.DEVICE_MODULES]
     assert "smibase.base" not in names
     assert "smibase.base_dev" not in names
-    # but it should cover the real device modules
-    assert "smibase.pilatus" in names
-    assert "smibase.energy" in names
-    assert "smibase.suspenders" in names
+    # Phase 5 keeps live instance construction in the package; smibase files are shims only.
+    assert "smi_beamline.instances.pilatus" in names
+    assert "smi_beamline.instances.energy" in names
+    assert "smi_beamline.instances.suspenders" in names
+    assert not any(name.startswith("smibase.") for name in names)

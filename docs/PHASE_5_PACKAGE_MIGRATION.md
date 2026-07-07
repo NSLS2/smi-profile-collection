@@ -34,15 +34,24 @@ Migrated these live instance-construction modules from `startup/smibase` into
 `src/smi_beamline/instances`:
 
 - `amptek`
+- `attenuators`
+- `beam`
 - `beamstop`
 - `bladecoater`
 - `crls`
 - `electrometers`
+- `energy`
 - `ioLogik`
 - `linkam`
 - `machine`
+- `manipulators`
+- `mirrors`
 - `motors`
+- `pilatus`
+- `prosilica`
+- `shutter`
 - `slits`
+- `suspenders`
 - `waxschamber`
 - `xbpms`
 
@@ -53,7 +62,11 @@ from smi_beamline.instances.<module> import *
 ```
 
 The factory import list in `src/smi_beamline/instances/__init__.py` now imports the migrated modules
-from `smi_beamline.instances.*`.
+from `smi_beamline.instances.*`; it no longer imports device groups from `smibase.*`.
+
+Most package-internal plan/helper imports have also been repointed from `smibase.*` shims to
+`smi_beamline.instances.*`. The remaining `src/` reference to `smibase.base` is the bootstrap-owned
+`mdsave` import used by the beam-snapshot helper.
 
 ## Hardware Test Adjustment
 
@@ -97,39 +110,26 @@ pixi run test-hardware
 # passed after the hardware smoke-test pruning above
 ```
 
-## Remaining Factory Imports From `smibase`
+## Remaining `smibase` Compatibility Layer
 
-As of this handoff, `src/smi_beamline/instances/__init__.py` still imports these coupled modules from
-`startup/smibase`:
+The migrated `startup/smibase/*.py` files are now compatibility shims of the form:
 
-- `smibase.shutter`
-- `smibase.attenuators`
-- `smibase.manipulators`
-- `smibase.mirrors`
-- `smibase.energy`
-- `smibase.pilatus`
-- `smibase.prosilica`
-- `smibase.beam`
-- `smibase.suspenders`
+```python
+from smi_beamline.instances.<module> import *
+```
 
-Recommended next order:
+The remaining non-shim `startup/smibase` modules are bootstrap/support modules, not factory-owned
+device groups:
 
-1. `prosilica` or `manipulators`
-2. `attenuators` or `mirrors`
-3. `shutter`
-4. `pilatus`
-5. `energy`
-6. `beam`
-7. `suspenders`
-
-Leave `energy`, `pilatus`, `beam`, and `suspenders` until later because they are more coupled to
-plans, managed energy moves, detector state, RE suspenders, or legacy convenience APIs.
+- `base`
+- `base_dev`
+- `zz_smi_plans`
 
 ## Next Step
 
-Start tomorrow by inspecting `startup/smibase/prosilica.py` and `startup/smibase/manipulators.py`.
-Pick one small batch, move its instance construction into `src/smi_beamline/instances/`, update
-`DEVICE_MODULES`, replace the `smibase` file with a re-export shim, then run:
+Next, run the full offline tiers and a live hardware smoke on the beamline. If those pass, the next
+structural cleanup is to decide whether any remaining shims are still needed by out-of-tree user
+scripts before deleting or formally deprecating them. Run:
 
 ```bash
 pixi run test-unit
