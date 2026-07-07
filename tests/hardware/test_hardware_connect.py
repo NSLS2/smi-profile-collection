@@ -63,7 +63,10 @@ def _assert_connected(dev, name, prefix):
     Area detectors (devices with a ``cam``) are checked via their *essential* acquisition path
     (``cam`` + ``tiff``), because ``dev.connected`` on the full AD component tree is too strict
     -- one disabled plugin or a powered-off detector-position/beamstop motor makes it ``False``
-    even though imaging works.  Everything else is checked as a whole device.
+    even though imaging works.
+
+    Two-button shutters are similarly checked via the PVs needed to read status and actuate them;
+    some live valves do not expose the upstream optional ``enabled_status`` PV.
     """
     if hasattr(dev, "cam"):
         essentials = [getattr(dev, n) for n in ("cam", "tiff") if hasattr(dev, n)]
@@ -71,6 +74,12 @@ def _assert_connected(dev, name, prefix):
             cpt.wait_for_connection(timeout=_CONNECT_TIMEOUT)
         assert essentials and all(c.connected for c in essentials), (
             "{} ({}): essential acquisition path (cam/tiff) not connected".format(name, prefix))
+    elif all(hasattr(dev, n) for n in ("status", "open_cmd", "close_cmd")):
+        essentials = [dev.status, dev.open_cmd, dev.close_cmd]
+        for sig in essentials:
+            sig.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert all(sig.connected for sig in essentials), (
+            "{} ({}): shutter status/open/close PVs not connected".format(name, prefix))
     else:
         dev.wait_for_connection(timeout=_CONNECT_TIMEOUT)
         assert dev.connected, "{} ({}) failed to connect".format(name, prefix)
@@ -91,7 +100,7 @@ def test_waxs_arc_readback_present():
     cls = _import("smi_beamline.devices.pilatus:WAXS_Detector")
     waxs = df.make_device(cls, "XF:12IDC-ES:2{Det:900KW}", name="pil900KW",
                           force=df.REAL, register=False, asset_path="pilatus900kw-1")
-    waxs.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+    waxs.motors.arc.wait_for_connection(timeout=_CONNECT_TIMEOUT)
     # read-only: the arc position must be a number we can read
     pos = waxs.motors.arc.position
     assert pos is not None
