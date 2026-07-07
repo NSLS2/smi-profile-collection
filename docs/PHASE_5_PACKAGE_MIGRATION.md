@@ -1,6 +1,6 @@
 # Phase 5 Package Migration Handoff
 
-Date: 2026-07-06
+Date: 2026-07-07
 Branch: `phase-5-package-startup-cleanup`
 
 ## Goal
@@ -107,8 +107,11 @@ Live verification:
 
 ```bash
 pixi run test-hardware
-# passed after the hardware smoke-test pruning above
+# passed
 ```
+
+The `bsui` console has also been confirmed working well on the beamline after the full instance
+module migration.
 
 ## Remaining `smibase` Compatibility Layer
 
@@ -127,9 +130,9 @@ device groups:
 
 ## Next Step
 
-Next, run the full offline tiers and a live hardware smoke on the beamline. If those pass, the next
-structural cleanup is to decide whether any remaining shims are still needed by out-of-tree user
-scripts before deleting or formally deprecating them. Run:
+The full instance-module migration is now live-smoke-confirmed. The next structural cleanup is to
+decide whether any remaining shims are still needed by out-of-tree user scripts before deleting or
+formally deprecating them. Re-run before removing shims:
 
 ```bash
 pixi run test-unit
