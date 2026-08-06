@@ -612,7 +612,8 @@ class SAXS_Detector(Pilatus):
         elif self.active_beamstop.get() == 'pin_removed':
             yield from self.restore_pin()
         else:
-            raise ValueError('Beamstop is not removed - please check system manually before continuing')
+            raise ValueError('Beamstop is not removed - please check system manually before continuing\nIf getting the above error all the time, try to go into alignment mode\n by RE(smi.modeAlignment()) and then to measurement by RE(smi.modeMeasurement())')
+
     
     def save_beamstop(self):
         if self.active_beamstop.get() == 'rod':
@@ -847,7 +848,7 @@ def set_energy_cam(cam, en_ev, thresh_ev=None, gain=1):
             thresh = 2
 
         elif 13 < en < 22 and 'pil900KW' in cam.name: ## avoid the fluoresence from the waxs beamstop
-            thresh = 11.0
+            thresh = 11.5
         else:
             thresh = en/2
 

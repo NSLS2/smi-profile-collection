@@ -19,7 +19,7 @@ def readHumidity(temperature=25, voltage_supply=5, verbosity=3):
 
 
 def readHumidity2(temperature=25, voltage_supply=5, verbosity=3):
-    voltage_out = moxa_out.ch2_read.get()
+    voltage_out = moxa_out.ch3_read.get()
     corr_voltage_out = voltage_out * (5.0 / voltage_supply)
     coeff_offset = 0.816887
     coeff_slope = 0.028813
@@ -32,7 +32,19 @@ def readHumidity2(temperature=25, voltage_supply=5, verbosity=3):
         )
     return np.round(true_RH, 2)
 
-
+def readHumidity3(temperature=25, voltage_supply=5, verbosity=3):
+    voltage_out = moxa_out.ch3_read.get()
+    corr_voltage_out = voltage_out * (5.0 / voltage_supply)
+    coeff_offset = 0.816887
+    coeff_slope = 0.028813
+    sensor_RH = (corr_voltage_out - coeff_offset) / coeff_slope
+    true_RH = sensor_RH / (1.0546 - 0.00216 * temperature)  # T in [degC]
+    if verbosity >= 3:
+        print("Raw sensor RH = {:.3f} pct.".format(sensor_RH))
+        print(
+            "T-corrected RH = {:.3f} pct at {:.3f} degC.".format(true_RH, temperature)
+        )
+    return np.round(true_RH, 2)
 # moxa_in.ch4_sp.put(5)
 
 
@@ -54,7 +66,35 @@ def setWetFlow(voltage=0):
 
 """
 
-humidity list
+
+
+
+2026 07 22
+
+humidity,   wet,    dry
+
+1.3         5       0
+
+20          2.05    3
+
+30          2.31    3
+
+40          2.61    3
+
+50          3       2.93
+
+60          3       2.54
+
+70          3       2.25
+
+80          3       2.03
+
+90          4       1.9
+
+95          4       1.78
+
+100         4       1.5
+
 
 humidity,    wet,     dry         2nd day, recheck
 48           3         3

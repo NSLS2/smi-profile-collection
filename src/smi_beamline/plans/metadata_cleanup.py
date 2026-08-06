@@ -20,7 +20,8 @@ RE_MD_WHITELIST = frozenset({
     "start_datetime",
     "tiled_access_tags",
     "username",
-    "versions",
+    "versions"
+    #"SAXS_setup", # not sure we want this persistant
 })
 
 

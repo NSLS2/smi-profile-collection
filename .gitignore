@@ -106,3 +106,4 @@ startup/.22-oav.py.swx
 # queueserver introspection cache -- generated per-deploy by `pixi run -e qs qs-list`
 # (qserver-list-plans-devices) so it always matches the deployed env; never commit it.
 startup/existing_plans_and_devices.yaml
+df
