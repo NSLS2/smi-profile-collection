@@ -1,0 +1,119 @@
+"""Tier-3 HARDWARE smoke tests -- connect to REAL EPICS PVs (read-only).
+
+These are **deselected by default**.  Run them only on the beamline with::
+
+    pixi run -e test test-hardware        # or:  pytest --run-hardware
+
+Each test builds a device through the factory in REAL mode (``force="real"``)
+and asserts it can connect within a short timeout.  They are **connection + read
+only -- nothing is ever moved, opened, closed, or triggered.**
+
+The device list below mirrors the ``smibase`` instantiation layer (same classes,
+same PV prefixes, same constructor kwargs), so a green run here means the
+post-refactor device *classes* still bind to the live IOCs.  Add devices by
+extending ``DEVICES``; keep every entry read-only and side-effect free.
+
+There is no beam dependency: connecting to a PV and reading a readback works
+whether or not the shutter is open.
+"""
+import pytest
+
+from smi_beamline.devices import device_factory as df
+
+_CONNECT_TIMEOUT = 5.0
+
+
+# (name, import path "module:ClassName", prefix, kwargs) -- mirrors smibase/*.
+# name is used only for the factory registry / test id.
+DEVICES = [
+    # detectors
+    ("pil2M", "smi_beamline.devices.pilatus:SAXS_Detector", "XF:12ID2-ES{Pilatus:Det-2M}",
+     {"asset_path": "pilatus2m-1"}),
+    ("pil900KW", "smi_beamline.devices.pilatus:WAXS_Detector", "XF:12IDC-ES:2{Det:900KW}",
+     {"asset_path": "pilatus900kw-1"}),
+    # sample stack (Huber coarse + SmarAct fine)
+    ("stage", "smi_beamline.devices.manipulators:STG_pseudo", "XF:12IDC-OP:2{HUB:Stg-Ax:", {}),
+    ("piezo", "smi_beamline.devices.manipulators:SMARACT", "", {}),
+    ("bdm", "smi_beamline.devices.manipulators:BDMStage", "XF:12IDC-ES:2:", {}),
+    # energy (DCM pseudo-positioner)
+    ("energy", "smi_beamline.devices.energy:Energy", "", {}),
+    # flux / I0 / transmitted
+    ("xbpm2", "smi_beamline.devices.electrometers:XBPM", "XF:12IDA-BI:2{EM:BPM2}", {}),
+    ("xbpm3", "smi_beamline.devices.electrometers:XBPM", "XF:12IDB-BI:2{EM:BPM3}", {}),
+    ("pin_diode", "nslsii.ad33:QuadEMV33", "XF:12ID:2{EM:Tetr1}", {}),
+    # temperature
+    ("ls", "smi_beamline.devices.electrometers:new_LakeShore", "XF:12ID-ES", {}),
+    # shutters / gate valve
+    ("ph_shutter", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDA-PPS:2{PSh}", {}),
+    ("GV7", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDC-VA:2{Det:1M-GV:7}", {}),
+    # a representative attenuator foil (the one smi-plans uses)
+    ("att2_9", "smi_beamline.devices.attenuators:Attenuator", "XF:12IDC-OP:2{Fltr:2-9}", {}),
+]
+
+
+def _import(path):
+    module_name, cls_name = path.split(":")
+    mod = __import__(module_name, fromlist=[cls_name])
+    return getattr(mod, cls_name)
+
+
+def _assert_connected(dev, name, prefix):
+    """Assert the device is usable.
+
+    Area detectors (devices with a ``cam``) are checked via their *essential* acquisition path
+    (``cam`` + ``tiff``), because ``dev.connected`` on the full AD component tree is too strict
+    -- one disabled plugin or a powered-off detector-position/beamstop motor makes it ``False``
+    even though imaging works.
+
+    Two-button shutters are similarly checked via the PVs needed to read status and actuate them;
+    some live valves do not expose the upstream optional ``enabled_status`` PV.
+    """
+    if hasattr(dev, "cam"):
+        essentials = [getattr(dev, n) for n in ("cam", "tiff") if hasattr(dev, n)]
+        for cpt in essentials:
+            cpt.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert essentials and all(c.connected for c in essentials), (
+            "{} ({}): essential acquisition path (cam/tiff) not connected".format(name, prefix))
+    elif all(hasattr(dev, n) for n in ("status", "open_cmd", "close_cmd")):
+        essentials = [dev.status, dev.open_cmd, dev.close_cmd]
+        for sig in essentials:
+            sig.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert all(sig.connected for sig in essentials), (
+            "{} ({}): shutter status/open/close PVs not connected".format(name, prefix))
+    else:
+        dev.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+        assert dev.connected, "{} ({}) failed to connect".format(name, prefix)
+
+
+@pytest.mark.parametrize("name,cls_path,prefix,kwargs",
+                         DEVICES, ids=[d[0] for d in DEVICES])
+def test_device_connects(name, cls_path, prefix, kwargs):
+    """Build the REAL device and assert it connects (no motion, no triggering)."""
+    cls = _import(cls_path)
+    dev = df.make_device(cls, prefix, name=name, force=df.REAL,
+                         register=False, **kwargs)
+    _assert_connected(dev, name, prefix)
+
+
+def test_waxs_arc_readback_present():
+    """The WAXS arc readback (used by the arc-block detector logic) is reachable."""
+    cls = _import("smi_beamline.devices.pilatus:WAXS_Detector")
+    waxs = df.make_device(cls, "XF:12IDC-ES:2{Det:900KW}", name="pil900KW",
+                          force=df.REAL, register=False, asset_path="pilatus900kw-1")
+    waxs.motors.arc.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+    # read-only: the arc position must be a number we can read
+    pos = waxs.motors.arc.position
+    assert pos is not None
+
+
+def test_stage_backcompat_aliases_connect():
+    """The Huber stage's legacy .th/.ph/.ch aliases resolve to connected axes."""
+    cls = _import("smi_beamline.devices.manipulators:STG_pseudo")
+    stage = df.make_device(cls, "XF:12IDC-OP:2{HUB:Stg-Ax:", name="stage",
+                           force=df.REAL, register=False)
+    stage.wait_for_connection(timeout=_CONNECT_TIMEOUT)
+    # the Phase-0 aliases must point at the (connected) rotation pseudo-axes
+    assert stage.th is stage.theta
+    assert stage.ph is stage.phi
+    assert stage.ch is stage.chi
+    assert stage.th.position is not None

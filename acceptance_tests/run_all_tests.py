@@ -5,7 +5,7 @@
 def test_pil2M():
     # it may be necessary to RE.clear_suspenders()
     sample_id(user_name="test", sample_name="test")
-    det_exposure_time(0.5, 0.5)
+    RE(det_exposure_time(0.5, 0.5))
     print("counting pil2M")
     uid, = RE(bp.count([pil2M]))
     print("accessing the count data")

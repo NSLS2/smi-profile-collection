@@ -1,1 +1,15 @@
-startup.py	calls all objects from smibase
+startup.py is the profile bootstrap entry point executed by IPython and queueserver.
+
+It creates the RunEngine/session objects, wires Redis/Tiled/context state, builds devices through
+the smi_beamline package factory, and exposes the live namespace for users and queueserver.
+
+For maintainers used to the conventional NSLS-II profile layout:
+
+- The section marked `Session Bootstrap (formerly startup/smibase/base.py)` in `startup.py` contains
+  the old `base.py` responsibilities: `nslsii.configure_base`, Redis stores, primary Tiled writer,
+  optional Tiled reader/databroker, olog, prompt, plot defaults, and package context injection.
+- The section marked `Supplemental Tiled Writer (formerly startup/smibase/base_dev.py)` contains the
+  old `base_dev.py` responsibilities: Tiled migration writer subscription, descriptor/resource
+  patches, and `tiled_access_tags` setup.
+- The `smi-plans` queue-surface wiring helper that briefly lived in `smibase/zz_smi_plans.py` now
+  lives in `startup/__init__.py` as `wire_smi_plans()`.

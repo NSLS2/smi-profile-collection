@@ -1,0 +1,518 @@
+"""Build the device classes as FAKE devices through :mod:`smi_beamline.devices.device_factory`.
+
+This proves the ``smi_beamline.devices`` device classes are fully constructible off the
+beamline via the same factory the live profile uses (``force="fake"`` here;
+``SMI_FAKE_DEVICES=all`` in production).  ``make_fake_device`` swaps every
+``EpicsSignal``/``EpicsMotor`` for an in-memory fake, so no CA connection is
+attempted.  We assert each device builds, exposes the expected components, and
+(where applicable) ``describe()``/``read()`` succeed.
+"""
+from smi_beamline.devices import device_factory as df
+import pytest
+
+
+def test_factory_records_mode_and_registry(make_fake):
+    from smi_beamline.devices.manipulators import SMARACT
+
+    piezo = make_fake(SMARACT, name="piezo")
+    assert ("piezo") in df.registered()
+    mode, inst = df.registry()["piezo"]
+    assert mode == df.FAKE
+    assert inst is piezo
+
+
+def test_stg_pseudo_builds_and_has_backcompat_aliases(make_fake):
+    """STG_pseudo (the Huber stack) builds, and the legacy .th/.ph/.ch aliases resolve."""
+    from smi_beamline.devices.manipulators import STG_pseudo
+
+    stg = make_fake(STG_pseudo, name="stage")
+    for ax in ("x", "y", "z", "theta", "chi", "phi"):
+        assert hasattr(stg, ax)
+    # backwards-compatible aliases added in Phase 0 must point at the rotation pseudo-axes
+    assert stg.th is stg.theta
+    assert stg.ph is stg.phi
+    assert stg.ch is stg.chi
+    # aliases must NOT have leaked into the ophyd component model
+    assert "th" not in stg.component_names
+    assert "theta" in stg.component_names
+
+
+def test_smaract_and_bdm_build(make_fake):
+    from smi_beamline.devices.manipulators import SMARACT, BDMStage
+
+    piezo = make_fake(SMARACT, name="piezo")
+    for ax in ("x", "y", "z", "th", "ch"):
+        assert hasattr(piezo, ax)
+
+    bdm = make_fake(BDMStage, name="bdm")
+    for ax in ("x", "y", "th"):
+        assert hasattr(bdm, ax)
+        # H4: each axis is now a positioner (has move-completion), not a bare signal.
+        assert hasattr(getattr(bdm, ax), "move")
+        assert hasattr(getattr(bdm, ax), "position")
+
+
+def test_bdm_move_completes_on_readback_not_moving_flag(make_fake):
+    """The BDM axis completes a move when the READBACK reaches the setpoint.
+
+    Crucially it must NOT depend on the controller's RD_MOVING/RD_INRANGE flags, which on the SMI
+    BDM are stuck (RD_MOVING==1 always, RD_INRANGE==0 always).  We pin RD_MOVING high the whole
+    time and assert the move still completes purely from the readback closing on the setpoint.
+    """
+    from smi_beamline.devices.manipulators import BDMStage
+
+    bdm = make_fake(BDMStage, name="bdm")
+    ax = bdm.y
+    # reflect the broken hardware: moving flag stuck high, in-range stuck low.
+    ax.moving_flag.sim_put(1)
+    ax.in_range.sim_put(0)
+    ax.readback.sim_put(0.60)
+
+    # a move whose readback does NOT update would never finish -> mirror the readback onto the
+    # setpoint to simulate the live POSITION ramping to target.
+    ax.setpoint.subscribe(lambda value, **k: ax.readback.sim_put(value), run=False)
+
+    st = ax.move(0.80, wait=False)
+    st.wait(timeout=5)
+    assert st.success
+    assert abs(ax.position - 0.80) <= ax.atol
+    # done despite the moving flag never clearing:
+    assert ax.moving_flag.get() == 1
+
+
+def test_bdm_move_does_not_complete_while_readback_far(make_fake):
+    """If the readback stays far from the setpoint, the move must NOT report done (no false early
+    completion -- the bug the old bare-EpicsSignal version had)."""
+    from smi_beamline.devices.manipulators import BDMStage
+
+    bdm = make_fake(BDMStage, name="bdm")
+    ax = bdm.y
+    ax.readback.sim_put(0.60)
+    # setpoint moves but readback is stuck far away (stalled stage)
+    st = ax.move(5.00, wait=False)
+    try:
+        # should still be moving shortly after issuing (readback far from setpoint)
+        import time as _t
+        _t.sleep(0.3)
+        assert not st.done
+    finally:
+        ax.readback.sim_put(5.00)   # let it finish so we don't leak the move
+        st.wait(timeout=5)
+
+
+def test_saxs_beamstops_build_and_describe(make_fake):
+    from smi_beamline.devices.beamstop import SAXSBeamStops
+
+    bs = make_fake(SAXSBeamStops, name="bs")
+    for ax in ("x_rod", "y_rod", "x_pin", "y_pin"):
+        assert hasattr(bs, ax)
+    # describe() should work against fake signals (no CA)
+    assert isinstance(bs.describe(), dict)
+
+
+def _wait_until(predicate, timeout=3.0, poll=0.02):
+    """Poll ``predicate`` until true or timeout (for CA-free fake signals updated by callbacks)."""
+    import time as _t
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        if predicate():
+            return True
+        _t.sleep(poll)
+    return predicate()
+
+
+def test_two_button_shutter_unified_and_polarity(make_fake):
+    """M3/M4: one TwoButtonShutter (the polarity-aware SMI subclass of nslsii's), and the
+    per-valve actuation polarity is honored -- 'open' writes cmd_actuate_val to Cmd:Opn-Cmd."""
+    from smi_beamline.devices.shutter import TwoButtonShutter
+    from nslsii.devices import TwoButtonShutter as _NSLSII
+
+    # it is the maintained upstream class, subclassed (single implementation, not a fork)
+    assert issubclass(TwoButtonShutter, _NSLSII)
+
+    # default polarity == historical behavior: actuate with 1, confirm 'Open'/'Not Open'
+    v = make_fake(TwoButtonShutter, name="v", prefix="VALVE:")
+    assert v.cmd_actuate_val == 1
+    assert (v.open_str, v.close_str) == ("Open", "Close")
+    # set('Open') must press the OPEN command PV with the actuate value, not the close PV.
+    v.status.sim_put("Not Open")
+    v.open_cmd.sim_put(0)
+    v.close_cmd.sim_put(0)
+    st = v.set("Open")
+    # the command put is driven from set(); poll (the retry callback runs on a timer)
+    assert _wait_until(lambda: int(v.open_cmd.get()) == 1)   # pressed the open button...
+    assert int(v.close_cmd.get()) == 0                       # ...not the close button
+    v.status.sim_put("Open")              # hardware confirms -> the move finishes
+    st.wait(timeout=5)
+    assert st.success
+
+    # a valve wired the OTHER way: actuate with 0.  Proves the polarity is expressible.
+    v0 = make_fake(TwoButtonShutter, name="v0", prefix="V0:")
+    v0.cmd_actuate_val = 0
+    v0.status.sim_put("Not Open")
+    v0.open_cmd.sim_put(7)
+    st0 = v0.set("Open")
+    assert _wait_until(lambda: int(v0.open_cmd.get()) == 0)  # wrote 0 (this valve's "actuate")
+    v0.status.sim_put("Open")
+    st0.wait(timeout=5)
+    assert st0.success
+
+
+def test_gv7_is_chamber_component_alias():
+    """GV7 must be the SAME object as the chamber's waxs_saxs_valve (defined once, aliased), and a
+    Valve (the unified, polarity-aware shutter)."""
+    from smi_beamline.devices.waxschamber import Sample_Chamber, Valve
+    from smi_beamline.devices.shutter import TwoButtonShutter
+
+    assert issubclass(Valve, TwoButtonShutter)
+    ch = Sample_Chamber("", name="chamber")
+    assert "waxs_saxs_valve" in ch.component_names
+    assert isinstance(ch.waxs_saxs_valve, Valve)
+    # the PV is preserved
+    assert ch.waxs_saxs_valve.open_cmd.pvname == "XF:12IDC-VA:2{Det:1M-GV:7}Cmd:Opn-Cmd"
+
+
+def test_pilatus_cam_builds_without_class_definition_epics_read(make_fake):
+    """Phase-1 deferral: the cam's energyset default is a plain 0.0 (no class-definition EPICS read)."""
+    from smi_beamline.devices.pilatus import PilatusDetectorCamV33
+
+    cam = make_fake(PilatusDetectorCamV33, name="cam", prefix="FAKE:cam1:")
+    assert cam.energyset.get() == 0.0
+
+
+def test_saxs_detector_full_instantiation(make_fake):
+    """SAXS_Detector now builds fully as a fake.
+
+    Its ``__init__`` and the immediate ``update_beam_center`` subscription read
+    ``.position`` on the beamstop/detector motors.  Those reads are now guarded
+    against unconnected (``None``) positioners, so a fresh fake builds cleanly
+    and leaves ``active_beamstop`` at its 'none' default.  (Previously xfail.)
+    """
+    from smi_beamline.devices.pilatus import SAXS_Detector
+
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
+    assert hasattr(det, "beamstop")
+    assert det.active_beamstop.get() == "none"
+
+
+def test_saxs_detector_remove_beamstop_is_noop_when_already_removed(make_fake):
+    from bluesky import RunEngine
+
+    from smi_beamline.devices.pilatus import SAXS_Detector
+
+    RE = RunEngine({})
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
+
+    for state in ("rod_removed", "pin_removed"):
+        det.active_beamstop.put(state)
+        RE(det.remove_beamstop())
+        assert det.active_beamstop.get() == state
+
+
+def test_saxs_detector_remove_beamstop_raises_when_beamstop_unknown(make_fake):
+    import pytest
+    from bluesky import RunEngine
+
+    from smi_beamline.devices.pilatus import SAXS_Detector
+
+    RE = RunEngine({})
+    det = make_fake(SAXS_Detector, name="pil2M", asset_path="pilatus2m-test")
+
+    det.active_beamstop.put("none")
+    with pytest.raises(ValueError, match="beamstop is not in place"):
+        RE(det.remove_beamstop())
+
+
+def test_saxs_detector_det_motor_z_is_not_hinted_by_default(make_fake):
+    """The SAXS detector position motors (DetMotor x/y/z) are read into every scan's primary stream
+    for the SDD filename token, so none of them may be hinted at the CLASS level -- otherwise the
+    detector position clutters the BestEffortCallback plot in every scan.  ``z`` used to be
+    ``kind='hinted'``; it must now be ``normal`` like ``x``/``y`` (i.e. the ``hinted`` bit clear).
+
+    Then, applying the live-profile instance tuning (``startup/smibase/pilatus.py``: strip the
+    ``hinted`` default off each ``user_readback``), the whole motor group contributes NO hinted
+    fields -- so BEC records x/y/z but plots none of them -- while ``read()`` still reports all
+    three (recorded).  When z (SDD) is actually scanned it still plots, because BEC takes the x-axis
+    from the scanned motor, not from ``kind``.
+    """
+    from smi_beamline.devices.pilatus import DetMotor
+    from ophyd import Kind
+
+    hinted_only = Kind.hinted & ~Kind.normal   # the bit that means "plot me" (0b100)
+    m = make_fake(DetMotor, name="pil2M_motor")
+
+    # 1) class-body default: none of x/y/z carries the hinted bit on its Cpt.
+    for ax in ("x", "y", "z"):
+        assert not (getattr(m, ax).kind & hinted_only), (
+            f"DetMotor.{ax} Cpt must not be hinted (recorded, not plotted); got "
+            f"{getattr(m, ax).kind!r}")
+
+    # 2) end-to-end: after the documented instance tuning, the group hints nothing but still reads
+    #    all three positions.
+    for ax in ("x", "y", "z"):
+        getattr(m, ax).user_readback.kind = "normal"
+    assert m.hints == {"fields": []}, m.hints
+    read_keys = set(m.read())
+    for ax in ("x", "y", "z"):
+        assert f"pil2M_motor_{ax}" in read_keys, (ax, read_keys)
+
+
+def test_xbpm_sums_recorded_not_plotted_after_instance_tuning(make_fake):
+    """The BPM2/BPM3 flux sums (sumX/sumY) must be RECORDED but NOT auto-plotted: the live profile
+    (``startup/smibase/electrometers.py``) sets them ``kind='normal'``.  Verify that with that kind
+    the XBPM contributes no hinted fields (nothing plotted) yet the sums are still in ``read()``,
+    and -- since the checkpoint plans pass ``xbpm3.sumY`` directly as a detector -- that the lone
+    signal also hints nothing (so BEC won't plot it) while still reading its value.
+    """
+    from smi_beamline.devices.electrometers import XBPM
+
+    x = make_fake(XBPM, name="xbpm3")
+    x.sumX.kind = "normal"
+    x.sumY.kind = "normal"
+
+    assert x.hints == {"fields": []}, x.hints
+    read_keys = set(x.read())
+    assert {"xbpm3_sumX", "xbpm3_sumY"} <= read_keys, read_keys
+    # passed as a bare detector: empty hints -> BEC plots nothing, but the value is still recorded
+    assert x.sumY.hints == {"fields": []}, x.sumY.hints
+    assert "xbpm3_sumY" in x.sumY.read()
+
+
+def test_factory_seed_sets_fake_signal_values(make_fake):
+    """The factory ``seed=`` applies values *after* construction (e.g. to put a
+    device in a known state before a plan).  Verify a seeded readback reads back.
+
+    (Note: seed runs post-__init__, so it cannot influence init-time inference
+    such as SAXS_Detector.active_beamstop; use ``force``/component defaults for that.)
+    """
+    from smi_beamline.devices.beamstop import SAXSBeamStops
+
+    bs = make_fake(SAXSBeamStops, name="bs", seed={"x_rod.user_readback": 6.8})
+    assert bs.x_rod.position == pytest.approx(6.8)
+
+
+def test_waxs_detector_builds_without_hardware(make_fake):
+    from smi_beamline.devices.pilatus import WAXS_Detector
+
+    det = make_fake(WAXS_Detector, name="pil900KW", asset_path="pilatus900kw-test")
+    assert hasattr(det, "motors")
+    assert hasattr(det.motors, "arc")  # the WAXS arc (arc-block readback)
+
+
+def test_energy_pseudopositioner_builds_without_hardware(make_fake):
+    from smi_beamline.devices.energy import Energy
+
+    en = make_fake(Energy, name="energy")
+    assert hasattr(en, "energy")
+    assert hasattr(en, "bragg")
+    assert hasattr(en, "ivugap")
+
+
+def test_energy_ivu_offset_table_is_config_and_drives_energy_to_gap(make_fake):
+    """The IVU-gap offset table is now kind='config' Signals (seeded from mdsave defaults), and
+    energy_to_gap reads them -- changing the signal changes the computed gap, proving the
+    calibration is data, not hardcoded."""
+    from smi_beamline.devices.energy import Energy
+
+    en = make_fake(Energy, name="energy")
+    assert en.ivu_gap_offset_energies_eV.kind.name == "config"
+    assert en.ivu_gap_offset_values_um.kind.name == "config"
+    assert list(en.ivu_gap_offset_energies_eV.get())[:2] == [2450, 2470]
+
+    g_default = en.energy_to_gap(8980, undulator_harmonic=1, man_offset=0)
+    # bump every offset by +100 um -> the auto_offset at 8980 rises by 100 -> gap drops by 100
+    bumped = [v + 100 for v in en.ivu_gap_offset_values_um.get()]
+    en.ivu_gap_offset_values_um.put(bumped)
+    g_bumped = en.energy_to_gap(8980, undulator_harmonic=1, man_offset=0)
+    assert abs((g_default - g_bumped) - 100) < 1e-6
+
+
+def test_lakeshore_and_linkam_build(make_fake):
+    from smi_beamline.devices.electrometers import new_LakeShore
+    from smi_beamline.devices.linkam import LinkamThermal
+
+    ls = make_fake(new_LakeShore, name="lakeshore")
+    assert hasattr(ls, "input_A_celsius")
+
+    # output1..4 are now PROPER Components (M6): they appear in the device tree and were faked
+    # (not left holding real EpicsSignals).
+    for n in ("output1", "output2", "output3", "output4"):
+        assert n in ls.component_names
+        out = getattr(ls, n)
+        for sig in ("P", "I", "D", "temp_set_point", "status"):
+            assert hasattr(out, sig)
+        # the fake makes signals settable in memory; if they were real EpicsSignals this would
+        # try to hit CA.
+        out.P.set(1.0).wait(timeout=1)
+
+    lk = make_fake(LinkamThermal, name="linkam")
+    # the readback Signal the Phase-2 Linkam-Heater fix will use
+    assert hasattr(lk, "temperature_current")
+
+
+def test_lakeshore_d_gain_points_at_d_pv():
+    """The D (derivative) gain must address Gain:D-SP, not Gain:I-SP (a 2022 copy-paste bug)."""
+    from smi_beamline.devices.electrometers import output_lakeshore
+
+    # Inspect the Component suffixes directly -- no instantiation, so no CA contact.
+    assert output_lakeshore.I.suffix == "Gain:I-SP"
+    assert output_lakeshore.D.suffix == "Gain:D-SP"
+    assert output_lakeshore.D.suffix != output_lakeshore.I.suffix
+
+
+def _drain_set_targets(gen, dev=None):
+    """Walk a (RunEngine-free) plan, applying 'set' messages to the fake signals; return what was
+    sent keyed by signal name."""
+    sent = {}
+    for msg in gen:
+        if msg.command == "set":
+            msg.obj.put(msg.args[0])
+            sent[msg.obj.name] = msg.args[0]
+            if dev is not None and msg.obj.name.endswith("_trg"):
+                attr = msg.obj.name[len(dev.name) + 1:] + "_rb"
+                getattr(dev, attr).sim_put(msg.args[0])
+    return sent
+
+
+def test_bimorph_defaults_are_config_signals_and_drive_set_target(make_fake):
+    """Bimorph default-voltage tables + the -80 offset are now kind='config' Signals (seeded from
+    mdsave defaults), and set_target reads them -- so the commanded voltages are data, not
+    hardcoded.  Verify the commanded values match the historical behavior."""
+    from smi_beamline.devices.bimorph import HFM_voltage, VFM_voltage
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    assert hfm.default_hfm_v.kind.name == "config"
+    assert hfm.lowdiv_offset_v.kind.name == "config"
+    sent = _drain_set_targets(hfm.set_target("SWAXS"), hfm)
+    # ch0 = offset + default[0] = -80 + (-151) = -231 ; ch15 = -80 + 36 = -44
+    assert sent["hfm_ch0_trg"] == -231
+    assert sent["hfm_ch15_trg"] == -44
+
+    vfm = make_fake(VFM_voltage, name="vfm", prefix="VFM:")
+    assert vfm.default_vfm_v.kind.name == "config"
+    assert vfm.default_vfm_opls_v.kind.name == "config"
+    sent_swaxs = _drain_set_targets(vfm.set_target("SWAXS"), vfm)
+    assert sent_swaxs["vfm_ch0_trg"] == 39        # default_vfm_v[0]
+    sent_opls = _drain_set_targets(vfm.set_target("OPLS"), vfm)
+    assert sent_opls["vfm_ch0_trg"] == -206       # default_vfm_opls_v[0]
+
+    # the table really drives it: change the offset, the commanded voltage follows
+    hfm.lowdiv_offset_v.put(0)
+    sent2 = _drain_set_targets(hfm.set_target("SWAXS"), hfm)
+    assert sent2["hfm_ch0_trg"] == -151           # now 0 + (-151)
+
+
+def test_bimorph_stage_then_apply_mechanism(make_fake):
+    """Verify the two-step stage/apply: set_targets writes SET-VTRGT (no apply), apply() triggers
+    SET-ALLTRGT, and apply_and_wait blocks until all GET-STATUS channels leave 'Busy'."""
+    import threading
+    from bluesky import RunEngine
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    # has the new per-channel readbacks
+    assert hasattr(hfm, "ch0_trg_rb") and hasattr(hfm, "ch0_status")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_status".format(i)).sim_put("On")
+
+    RE = RunEngine({})
+
+    # staging must NOT touch the apply signal
+    hfm.apply_sig.sim_put(0)
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(float(i))
+    RE(hfm.set_targets([float(i) for i in range(N_BIMORPH_CH)]))
+    assert int(hfm.apply_sig.get()) == 0          # not applied yet
+    assert int(hfm.ch5_trg.get()) == 5            # staged
+
+    # apply() writes 1 to SET-ALLTRGT
+    RE(hfm.apply())
+    assert int(hfm.apply_sig.get()) == 1
+
+    # apply_and_wait returns once nothing is busy; simulate a channel busy then settling
+    getattr(hfm, "ch3_status").sim_put("Busy")
+
+    def _settle():
+        getattr(hfm, "ch3_status").sim_put("On")
+
+    threading.Timer(0.4, _settle).start()
+    RE(hfm.apply_and_wait(settle=0.1, timeout=5))
+    assert not hfm.is_busy()
+
+
+def test_bimorph_set_targets_waits_for_each_target_readback(make_fake):
+    """Regression for CAENels behavior: do not batch-write later channels before ch0 latches."""
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(-999)
+
+    gen = hfm.set_targets_sequential(
+        [float(i) for i in range(N_BIMORPH_CH)],
+        timeout=2,
+        poll=0.01,
+        stable_reads=1,
+    )
+
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    hfm.ch0_trg_rb.sim_put(0.0)
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch1_trg"
+
+
+def test_bimorph_set_targets_retries_same_channel_before_failing(make_fake):
+    """The controller sometimes needs the same SET-VTRGT resent before GET-VTRGT latches."""
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_trg_rb".format(i)).sim_put(-999)
+
+    gen = hfm.set_targets_sequential(
+        [float(i) for i in range(N_BIMORPH_CH)],
+        timeout=0.0,
+        poll=0.01,
+        stable_reads=1,
+        attempts=2,
+    )
+
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    for _ in range(10):
+        msg = next(gen)
+        if msg.command == "set":
+            break
+    else:
+        raise AssertionError("did not retry ch0 SET-VTRGT")
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch0_trg"
+    msg.obj.put(msg.args[0])
+
+    hfm.ch0_trg_rb.sim_put(0.0)
+    msg = next(gen)
+    assert msg.command == "set"
+    assert msg.obj.name == "hfm_ch1_trg"
+
+
+def test_bimorph_apply_and_wait_times_out_if_stuck_busy(make_fake):
+    import pytest as _pytest
+    from bluesky import RunEngine
+    from smi_beamline.devices.bimorph import HFM_voltage, N_BIMORPH_CH
+
+    hfm = make_fake(HFM_voltage, name="hfm", prefix="HFM:")
+    for i in range(N_BIMORPH_CH):
+        getattr(hfm, "ch{}_status".format(i)).sim_put("On")
+    getattr(hfm, "ch7_status").sim_put("Busy")    # stuck busy forever
+
+    RE = RunEngine({})
+    with _pytest.raises(TimeoutError):
+        RE(hfm.apply_and_wait(settle=0.1, timeout=1.0))
