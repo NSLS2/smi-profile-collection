@@ -129,6 +129,7 @@ from ophyd import (
     EpicsSignalRO,
     Signal,
 )
+from ophyd.status import MoveStatus
 
 from ophyd.pseudopos import (
     PseudoPositioner,
@@ -145,6 +146,77 @@ class ReadbackEpicsMotor(EpicsMotor):
     """
 
     readback = Cpt(EpicsSignalRO, ".RBV")
+
+
+class DeadbandEpicsMotor(ReadbackEpicsMotor):
+    """
+    EPICS motor that skips writes for moves already inside a configured deadband.
+
+    This is used under ``STG_pseudo`` to avoid heating a real axis with tiny
+    pseudo-positioner correction moves caused by transform/readback roundoff.
+    """
+
+    deadband = 0.0
+
+    def move(self, position, wait=True, **kwargs):
+        try:
+            current = self.position
+            if current is not None and abs(float(position) - float(current)) <= self.deadband:
+                moved_cb = kwargs.get("moved_cb")
+                status = MoveStatus(self, position)
+                status.set_finished()
+                if moved_cb is not None:
+                    moved_cb(status, obj=self)
+                return status
+        except (TypeError, ValueError):
+            pass
+
+        return super().move(position, wait=wait, **kwargs)
+
+
+class STG_temps(Device):
+    x = Cpt(
+            EpicsSignal,
+            "3",
+            name="X temp",
+            kind="normal",
+            doc="Temperature of the Huber X motor",
+        )
+    y = Cpt(
+            EpicsSignal,
+            "4",
+            name="Y temp",
+            kind="normal",
+            doc="Temperature of the Huber Y motor",
+        )
+    z = Cpt(
+            EpicsSignal,
+            "2",
+            name="Z temp",
+            kind="normal",
+            doc="Temperature of the Huber Z motor",
+        )
+    th = Cpt(
+            EpicsSignal,
+            "6",
+            name="Theta temp",
+            kind="normal",
+            doc="Temperature of the Huber Theta motor",
+        )
+    phi = Cpt(
+            EpicsSignal,
+            "7",
+            name="Phi temp",
+            kind="normal",
+            doc="Temperature of the Huber Phi motor",
+        )
+    chi = Cpt(
+            EpicsSignal,
+            "5",
+            name="Chi temp",
+            kind="normal",
+            doc="Temperature of the Huber Chi motor",
+        )
 
 
 class STG_pseudo(PseudoPositioner):
@@ -192,6 +264,8 @@ class STG_pseudo(PseudoPositioner):
 
     These are NOT pseudo axes.
     """
+
+    real_move_deadband = 0.001
 
     # ------------------------------------------------------------------
     # PSEUDO AXES
@@ -244,46 +318,53 @@ class STG_pseudo(PseudoPositioner):
     # ------------------------------------------------------------------
 
     x_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "X}Mtr",
         labels=["stage"],
         kind="normal",
     )
 
     y_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "Y}Mtr",
         labels=["stage"],
         kind="normal",
     )
 
     z_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "Z}Mtr",
         labels=["stage"],
         kind="normal",
     )
 
     theta_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "theta}Mtr",
         labels=["stage"],
         kind="normal",
     )
 
     chi_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "chi}Mtr",
         labels=["stage"],
         kind="normal",
     )
 
     phi_real = Cpt(
-        ReadbackEpicsMotor,
+        DeadbandEpicsMotor,
         "phi}Mtr",
         labels=["stage"],
         kind="normal",
     )
+
+    def __init__(self, *args, real_move_deadband=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if real_move_deadband is not None:
+            self.real_move_deadband = real_move_deadband
+        for motor in self.real_positioners:
+            motor.deadband = self.real_move_deadband
 
     # ------------------------------------------------------------------
     # ROTATION CENTER CONFIGURATION SIGNALS

@@ -37,6 +37,35 @@ def test_stg_pseudo_builds_and_has_backcompat_aliases(make_fake):
     assert "theta" in stg.component_names
 
 
+def test_stg_real_motor_deadband_skips_tiny_phi_moves(make_fake):
+    """Tiny pseudo-transform corrections must not write a new phi motor setpoint."""
+    from smi_beamline.devices.manipulators import STG_pseudo
+
+    stg = make_fake(STG_pseudo, name="stage")
+    stg.phi_real.user_readback.sim_put(10.0)
+    stg.phi_real.user_setpoint.sim_put(10.0)
+
+    status = stg.phi_real.move(10.0005, wait=False)
+
+    assert status.done
+    assert status.success
+    assert stg.phi_real.user_setpoint.get() == 10.0
+
+
+def test_stg_real_motor_deadband_allows_significant_phi_moves(make_fake):
+    """Moves larger than the deadband still go through the normal motor path."""
+    from smi_beamline.devices.manipulators import STG_pseudo
+
+    stg = make_fake(STG_pseudo, name="stage")
+    stg.phi_real.user_readback.sim_put(10.0)
+    stg.phi_real.user_setpoint.sim_put(10.0)
+    stg.phi_real.user_setpoint._limits = (-90, 90)
+
+    stg.phi_real.move(10.01, wait=False)
+
+    assert stg.phi_real.user_setpoint.get() == 10.01
+
+
 def test_smaract_and_bdm_build(make_fake):
     from smi_beamline.devices.manipulators import SMARACT, BDMStage
 
