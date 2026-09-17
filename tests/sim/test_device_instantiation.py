@@ -320,6 +320,24 @@ def test_factory_seed_sets_fake_signal_values(make_fake):
     assert bs.x_rod.position == pytest.approx(6.8)
 
 
+def test_power_supply_pvs(make_fake):
+    from smi_beamline.devices.power_supply import PowerSupply
+
+    ps = make_fake(PowerSupply, prefix="XF:12ID2-ES{PS:1}", name="es_ps1")
+
+    assert hasattr(ps, "current")
+    assert PowerSupply.current.suffix == "I"
+    assert PowerSupply.out_main_readback.suffix == "E:OutMain-RB"
+    assert PowerSupply.out_main_setpoint.suffix == "E:OutMain-SP"
+    assert PowerSupply.lock_command.suffix == "Enbl:Lock-Cmd"
+    assert PowerSupply.lock_status.suffix == "Enbl:Lock-Sts"
+    assert PowerSupply.out_main_command.suffix == "Enbl:OutMain-Cmd"
+    assert PowerSupply.out_main_status.suffix == "Enbl:OutMain-Sts"
+    assert PowerSupply.current_limit.suffix == "I-Lim"
+    assert PowerSupply.operating_status_bc.suffix == "Sts:Opr-Sts.BC"
+    assert PowerSupply.operating_status_bd.suffix == "Sts:Opr-Sts.BD"
+
+
 def test_waxs_detector_builds_without_hardware(make_fake):
     from smi_beamline.devices.pilatus import WAXS_Detector
 

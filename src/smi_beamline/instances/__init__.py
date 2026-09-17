@@ -26,6 +26,7 @@ DEVICE_MODULES = [
     ("sample chamber", "smi_beamline.instances.waxschamber"),
     ("shutters",       "smi_beamline.instances.shutter"),
     ("beamstop",       "smi_beamline.instances.beamstop"),
+    ("power supplies", "smi_beamline.instances.power_supply"),
     ("machine/ring",   "smi_beamline.instances.machine"),
     ("attenuators",    "smi_beamline.instances.attenuators"),
     ("CRLs",           "smi_beamline.instances.crls"),
