@@ -323,7 +323,7 @@ def test_factory_seed_sets_fake_signal_values(make_fake):
 def test_power_supply_pvs(make_fake):
     from smi_beamline.devices.power_supply import PowerSupply
 
-    ps = make_fake(PowerSupply, prefix="XF:12ID2-ES{PS:1}", name="es_ps1")
+    ps = make_fake(PowerSupply, prefix="XF:12ID2-ES{PS:1}", name="sorensen_ps1")
 
     assert hasattr(ps, "current")
     assert PowerSupply.current.suffix == "I"
@@ -333,9 +333,40 @@ def test_power_supply_pvs(make_fake):
     assert PowerSupply.lock_status.suffix == "Enbl:Lock-Sts"
     assert PowerSupply.out_main_command.suffix == "Enbl:OutMain-Cmd"
     assert PowerSupply.out_main_status.suffix == "Enbl:OutMain-Sts"
-    assert PowerSupply.current_limit.suffix == "I-Lim"
+    assert PowerSupply.max_current.suffix == "I-Lim"
     assert PowerSupply.operating_status_bc.suffix == "Sts:Opr-Sts.BC"
     assert PowerSupply.operating_status_bd.suffix == "Sts:Opr-Sts.BD"
+
+
+def test_power_supply_read_and_helpers(make_fake):
+    from smi_beamline.devices.power_supply import PowerSupply
+
+    ps = make_fake(PowerSupply, prefix="XF:12ID2-ES{PS:1}", name="sorensen_ps1")
+
+    ps.current.sim_put(0.5)
+    ps.out_main_readback.sim_put(12.0)
+    read = ps.read()
+    described = ps.describe()
+
+    assert set(read) == {"sorensen_ps1_current", "sorensen_ps1_out_main_readback"}
+    assert described["sorensen_ps1_current"]["units"] == "A"
+    assert described["sorensen_ps1_out_main_readback"]["units"] == "V"
+
+    ps.output(24.0).wait(timeout=1)
+    assert ps.out_main_setpoint.get() == 24.0
+
+    ps.max_current.sim_put(1.2)
+    ps.output(25.0).wait(timeout=1)
+    assert ps.max_current.get() == 1.2
+
+    ps.output(26.0, current_max=2.5).wait(timeout=1)
+    assert ps.out_main_setpoint.get() == 26.0
+    assert ps.max_current.get() == 2.5
+
+    ps.on().wait(timeout=1)
+    assert ps.out_main_command.get() == 1
+    ps.off().wait(timeout=1)
+    assert ps.out_main_command.get() == 0
 
 
 def test_waxs_detector_builds_without_hardware(make_fake):
