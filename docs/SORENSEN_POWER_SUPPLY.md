@@ -16,8 +16,11 @@ sorensen_ps1.read()
 
 Recorded fields:
 
-- `sorensen_ps1_current`, in `A`, from `XF:12ID2-ES{PS:1}I`
+- `sorensen_ps1_current`, in `A`, from `XF:12ID2-ES{PS:1}I-I`
 - `sorensen_ps1_out_main_readback`, in `V`, from `XF:12ID2-ES{PS:1}E:OutMain-RB`
+
+The current readback suffix was corrected from `I` to `I-I` to match the real
+beamline PV. `XF:12ID2-ES{PS:1}I-I` has been verified during hardware operation.
 
 ## Set Voltage
 
@@ -59,7 +62,7 @@ These helpers write `1` and `0`, respectively, to `XF:12ID2-ES{PS:1}Enbl:OutMain
 
 ## PV Map
 
-- `current`: `XF:12ID2-ES{PS:1}I`
+- `current`: `XF:12ID2-ES{PS:1}I-I`
 - `max_current`: `XF:12ID2-ES{PS:1}I-Lim`
 - `out_main_readback`: `XF:12ID2-ES{PS:1}E:OutMain-RB`
 - `out_main_setpoint`: `XF:12ID2-ES{PS:1}E:OutMain-SP`

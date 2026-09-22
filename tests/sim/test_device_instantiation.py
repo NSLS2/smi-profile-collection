@@ -326,7 +326,7 @@ def test_power_supply_pvs(make_fake):
     ps = make_fake(PowerSupply, prefix="XF:12ID2-ES{PS:1}", name="sorensen_ps1")
 
     assert hasattr(ps, "current")
-    assert PowerSupply.current.suffix == "I"
+    assert PowerSupply.current.suffix == "I-I"
     assert PowerSupply.out_main_readback.suffix == "E:OutMain-RB"
     assert PowerSupply.out_main_setpoint.suffix == "E:OutMain-SP"
     assert PowerSupply.lock_command.suffix == "Enbl:Lock-Cmd"
