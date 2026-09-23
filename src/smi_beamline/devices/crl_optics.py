@@ -1,8 +1,8 @@
-"""Hardware-independent, provisional thin-lens model for the SMI diamond CRLs.
+"""Hardware-independent, provisional thin-lens model for the SMI CRLs.
 
 Energy arguments are keV; motor positions and image distances are mm. Radii
 are per-surface radii for *two-sided* parabolic lenses. The refractive decrement
-uses the free-electron approximation (carbon f1 = 6), not tabulated dispersion.
+uses the free-electron approximation, not tabulated dispersion.
 See docs/CRL_MICROFOCUSING.md for assumptions and calibration requirements.
 """
 
@@ -12,7 +12,15 @@ from math import isfinite, pi, sqrt
 
 
 ENERGY_RANGE_KEV = (2.1, 24.0)
+MEASURED_SAMPLE_DISTANCE_AT_Z0_MM = 1600.0
+SSA_DISTANCE_AT_Z0_M = 10.5  # Upstream of the CRL center at crl.z=0.
+DEFAULT_INCIDENT_CURVATURE_PER_M = 1 / SSA_DISTANCE_AT_Z0_M
+BERYLLIUM_DENSITY_G_CM3 = 1.848
 DIAMOND_DENSITY_G_CM3 = 3.515
+MATERIALS = {
+    "Be": (BERYLLIUM_DENSITY_G_CM3, 9.0121831, 4),
+    "diamond": (DIAMOND_DENSITY_G_CM3, 12.011, 6),
+}
 
 
 def _finite(value, name):
@@ -29,20 +37,60 @@ def _energy(energy_keV):
     return energy
 
 
+def _delta_from_composition(energy_keV, *, density_g_cm3, atomic_weight_g_mol,
+                            electrons_per_atom):
+    """Approximate delta = r_e lambda^2 n_e / (2 pi)."""
+    energy = _energy(energy_keV)
+    density = _finite(density_g_cm3, "density_g_cm3")
+    atomic_weight = _finite(atomic_weight_g_mol, "atomic_weight_g_mol")
+    electrons = _finite(electrons_per_atom, "electrons_per_atom")
+    if density <= 0:
+        raise ValueError("density_g_cm3 must be positive")
+    if atomic_weight <= 0:
+        raise ValueError("atomic_weight_g_mol must be positive")
+    if electrons <= 0:
+        raise ValueError("electrons_per_atom must be positive")
+    electrons_per_m3 = density * 1e6 / atomic_weight * 6.02214076e23 * electrons
+    wavelength_m = 1.2398419843320026e-9 / energy
+    return 2.8179403205e-15 * wavelength_m**2 * electrons_per_m3 / (2 * pi)
+
+
+def material_delta(energy_keV, material):
+    """Free-electron refractive decrement for a supported lens material."""
+    try:
+        density, atomic_weight, electrons = MATERIALS[material]
+    except KeyError as exc:
+        raise ValueError(f"unknown lens material: {material!r}") from exc
+    return _delta_from_composition(
+        energy_keV, density_g_cm3=density, atomic_weight_g_mol=atomic_weight,
+        electrons_per_atom=electrons,
+    )
+
+
+def beryllium_delta(energy_keV, *, density_g_cm3=BERYLLIUM_DENSITY_G_CM3):
+    """Approximate delta for beryllium with neutral-atom f1 = 4.
+
+    Constants: classical electron radius 2.8179403205e-15 m, hc =
+    1.2398419843320026e-9 keV m, N_A = 6.02214076e23 mol^-1,
+    beryllium atomic weight 9.0121831 g/mol. No absorption/dispersion correction.
+    """
+    return _delta_from_composition(
+        energy_keV, density_g_cm3=density_g_cm3, atomic_weight_g_mol=9.0121831,
+        electrons_per_atom=4,
+    )
+
+
 def diamond_delta(energy_keV, *, density_g_cm3=DIAMOND_DENSITY_G_CM3):
-    """Approximate delta = r_e lambda^2 n_e / (2 pi), with carbon f1 = 6.
+    """Approximate delta for diamond with carbon f1 = 6.
 
     Constants: classical electron radius 2.8179403205e-15 m, hc =
     1.2398419843320026e-9 keV m, N_A = 6.02214076e23 mol^-1,
     carbon atomic weight 12.011 g/mol. No absorption/dispersion correction.
     """
-    energy = _energy(energy_keV)
-    density = _finite(density_g_cm3, "density_g_cm3")
-    if density <= 0:
-        raise ValueError("density_g_cm3 must be positive")
-    electrons_per_m3 = density * 1e6 / 12.011 * 6.02214076e23 * 6
-    wavelength_m = 1.2398419843320026e-9 / energy
-    return 2.8179403205e-15 * wavelength_m**2 * electrons_per_m3 / (2 * pi)
+    return _delta_from_composition(
+        energy_keV, density_g_cm3=density_g_cm3, atomic_weight_g_mol=12.011,
+        electrons_per_atom=6,
+    )
 
 
 @dataclass(frozen=True)
@@ -61,22 +109,25 @@ class LensHolder:
     @property
     def description(self):
         if self.count:
-            return f"{self.count} x {self.radius_um:g} um (assumed diamond)"
-        return f"{self.aperture_mm:g} mm aperture" if self.aperture_mm else "empty"
+            material = f" {self.material}" if self.material else ""
+            return f"{self.count} x {self.radius_um:g} um{material}"
+        return (f"{self.aperture_mm:g} mm aperture" if self.aperture_mm
+                else "blank / uncharacterized")
 
 
 DEFAULT_HOLDERS = (
-    LensHolder(1, 1, 50, material="diamond"),
-    LensHolder(2, 8, 50, material="diamond"),
-    LensHolder(3, 16, 50, material="diamond"),
-    LensHolder(4, 4, 50, material="diamond"),
-    LensHolder(5, 2, 50, material="diamond"),
+    LensHolder(1, 1, 50, material="Be"),
+    LensHolder(2, 8, 50, material="Be"),
+    LensHolder(3, 16, 50, material="Be"),
+    LensHolder(4, 4, 50, material="Be"),
+    LensHolder(5, 2, 50, material="Be"),
     LensHolder(6), LensHolder(7), LensHolder(8),
-    LensHolder(9, 1, 200, material="diamond"),
-    LensHolder(10, 8, 500, material="diamond"),
-    LensHolder(11, 1, 500, material="diamond"),
+    LensHolder(9, 1, 200, material="Be"),
+    LensHolder(10, 8, 500, material="Be"),
+    LensHolder(11, 1, 500, material="Be"),
     LensHolder(12, aperture_mm=2.0),
 )
+HOLDERS_BY_NUMBER = {h.number: h for h in DEFAULT_HOLDERS}
 
 
 @dataclass(frozen=True)
@@ -108,18 +159,20 @@ COMBINATIONS = _combinations()
 
 @dataclass(frozen=True)
 class CRLGeometry:
-    """Common lens plane, sample fixed at +615 mm from the Z=0 lens plane.
+    """Common lens plane, sample fixed downstream from the Z=0 lens plane.
 
     Positive Z moves downstream. ``incident_curvature_per_m`` is ray slope /
     ray height at Z=0: zero = collimated, positive = diverging, negative =
     converging. At Z it propagates as C(Z) = C(0)/(1 + C(0)*Z[m]).
     This is geometrical wavefront curvature, not angular divergence/emittance.
+    Default: SSA secondary source 10.5 m upstream of the CRL center at Z=0,
+    so source distance p(Z) = 10.5 + Z[m]. Set curvature=0 for collimated input.
     """
 
-    sample_distance_mm: float = 615.0
-    z_min_mm: float = -50.0
-    z_max_mm: float = 250.0
-    incident_curvature_per_m: float = 0.0
+    sample_distance_mm: float = MEASURED_SAMPLE_DISTANCE_AT_Z0_MM
+    z_min_mm: float = -300.0
+    z_max_mm: float = 300.0
+    incident_curvature_per_m: float = DEFAULT_INCIDENT_CURVATURE_PER_M
 
     def __post_init__(self):
         for name in ("sample_distance_mm", "z_min_mm", "z_max_mm",
@@ -199,30 +252,47 @@ class SelectionBand:
 @dataclass(frozen=True)
 class CRLModel:
     geometry: CRLGeometry = field(default_factory=CRLGeometry)
-    density_g_cm3: float = DIAMOND_DENSITY_G_CM3
 
     def __post_init__(self):
-        diamond_delta(10, density_g_cm3=self.density_g_cm3)
+        for holder in DEFAULT_HOLDERS:
+            if holder.count:
+                material_delta(10, holder.material)
 
-    def delta(self, energy_keV):
-        return diamond_delta(energy_keV, density_g_cm3=self.density_g_cm3)
+    def delta(self, energy_keV, material):
+        return material_delta(energy_keV, material)
 
-    def focal_length_mm(self, energy_keV, holders):
-        """Effective focal length; reject empty holders/aperture/duplicate IDs."""
+    def _combination_for_holders(self, holders):
         ids = tuple(sorted(holders))
         combo = next((c for c in COMBINATIONS if c.holders == ids), None)
         if combo is None:
             raise ValueError("select a nonempty, unique subset of lens holders 1-5, 9-11")
-        return 1000 / (2 * self.delta(energy_keV) * combo.strength_per_m)
+        return combo
+
+    def _combination_power_per_m(self, energy_keV, combo):
+        energy = _energy(energy_keV)
+        return sum(
+            2 * self.delta(energy, HOLDERS_BY_NUMBER[number].material)
+            * HOLDERS_BY_NUMBER[number].count
+            / (HOLDERS_BY_NUMBER[number].radius_um * 1e-6)
+            for number in combo.holders
+        )
+
+    def power_per_m(self, energy_keV, holders):
+        """Effective focusing power in 1/m for explicit holder numbers."""
+        combo = self._combination_for_holders(holders)
+        return self._combination_power_per_m(energy_keV, combo)
+
+    def focal_length_mm(self, energy_keV, holders):
+        """Effective focal length; reject empty holders/aperture/duplicate IDs."""
+        return 1000 / self.power_per_m(energy_keV, holders)
 
     def candidates(self, energy_keV):
         """Feasible solutions ordered by holder count, elements, IDs, then Z margin."""
         energy = _energy(energy_keV)
-        delta = self.delta(energy)
         g = self.geometry
         solutions = []
         for combo in COMBINATIONS:
-            power = 2 * delta * combo.strength_per_m
+            power = self._combination_power_per_m(energy, combo)
             positions = sorted(g.focus_positions_mm(power), key=lambda z: (
                 -min(z - g.z_min_mm, g.z_max_mm - z), z))
             for z in positions:
@@ -248,7 +318,7 @@ class CRLModel:
         low_power, high_power = self.geometry.power_range_per_m()
         if high_power <= 0:
             return None
-        coefficient = 2 * self.delta(10) * 10**2 * combo.strength_per_m
+        coefficient = self._combination_power_per_m(10, combo) * 10**2
         low = max(ENERGY_RANGE_KEV[0], sqrt(coefficient / high_power))
         high = min(ENERGY_RANGE_KEV[1], sqrt(coefficient / low_power)
                    if low_power > 0 else float("inf"))

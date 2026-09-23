@@ -1,4 +1,4 @@
-"""Generate the offline CRL feasibility PDF, plots, and machine-readable tables.
+"""Document the current understanding of the installed SMI CRLs and focus settings.
 
 Run from the repository root:
     PYTHONPATH=src python scripts/crl_optics_report.py --output docs/crl_report
@@ -16,7 +16,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 
 from smi_beamline.devices.crl_optics import (
-    COMBINATIONS, DEFAULT_HOLDERS, CRLGeometry, CRLModel,
+    COMBINATIONS, DEFAULT_HOLDERS, MEASURED_SAMPLE_DISTANCE_AT_Z0_MM,
+    DEFAULT_INCIDENT_CURVATURE_PER_M, CRLGeometry, CRLModel,
 )
 
 
@@ -29,13 +30,68 @@ def text_page(pdf, title, lines):
     plt.close(fig)
 
 
+def ray_diagram(pdf, model, output):
+    """Paraxial ray transfer at the travel limits and center; arbitrary ray heights."""
+    g = model.geometry
+    c0 = g.incident_curvature_per_m
+    d = g.sample_distance_mm / 1000
+    fig, axes = plt.subplots(3, 1, figsize=(8.27, 11.69))
+    fig.subplots_adjust(left=0.09, right=0.96, top=0.82, bottom=0.27, hspace=0.75)
+    fig.text(0.08, 0.95, "SSA to CRL to sample", fontsize=18, weight="bold")
+    fig.text(0.08, 0.89,
+             "Rays at the travel limits and center, focused onto the fixed sample.\n"
+             "Each panel uses the required lens power at that position; the holder-3\n"
+             "energy is an equivalent example, not the same energy in all three panels.",
+             fontsize=10, linespacing=1.5)
+    source = -1 / c0 if c0 > 0 else None
+    left = source if source is not None else g.z_min_mm / 1000 - 2
+    for ax, z_mm, color in zip(axes, (g.z_min_mm, 0, g.z_max_mm),
+                                ("tab:blue", "tab:green", "tab:orange")):
+        z = z_mm / 1000
+        power = g.required_power_per_m(z_mm)
+        curvature = c0 / (1 + c0 * z)
+        f = 1 / power
+        energy = 10 * np.sqrt(model.power_per_m(10, [3]) / power)
+        for height in (-1, -0.5, 0.5, 1):
+            slope_in = curvature * height
+            height_left = height + slope_in * (left - z)
+            # Thin lens changes slope by -height/f; propagate to the sample.
+            height_sample = height + (slope_in - power * height) * (d - z)
+            ax.plot([left, z, d], [height_left, height, height_sample], color=color, lw=1.2)
+        ax.axhline(0, color="0.6", lw=0.6)
+        ax.axvline(z, ymin=0.15, ymax=0.85, color=color, lw=3)
+        ax.axvline(d, color="0.2", lw=1, ls="--")
+        ax.axvline(0, color="0.6", lw=0.7, ls=":")
+        ax.text(left, -1.4, "SSA" if source is not None else "Incident beam", fontsize=9)
+        ax.text(z, 1.23, f"CRL Z={z_mm:+g} mm", ha="center", fontsize=9)
+        ax.text(d, -1.4, "Sample", ha="right", fontsize=9)
+        p_label = f"p={z-source:.3f} m; " if source is not None else ""
+        ax.set_title(f"{p_label}q={d-z:.3f} m; required f={f*1000:.1f} mm\n"
+                     f"Holder 3 example: {energy:.3f} keV", fontsize=10, loc="left", pad=12)
+        ax.set(xlim=(left-0.3, d+0.4), ylim=(-1.6, 1.65), yticks=[],
+               xticks=[left, 0, d], xlabel="Longitudinal position from CRL Z=0 (m)")
+        ax.spines[["top", "right", "left"]].set_visible(False)
+    fig.text(0.08, 0.10,
+             "Positive CRL Z increases source-to-lens distance p and decreases q.\n"
+             "Focusing condition: 1/f = 1/p + 1/q; SSA and sample stay fixed.\n"
+             "Longitudinal scale is physical; transverse ray heights are arbitrary.\n"
+             "Rays illustrate focusing geometry, not predicted beam size or aperture.",
+             fontsize=10, linespacing=1.6)
+    pdf.savefig(fig)
+    fig.savefig(output / "ray_geometry.png", dpi=160)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("docs/crl_report"))
-    parser.add_argument("--sample-distance-mm", type=float, default=615)
-    parser.add_argument("--z-min-mm", type=float, default=-50)
-    parser.add_argument("--z-max-mm", type=float, default=250)
-    parser.add_argument("--incident-curvature-per-m", type=float, default=0)
+    parser.add_argument("--sample-distance-mm", type=float,
+                        default=MEASURED_SAMPLE_DISTANCE_AT_Z0_MM)
+    parser.add_argument("--z-min-mm", type=float, default=-300)
+    parser.add_argument("--z-max-mm", type=float, default=300)
+    parser.add_argument("--incident-curvature-per-m", type=float,
+                        default=DEFAULT_INCIDENT_CURVATURE_PER_M,
+                        help="Curvature at CRL Z=0; default is 1/10.5 per m from SSA; 0 is collimated")
     args = parser.parse_args()
     geometry = CRLGeometry(args.sample_distance_mm, args.z_min_mm, args.z_max_mm,
                            args.incident_curvature_per_m)
@@ -63,83 +119,41 @@ def main():
                              " ".join(map(str, band.holders)) if band.holders else "unreachable"])
 
     with PdfPages(args.output / "crl_optics_report.pdf") as pdf:
-        gaps = [b for b in bands if b.holders is None]
-        text_page(pdf, "SMI CRL microfocusing: initial feasibility", [
-            "PROVISIONAL OPTICS MODEL - September 2026",
+        text_page(pdf, "SMI CRLs: the installed beamline", [
+            "CURRENT BEST UNDERSTANDING",
+            "Reconstructing the operating beamline - September 2026",
+            "Original installed-system documentation is no longer available.",
+            "This records our current best understanding and calculated settings.",
             "",
+            "LAYOUT",
             f"Lens plane to sample at Z=0: {geometry.sample_distance_mm:g} mm",
             f"Z travel: {geometry.z_min_mm:g} to {geometry.z_max_mm:g} mm; positive downstream",
-            f"Accessible image distance: {geometry.sample_distance_mm - geometry.z_max_mm:g}"
-            f" to {geometry.sample_distance_mm - geometry.z_min_mm:g} mm",
-            f"Incident curvature at Z=0: {geometry.incident_curvature_per_m:g} /m",
-            "Eight populated holders; 255 nonempty combinations evaluated.",
-            "Priority: fewest holders, then elements, then holder numbers.",
+            (f"SSA secondary source: {1/geometry.incident_curvature_per_m:g} m upstream of CRL Z=0."
+             if geometry.incident_curvature_per_m > 0 else
+             f"Incident curvature at Z=0: {geometry.incident_curvature_per_m:g} /m"),
             "",
-            "Predicted gaps within 2.1-24 keV (analytic boundaries):",
-            *([f"  {b.energy_min_keV:.4f} - {b.energy_max_keV:.4f} keV" for b in gaps]
-              or ["  None in this model."]),
-            "",
-            "ASSUMPTIONS",
-            "Diamond, density 3.515 g/cm^3; two parabolic surfaces per lens.",
-            "Quoted radii apply to each surface. All holders share one plane.",
-            "Free-electron delta (carbon f1=6); delta scales as energy^-2.",
-            f"At 10 keV: delta = {model.delta(10):.7g}.",
-            "Focal length: f = 1 / [2 delta sum(N/R)].",
-            "Ray curvature C: 1/q = 1/f - C(Z); q = (615-Z) mm by default.",
-            "C(Z) = C(0) / [1 + C(0) Z(m)]. Positive C means divergence.",
-            "",
-            "INTERPRETATION",
-            "Coverage means a geometrical focus exists within nominal travel.",
-            "It does not establish spot size, transmission, or beam quality.",
-            "Material, radius convention, holder spacing and Z zero need",
-            "confirmation. No tabulated dispersion correction is included.",
-            "Transmission needs lens aperture and web thickness; spot size",
-            "also needs incident size/emittance and wavefront information.",
-            "Fewest holders can favor a thick stack over fewer lens elements.",
-            "",
-            "Switches may require large Z jumps. Boundary solutions have",
-            "zero travel margin; usable coverage will shrink with a margin.",
-            "A 1% focal-length error shifts Z by roughly 3.7-6.7 mm here.",
-            "Model and report generation issue no hardware commands.",
-        ])
-        text_page(pdf, "Holder inventory and nominal positions", [
+            "KNOWN INVENTORY (sizes are quoted radii)",
             "Holder  Contents                              IN mm   OUT mm",
             "------  ------------------------------------  -----   ------",
             *[f"{h.number:>6}  {h.description:<36}  {h.in_mm:>5.1f}   {h.out_mm:>6.1f}"
               for h in DEFAULT_HOLDERS],
             "",
-            "Empty holders 6-8 and aperture holder 12 have no lens power.",
-            "They are excluded from automatic lens selection.",
+            "Blank holders 6-8 may contain diamond CRLs; contents unconfirmed.",
+            "Locate and measure the 12 reported diamonds during commissioning.",
+            "Blanks and aperture 12 are excluded from automatic lens selection.",
             "IN=0 mm is nominal, pending alignment within about +/-2 mm.",
             "",
-            "NEXT CALIBRATIONS / DECISIONS",
-            "1. Confirm material, per-surface radii, and holder axial spacing.",
-            "2. Measure at least one energy + holders + best-focus Z point.",
-            "3. Confirm actual motor travel and choose working end margins.",
-            "4. Choose alignment signal: transmission or measured spot size.",
-            "5. Decide aperture-12 behavior and persistence of IN positions.",
-            "6. Check horizontal/vertical curvature separately if astigmatic.",
+            "CALCULATION BASIS",
+            "Two-sided parabolic lenses assumed; all labeled lenses are Be.",
+            "Be density 1.848 g/cm^3; free-electron delta scales as energy^-2.",
+            "Common-plane thin lenses image the SSA onto the sample.",
+            "Predicts geometrical focus, not spot size or transmission.",
             "",
-            "The existing lens1...lens12, x/y/z/ph/th remain motor components.",
-            "Initial CRL helpers expose inventory and offline calculations.",
+            "FOLLOW-UP",
+            "Test a few energies/combinations; confirm and measure blank contents",
+            "(diamond?); develop advanced alignment routines.",
         ])
-
-        fig, ax = plt.subplots(figsize=(10, 6), layout="constrained")
-        for holder in DEFAULT_HOLDERS:
-            if holder.count:
-                ax.plot(energies, [model.focal_length_mm(e, [holder.number]) for e in energies],
-                        label=f"H{holder.number}: {holder.count} x R{holder.radius_um:g} um")
-        ax.axhspan(geometry.sample_distance_mm - geometry.z_max_mm,
-                   geometry.sample_distance_mm - geometry.z_min_mm,
-                   color="gray", alpha=0.2, label="Sample distance range (q)")
-        ax.set(yscale="log", xlabel="Energy (keV)", ylabel="Effective focal length (mm)",
-               title="Individual holder focal lengths (q = f only for collimated input)",
-               xlim=(2.1, 24), ylim=(10, 1e5))
-        ax.legend(ncols=2, fontsize=8)
-        ax.grid(alpha=0.25, which="both")
-        pdf.savefig(fig)
-        fig.savefig(args.output / "focal_lengths.png", dpi=160)
-        plt.close(fig)
+        ray_diagram(pdf, model, args.output)
 
         fig, (ax, count_ax) = plt.subplots(2, 1, figsize=(11, 8), sharex=True,
                                           layout="constrained", height_ratios=(3, 1))
@@ -148,7 +162,7 @@ def main():
             if interval:
                 es = np.linspace(*interval, 80)
                 zs = [geometry.focus_positions_mm(
-                    2 * model.delta(e) * combo.strength_per_m) for e in es]
+                    model.power_per_m(e, combo.holders)) for e in es]
                 ax.plot(es, [z[0] if z else np.nan for z in zs], color="0.8",
                         alpha=0.35, linewidth=0.6)
         for index, band in enumerate(bands):
@@ -174,7 +188,8 @@ def main():
                             xytext=(0, 5), textcoords="offset points")
             count_ax.plot([es[0], es[-1]], [len(band.holders)] * 2, color=color, linewidth=3)
         ax.set(ylabel="Recommended CRL Z (mm)",
-               title="Fewest-holder selection; labels are holder numbers; gray = alternatives",
+               title="Fewest-holder selection; labels are holder numbers; gray = alternatives\n"
+                     "Minimum holder count takes priority, including at travel limits",
                ylim=(geometry.z_min_mm - 15, geometry.z_max_mm + 15))
         max_holders = max(len(s.holders) for s in selected if s)
         count_ax.set(xlabel="Energy (keV)", ylabel="Holders IN", xlim=(2.1, 24),
@@ -205,34 +220,10 @@ def main():
                 "At shared endpoints both adjacent choices can be reachable.",
                 "Use recommend() at the exact energy, not interpolation across",
                 "a holder change. N is the total number of individual lenses.",
+                "All 255 known combinations evaluated; fewest holders first,",
+                "then fewest elements, then holder IDs. Travel limits included.",
             ])
 
-        fig, ax = plt.subplots(figsize=(10, 6), layout="constrained")
-        reference = np.array([s.z_mm if s else np.nan for s in selected])
-        for curvature in (-0.1, 0.1):
-            varied = CRLModel(CRLGeometry(geometry.sample_distance_mm, geometry.z_min_mm,
-                                         geometry.z_max_mm, curvature))
-            differences = []
-            for e, s in zip(energies, selected):
-                positions = varied.geometry.focus_positions_mm(
-                    1000 / model.focal_length_mm(e, s.holders)) if s else ()
-                differences.append(positions[0] if positions else np.nan)
-            difference = np.array(differences) - reference
-            for i in range(1, len(selected)):
-                if selected[i] and selected[i - 1] and selected[i].holders != selected[i - 1].holders:
-                    difference[i] = np.nan
-            ax.plot(energies, difference,
-                    label=f"C(0)={curvature:+g} /m (signed radius {1/curvature:+g} m)")
-        ax.set(xlabel="Energy (keV)", ylabel="Z change from baseline (mm)", xlim=(2.1, 24),
-               title="Sensitivity to incident curvature, holding baseline lens choice fixed")
-        ax.text(0.03, 0.45, "Breaks: outside travel or a baseline holder change.\n"
-                "Different X/Y curvatures generally give different focus positions.",
-                transform=ax.transAxes, fontsize=9)
-        ax.legend()
-        ax.grid(alpha=0.25)
-        pdf.savefig(fig)
-        fig.savefig(args.output / "curvature_sensitivity.png", dpi=160)
-        plt.close(fig)
     print(f"Report: {args.output / 'crl_optics_report.pdf'}")
     for band in bands:
         print(f"{band.energy_min_keV:.6f}-{band.energy_max_keV:.6f} keV: "

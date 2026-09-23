@@ -41,9 +41,11 @@ class CRL(Device):
     def recommend_focus(self, energy_keV, *, geometry=None):
         """Return the fewest-holder solution; raise if focus is unreachable.
 
-        ``geometry`` may be a CRLGeometry with calibrated sample distance,
-        working travel limits, and incident curvature. Defaults are provisional:
-        sample at 615 mm, Z=-50..250 mm, collimated input. Calculates only.
+        ``geometry`` may be a CRLGeometry with measured sample distance,
+        working travel limits, and incident curvature. Defaults: sample is
+        1600 mm from the CRL center at crl.z=0, Z=-300..300 mm, and an SSA
+        secondary source 10.5 m upstream of the CRL center at crl.z=0.
+        Calculates only.
         """
         model = CRLModel() if geometry is None else CRLModel(geometry)
         return model.recommend(energy_keV)

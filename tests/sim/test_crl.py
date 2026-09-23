@@ -31,12 +31,12 @@ def test_optics_helpers_do_not_read_or_move_motors(make_fake, monkeypatch):
         monkeypatch.setattr(motor.user_readback, "get", unexpected)
         monkeypatch.setattr(motor.user_setpoint, "put", unexpected)
     solution = crl.recommend_focus(10)
-    assert solution.holders == (2,)
-    assert solution.z_mm == pytest.approx(186.34, abs=0.1)
+    assert solution.holders == (1, 4)
+    assert solution.z_mm == pytest.approx(-109.89, abs=0.1)
     assert crl.focus_candidates(10)[0] == solution
-    assert crl.focal_length(10, [2]) == solution.focal_length_mm
+    assert crl.focal_length(10, solution.holders) == solution.focal_length_mm
     with pytest.raises(NoFocusSolution):
-        crl.recommend_focus(2.8)
+        crl.recommend_focus(3.5)
     varied = crl.recommend_focus(10, geometry=CRLGeometry(incident_curvature_per_m=0.1))
-    assert varied.holders == (2,)
+    assert varied.holders == solution.holders
     assert varied.z_mm < solution.z_mm
