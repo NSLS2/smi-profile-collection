@@ -21,7 +21,7 @@ RE_MD_WHITELIST = frozenset({
     "tiled_access_tags",
     "username",
     "versions"
-    #"SAXS_setup", # not sure we want this persistant
+    "SAXS_setup",
 })
 
 

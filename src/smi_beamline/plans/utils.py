@@ -225,20 +225,23 @@ def ps(
         ps.fwhm = FWHM
 
     ### re-plot results:
+    fontsize = 12
+    labelpad = 10
+    fig_size_scale = 1
     if plot:
         if logplot == "on":
             plt.close(999)
-            plt.figure(999, figsize=(6.4 * 2, 4.8 * 2))
+            plt.figure(999, figsize=(6.4 * fig_size_scale, 4.8 * fig_size_scale))
             plt.semilogy([PEAK, PEAK], [np.min(y), np.max(y)], "k--", label="PEAK", lw=2)
             # plt.hold(True)
             plt.semilogy([CEN, CEN], [np.min(y), np.max(y)], "r-.", label="CEN", lw=2)
             plt.semilogy([COM, COM], [np.min(y), np.max(y)], "g.-.", label="COM", lw=2)
             plt.semilogy(x, y, "bo-")
-            plt.xlabel(field, fontsize=20, labelpad=15)
-            plt.ylabel(intensity_field, fontsize=20, labelpad=15)
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            plt.legend(fontsize=20)
+            plt.xlabel(field, fontsize=fontsize, labelpad=labelpad)
+            plt.ylabel(intensity_field, fontsize=fontsize, labelpad=labelpad)
+            plt.xticks(fontsize=fontsize)
+            plt.yticks(fontsize=fontsize)
+            plt.legend(fontsize=fontsize)
             plt.title(
                 "uid: "
                 + str(uid)
@@ -254,22 +257,22 @@ def ps(
                 + str(FWHM)[:8]
                 + " @ CEN: "
                 + str(CEN)[:8],
-                size=20,
+                #size=20,
             )
             plt.show()
         else:
             plt.close(999)
-            plt.figure(999, figsize=(6.4 * 2, 4.8 * 2))
+            plt.figure(999, figsize=(6.4 * fig_size_scale, 4.8 * fig_size_scale))
             plt.plot([PEAK, PEAK], [np.min(y), np.max(y)], "k--", label="PEAK", lw=2)
             # plt.hold(True)
             plt.plot([CEN, CEN], [np.min(y), np.max(y)], "r-.", label="CEN", lw=2)
             plt.plot([COM, COM], [np.min(y), np.max(y)], "g.-.", label="COM", lw=2)
             plt.plot(x, y, "bo-")
-            plt.xlabel(field, fontsize=20, labelpad=15)
-            plt.ylabel(intensity_field, fontsize=20, labelpad=15)
-            plt.legend(fontsize=20)
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
+            plt.xlabel(field, fontsize=fontsize, labelpad=labelpad)
+            plt.ylabel(intensity_field, fontsize=fontsize, labelpad=labelpad)
+            plt.legend(fontsize=fontsize)
+            plt.xticks(fontsize=fontsize)
+            plt.yticks(fontsize=fontsize)
             plt.title(
                 "uid: "
                 + str(uid)
@@ -285,7 +288,7 @@ def ps(
                 + str(FWHM)[:8]
                 + " @ CEN: "
                 + str(CEN)[:8],
-                size=20,
+                #size=20,
             )
             plt.show()
 

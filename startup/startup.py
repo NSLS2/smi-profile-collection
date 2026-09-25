@@ -154,13 +154,13 @@ class ProposalIDPrompt(Prompts):
         project_name = str(RE.md.get("project_name", "N/A"))
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return [
-            (_PromptToken.Prompt, "SMI "),
+            #(_PromptToken.Prompt, "SMI "),
             (_PromptToken.Prompt, f"{data_session} "),
             (_PromptToken.Name.Class, f"{project_name} "),
-            (_PromptToken.Comment, f"{now} "),
-            (_PromptToken.Prompt, "["),
-            (_PromptToken.PromptNum, str(self.shell.execution_count)),
-            (_PromptToken.Prompt, "]: "),
+            #(_PromptToken.Comment, f"{now} "),
+            #(_PromptToken.Prompt, "["),
+            #(_PromptToken.PromptNum, str(self.shell.execution_count)),
+            #(_PromptToken.Prompt, "]: "),
         ]
 
 
