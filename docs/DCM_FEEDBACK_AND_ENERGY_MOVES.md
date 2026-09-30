@@ -204,14 +204,26 @@ verify centred at target; leave feedback ON
 * Direction & magnitude of the coarse move come from the **m67/m68 → OVAL calibration** measured
   in Phase 0 (see §6). Getting the sign wrong drives the piezo *into* the rail and loses the
   beam — this is the single most safety-critical number.
-* **Wrong-way abort, with a noise tolerance.** The recentre judges the *settled* OVAL direction; a
-  step that moves OVAL *away* from 0 aborts **immediately only if it is large**
-  (`|dOVAL| >= wrong_way_oval`, default 500) — a genuine sign/coupling error. A *small* wrong-way
-  move is treated as OVAL noise / motor hysteresis (the pitch loop in particular is jumpy) and
-  **forgiven up to `wrong_way_max` (default 2) times in a row** — a correct step resets the count,
-  and a bigger corrective step usually wins on the retry. This stopped spurious aborts like
-  `pitch: settled OVAL +4528 → +4648 (dOVAL +120)` seen on small steps, while still bailing out
-  fast on a real sign error.
+* **Wrong-way abort, with transient confirmation.** After the usual 1.5 s per-step settling,
+  a large wrong-way change (`|dOVAL| >= wrong_way_oval`, default 500) gets **another 5 s of
+  sampling with the coarse motor held stationary** before deciding to abort. The mean of the
+  final third of this window is compared to the original pre-step OVAL. This lets a delayed
+  feedback response recover, such as roll briefly rising from +905 to +1634 before coming down.
+  Small wrong-way changes are forgiven up to `wrong_way_max` (default 2) times in a row; exceeding
+  that count also gets the confirmation window. A correct response resets the count. Persistent
+  wrong-way behavior still aborts, and beyond-rail readings abort during sampling. Normal correct
+  steps incur no extra wait.
+
+  Tune both automatic large-move and small-move drift recentering at the console (after loading
+  the updated code):
+
+  ```python
+  enable_managed_energy_moves(walk_kwargs={"recenter_wrong_way_wait": 8.0})
+  ```
+
+  The default is 5 s; 0 restores the immediate wrong-way verdict. For an explicit walk use
+  `RE(energy_walk(10000, recenter_wrong_way_wait=8.0))`; for `recenter_axis_plan` directly the
+  parameter is `wrong_way_wait`. These are additional seconds only on a would-be wrong-way abort.
 * **Per-energy BPM3 range (gain).** As each sub-step lands — *before* the flux gate and recentre —
   `energy_walk` sets the BPM3 electrometer range to match the new energy band and confirms it via
   `Range_RBV`, so the sum/position are on the right scale (low energy = more flux = coarser range;
@@ -497,4 +509,3 @@ stale threshold. Treat these as finishing touches on this work, not a new phase.
 **Why grouped here.** Both items make the detector thresholds track energy the way the feedback now
 tracks the beam — small, safe, and best done right after the managed move lands. No new calibration
 or beam-time gating required (unlike §10).
-
