@@ -62,6 +62,7 @@ class XBPM(Device):
     sumY = Cpt(EpicsSignal, "SumY:MeanValue_RBV")
     posX = Cpt(EpicsSignal, "PosX:MeanValue_RBV")
     posY = Cpt(EpicsSignal, "PosY:MeanValue_RBV")
+    range = Cpt(EpicsSignal, "Range", kind="config")
 
 
 # this doesn't work, because the PV names do not end in .VAL ??
