@@ -6,7 +6,7 @@ energy = Energy(
     prefix="",
     name="energy",
     read_attrs=["energy", "ivugap", "bragg", "harmonic"],
-    configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic"],
+    configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic", "locked_harmonic"],
 )
 energy.settle_time = 1
 
@@ -64,6 +64,19 @@ def feedback(action=None):
 
 
 import bluesky.plan_stubs as bps
+from smi_beamline.plans.harmonic_lock import with_harmonic_lock as _with_harmonic_lock
+
+
+def with_harmonic_lock(plan, start, stop, *, harmonic=None, max_harmonic=None,
+                       gap_margin_um=0):
+    """Run a plan on one harmonic spanning start..stop (eV), restoring the previous lock.
+
+    Selects and establishes the harmonic before acquisition. See
+    ``docs/ENERGY_SCAN_HARMONICS.md`` for examples and approach/cleanup semantics.
+    """
+    return (yield from _with_harmonic_lock(
+        plan, start, stop, energy=energy, harmonic=harmonic,
+        max_harmonic=max_harmonic, gap_margin_um=gap_margin_um))
 
 
 def move_energy(target_energy):

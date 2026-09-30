@@ -455,6 +455,15 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
 
     def _body():
         start_eV = _now()
+        # Preflight the whole managed path while locked, before moving any sub-step.
+        # Plain positioners used by off-beamline callers need not implement this feature.
+        locked = 0
+        if hasattr(energy, "locked_harmonic"):
+            locked = yield from bps.rd(energy.locked_harmonic)
+            if locked:
+                if not (yield from bps.rd(energy.enableivu)):
+                    raise RuntimeError("A harmonic lock requires enableivu=True.")
+                energy.harmonic_for_range(start_eV, target_eV, harmonic=locked)
         targets = _substep_targets(start_eV, float(target_eV))
         _emit(f"energy_walk: {start_eV:.2f} -> {float(target_eV):.2f} eV "
               f"({len(targets)} step(s); <= {step_eV} eV, {LOW_ENERGY_STEP_eV:g} eV below "
