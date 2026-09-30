@@ -67,7 +67,7 @@ def delete_bimorph_state(name):
     print("deleted bimorph state {!r}".format(name))
 
 
-def stage_bimorph(name):
+def stage_bimorph(name, *, debug=False):
     """PLAN: stage the saved state ``name`` onto both mirrors' SET-VTRGT targets (NO motion).
 
     Writes the targets only; does not apply, so the mirror does not move.  Follow with
@@ -80,24 +80,24 @@ def stage_bimorph(name):
     snap = states[name]
     for key, dev in _BIMORPH_MIRRORS.items():
         if key in snap:
-            yield from dev.set_targets(snap[key])
+            yield from dev.set_targets(snap[key], debug=debug)
     print("staged bimorph state {!r} onto SET-VTRGT (not yet applied)".format(name))
 
 
-def apply_bimorph(settle=1.0, timeout=120.0):
+def apply_bimorph(settle=1.0, timeout=120.0, *, debug=False):
     """PLAN: apply the currently-staged targets on BOTH mirrors and wait until they settle."""
     for dev in _BIMORPH_MIRRORS.values():
-        yield from dev.apply_and_wait(settle=settle, timeout=timeout)
+        yield from dev.apply_and_wait(settle=settle, timeout=timeout, debug=debug)
 
 
-def load_bimorph(name, settle=1.0, timeout=120.0):
+def load_bimorph(name, settle=1.0, timeout=120.0, *, debug=False):
     """PLAN: stage the saved state ``name`` and apply it (ramp both mirrors), waiting to settle.
 
     ``RE(load_bimorph('tender'))``.  Stages SET-VTRGT (safe, no motion), then triggers the apply
     and polls GET-STATUS until every channel leaves 'Busy'.
     """
-    yield from stage_bimorph(name)
-    yield from apply_bimorph(settle=settle, timeout=timeout)
+    yield from stage_bimorph(name, debug=debug)
+    yield from apply_bimorph(settle=settle, timeout=timeout, debug=debug)
     print("loaded bimorph state {!r}".format(name))
 
 

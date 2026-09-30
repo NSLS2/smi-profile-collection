@@ -1,5 +1,7 @@
 import re
 import contextlib
+from datetime import datetime
+import sys
 import numpy as np
 from ophyd import (
     EpicsSignal,
@@ -15,6 +17,12 @@ from . import _config
 
 #: number of bimorph channels
 N_BIMORPH_CH = 16
+
+
+def _bimorph_debug(name, message):
+    # CA exceptions go directly to stderr; use the same stream and flush each marker.
+    stamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+    print("[{}] {}: {}".format(stamp, name, message), file=sys.stderr, flush=True)
 
 
 @contextlib.contextmanager
@@ -91,7 +99,7 @@ class _BimorphChannels:
         """True if ANY channel reports busy (mid-ramp). (Not a plan.)"""
         return any(s == self.STATUS_BUSY for s in self.channel_states())
 
-    def set_targets(self, voltages):
+    def set_targets(self, voltages, *, debug=False):
         """PLAN: stage the 16 per-channel targets (SET-VTRGT).  Does NOT move the mirror.
 
         ``voltages`` must have length ``N_BIMORPH_CH``.  Staging is safe -- it never actuates;
@@ -100,8 +108,10 @@ class _BimorphChannels:
         The CAENels controller serializes target updates internally.  Live testing showed that
         sending all channels as one batch can leave later channels stale, so this writes one
         channel, waits for its GET-VTRGT readback to settle, then continues to the next channel.
+        ``debug=True`` prints timestamped write/readback diagnostics to stderr and leaves
+        CA messages unsuppressed during writes.
         """
-        yield from self.set_targets_sequential(voltages)
+        yield from self.set_targets_sequential(voltages, debug=debug)
 
     def set_targets_sequential(
         self,
@@ -112,6 +122,7 @@ class _BimorphChannels:
         tolerance=0.5,
         stable_reads=3,
         attempts=3,
+        debug=False,
     ):
         """PLAN: stage targets one channel at a time with GET-VTRGT verification."""
         import time as _time
@@ -119,6 +130,11 @@ class _BimorphChannels:
         voltages = list(voltages)
         if len(voltages) != N_BIMORPH_CH:
             raise ValueError("expected {} voltages, got {}".format(N_BIMORPH_CH, len(voltages)))
+        started = _time.monotonic()
+        if debug:
+            _bimorph_debug(self.name, "STAGE begin: {} channels; timeout={}s poll={}s "
+                           "tolerance={}V stable_reads={} attempts={}; CA messages unsuppressed".format(
+                               len(voltages), timeout, poll, tolerance, stable_reads, attempts))
         for i, v in enumerate(voltages):
             target = float(v)
             write_sig = getattr(self, "ch{}_trg".format(i))
@@ -126,29 +142,71 @@ class _BimorphChannels:
 
             last = None
             for attempt in range(1, int(attempts) + 1):
-                with _quiet_ca_messages():
-                    yield from bps.abs_set(write_sig, target, wait=False)
+                label = "STAGE ch{} attempt {}/{}".format(i, attempt, attempts)
+                attempt_started = _time.monotonic()
+                if debug:
+                    _bimorph_debug(self.name, "{} WRITE pv={} target={:.3f}V "
+                                   "put_complete={} connected={}".format(
+                                       label, getattr(write_sig, "pvname", write_sig.name), target,
+                                       getattr(write_sig, "put_complete", "n/a"), write_sig.connected))
+                try:
+                    with contextlib.nullcontext() if debug else _quiet_ca_messages():
+                        status = yield from bps.abs_set(write_sig, target, wait=False)
+                except Exception as exc:
+                    if debug:
+                        _bimorph_debug(self.name, "{} WRITE raised {!r}".format(label, exc))
+                    raise
+                if debug:
+                    _bimorph_debug(self.name, "{} WRITE dispatched; status={} "
+                                   "(asynchronous, not proof of target acceptance)".format(label, status))
+                    if status is not None:
+                        def report_write_done(done, label=label):
+                            error = None if done.success else done.exception(timeout=0)
+                            _bimorph_debug(self.name, "{} WRITE status complete: success={} "
+                                           "exception={!r}".format(label, done.success, error))
+
+                        status.add_callback(report_write_done)
 
                 deadline = _time.monotonic() + float(timeout)
                 stable = 0
                 while True:
-                    last = float(read_sig.get())
+                    try:
+                        last = float(read_sig.get())
+                    except Exception as exc:
+                        if debug:
+                            _bimorph_debug(self.name, "{} READ pv={} raised {!r}".format(
+                                label, getattr(read_sig, "pvname", read_sig.name), exc))
+                        raise
                     if abs(last - target) <= float(tolerance):
                         stable += 1
-                        if stable >= int(stable_reads):
-                            break
                     else:
                         stable = 0
+                    if debug:
+                        _bimorph_debug(self.name, "{} READ pv={} value={:.3f}V delta={:+.3f}V "
+                                       "stable={}/{} elapsed={:.3f}s write_status={}".format(
+                                           label, getattr(read_sig, "pvname", read_sig.name), last,
+                                           last - target, stable, stable_reads,
+                                           _time.monotonic() - attempt_started, status))
+                    if stable >= int(stable_reads):
+                        break
                     if _time.monotonic() > deadline:
+                        if debug:
+                            _bimorph_debug(self.name, "{} verification TIMEOUT; {}".format(
+                                label, "retrying" if attempt < int(attempts) else "attempts exhausted"))
                         break
                     yield from bps.sleep(float(poll))
                 if stable >= int(stable_reads):
+                    if debug:
+                        _bimorph_debug(self.name, "{} VERIFIED target={:.3f}V".format(label, target))
                     break
             else:
                 raise TimeoutError(
                     "{}: ch{} target readback did not reach {:.3f} after {} attempts "
                     "of {:.1f}s (last GET-VTRGT={:.3f})".format(
                         self.name, i, target, int(attempts), float(timeout), last))
+        if debug:
+            _bimorph_debug(self.name, "STAGE complete in {:.3f}s; targets only, APPLY not sent".format(
+                _time.monotonic() - started))
 
     def sync_targets_to_outputs(self):
         """PLAN: copy each live OUTPUT into its TARGET (targets only -- never moves the mirror).
@@ -158,17 +216,21 @@ class _BimorphChannels:
         """
         yield from self.set_targets(self.read_outputs())
 
-    def apply(self):
+    def apply(self, *, debug=False):
         """PLAN: trigger the ramp of the staged targets onto the outputs (write SET-ALLTRGT=1).
 
         Does NOT wait -- use :meth:`apply_and_wait` to block until the channels settle.  Written
         without put-completion (this controller's put-callback always fails though the put lands).
         """
-        with _quiet_ca_messages():
+        if debug:
+            _bimorph_debug(self.name, "APPLY WRITE pv={} value=1".format(self.apply_sig.pvname))
+        with contextlib.nullcontext() if debug else _quiet_ca_messages():
             self.apply_sig.put(1)
+        if debug:
+            _bimorph_debug(self.name, "APPLY write returned")
         yield from bps.null()
 
-    def apply_and_wait(self, settle=1.0, timeout=120.0, poll=0.5):
+    def apply_and_wait(self, settle=1.0, timeout=120.0, poll=0.5, *, debug=False):
         """PLAN: apply the staged targets, then wait until every channel's status leaves 'Busy'.
 
         Triggers ``SET-ALLTRGT`` then polls ``GET-STATUS<n>`` until none are busy (and stays
@@ -177,12 +239,16 @@ class _BimorphChannels:
         """
         import time as _time
 
-        yield from self.apply()
+        yield from self.apply(debug=debug)
         deadline = _time.monotonic() + timeout
         stable_since = None
         while True:
-            busy = self.is_busy()
+            states = self.channel_states()
+            busy = any(s == self.STATUS_BUSY for s in states)
             now = _time.monotonic()
+            if debug:
+                _bimorph_debug(self.name, "APPLY poll elapsed={:.3f}s busy={} states={}".format(
+                    now - (deadline - timeout), busy, states))
             if busy:
                 stable_since = None
             else:
@@ -191,6 +257,8 @@ class _BimorphChannels:
                 if stable_since is None:
                     stable_since = now
                 elif now - stable_since >= settle:
+                    if debug:
+                        _bimorph_debug(self.name, "APPLY settled")
                     return
             if now > deadline:
                 raise TimeoutError(
