@@ -35,7 +35,7 @@ bragg.read_attrs = ["user_readback"]
 # Do this AFTER the ``bragg.read_attrs = [...]`` reassignment above (which would otherwise re-hint
 # bragg.user_readback).
 energy.energy.kind = "normal"
-energy.energy.readback.kind = "normal"
+energy.energy.readback.kind = "hinted"
 energy.bragg.user_readback.kind = "normal"
 energy.ivugap.user_readback.kind = "normal"
 energy.dcmgap.user_readback.kind = "normal"
