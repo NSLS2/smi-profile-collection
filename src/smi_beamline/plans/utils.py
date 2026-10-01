@@ -139,6 +139,13 @@ def ps(
     # from lmfit import minimize, Parameters, Parameter, report_fit
     # from scipy.special import erf
 
+    # Clear previous results even when data loading or fitting fails. Alignment
+    # plans inspect the measured profile to recover from an unreasonable fit.
+    ps.cen = ps.peak = ps.com = ps.fwhm = np.nan
+    ps.x_data = ps.y_data = np.array([])
+    ps.fit_success = False
+    ps.fit_kind = None
+
     # get the scan information:
     h = db[uid]
     uid = h.start['scan_id']
@@ -176,7 +183,13 @@ def ps(
         y = np.diff(y)
         x = x[1:]
 
+    ps.x_data, ps.y_data = x, y
+    if (len(x) < 2 or not np.all(np.isfinite(x))
+            or not np.all(np.isfinite(y)) or np.ptp(y) == 0):
+        raise ValueError("Cannot calculate peak statistics from flat or non-finite scan data")
+
     PEAK = x[np.argmax(y)]
+    ps.peak = PEAK
     PEAK_y = np.max(y)
     COM = np.sum(x * y) / np.sum(y)
 
@@ -198,6 +211,8 @@ def ps(
             )
             positive = not positive
     if len(list_of_roots) >= 2:
+        ps.fit_kind = "peak"
+        ps.fit_success = True
         FWHM = abs(list_of_roots[-1] - list_of_roots[0])
         CEN = list_of_roots[0] + 0.5 * (list_of_roots[1] - list_of_roots[0])
         ps.fwhm = FWHM
@@ -207,6 +222,7 @@ def ps(
         #    'x_range': list_of_roots,
     # }
     else:  # ok, maybe it's a step function..
+        ps.fit_kind = "step"
         print("no peak...trying step function...")
         ym = ym + shift
 
@@ -215,10 +231,17 @@ def ps(
 
         mod = Model(err_func)
         ### estimate starting values:
-        x0 = np.mean(x)
-        # k=0.1*(np.max(x)-np.min(x))
-        pars = mod.make_params(x0=x0, k=200, A=1.0, base=0.0)
+        # Scale the starting slope to the scan units (hexapod mm versus
+        # piezo microns), and start at the measured half-height crossing.
+        x0 = list_of_roots[0] if list_of_roots else np.mean(x)
+        span = np.ptp(x)
+        if span <= 0:
+            raise ValueError("Cannot fit a step without a nonzero scan range")
+        amplitude = 0.5 if y[0] > y[-1] else -0.5
+        pars = mod.make_params(x0=x0, k=2 / span, A=amplitude, base=0.5)
+        pars["k"].set(min=0)
         result = mod.fit(ym, pars, x=x)
+        ps.fit_success = bool(result.success)
         CEN = result.best_values["x0"]
         FWHM = result.best_values["k"]
         ps.cen = CEN
@@ -669,4 +692,3 @@ def _safe_read_device(dev):
     except Exception:
         pass
     return "connected"
-

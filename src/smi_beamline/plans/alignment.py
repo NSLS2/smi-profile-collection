@@ -1,3 +1,8 @@
+"""Beamline alignment plans.
+
+The ``align_*`` height/angle helpers validate fit results and accept
+``max_retries`` (default 3) for edge-centered rescans; see docs/ALIGNMENT.md.
+"""
 
 import matplotlib.pyplot as plt
 import bluesky.plan_stubs as bps
@@ -7,6 +12,7 @@ from smi_beamline.instances.manipulators import piezo, stage
 from smi_beamline.instances.pilatus import pil2M
 from smi_beamline.instances.pilatus import det_exposure_time
 from .utils import ps
+from ._alignment import scan_and_center as _scan_and_center
 from smi_beamline.devices import _context
 from smi_beamline.instances.beam import SMI as smi
 
@@ -103,7 +109,7 @@ def knife_edge_y(distance=1.0, steps=51, position=None, **kwargs):
         piezo.y, distance=distance, steps=steps, position=position, **kwargs))
 
 
-def align_gisaxs_height(rang=0.3, point=31, der=False):
+def align_gisaxs_height(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align GISAXS height using a relative scan.
 
@@ -112,12 +118,11 @@ def align_gisaxs_height(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], piezo.y, -rang, rang, point)
-    ps(der=der, plot=False)
-    yield from bps.mv(piezo.y, ps.cen)
+    yield from _scan_and_center([pil2M], piezo.y, rang, point, ps,
+                                der=der, max_retries=max_retries)
 
 
-def align_bdm_height(rang=0.3, point=31, der=False):
+def align_bdm_height(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align BDM height using a relative scan.
 
@@ -126,13 +131,12 @@ def align_bdm_height(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], bdm.y, -rang, rang, point)
-    ps(der=der, plot=False)
+    yield from _scan_and_center([pil2M], bdm.y, rang, point, ps,
+                                der=der, max_retries=max_retries)
     print(f'Moving to halfcut at {ps.cen}')
-    yield from bps.mv(bdm.y, ps.cen)
 
 
-def align_gisaxs_height_rb(rang=0.3, point=31, der=False):
+def align_gisaxs_height_rb(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align GISAXS height on the reflected beam.
 
@@ -141,12 +145,11 @@ def align_gisaxs_height_rb(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], piezo.y, -rang, rang, point)
-    ps(der=der, plot=False)
-    yield from bps.mv(piezo.y, ps.peak)
+    yield from _scan_and_center([pil2M], piezo.y, rang, point, ps,
+                                der=der, target="peak", max_retries=max_retries)
 
 
-def align_bdm_height_rb(rang=0.3, point=31, der=False):
+def align_bdm_height_rb(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align BDM height on the reflected beam.
 
@@ -155,13 +158,12 @@ def align_bdm_height_rb(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], bdm.y, -rang, rang, point)
-    ps(der=der, plot=False)
+    yield from _scan_and_center([pil2M], bdm.y, rang, point, ps,
+                                der=der, target="peak", max_retries=max_retries)
     print(f'Moving to peak position at {ps.peak}')
-    yield from bps.mv(bdm.y, ps.peak)
 
 
-def align_gisaxs_th(rang=0.3, point=31):
+def align_gisaxs_th(rang=0.3, point=31, *, max_retries=3):
     """
     Align GISAXS theta using a relative scan.
 
@@ -169,12 +171,11 @@ def align_gisaxs_th(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil2M], piezo.th, -rang, rang, point)
-    ps(plot=False)
-    yield from bps.mv(piezo.th, ps.peak)
+    yield from _scan_and_center([pil2M], piezo.th, rang, point, ps,
+                                target="peak", max_retries=max_retries)
 
 
-def align_gisaxs_ch(rang=0.3, point=31):
+def align_gisaxs_ch(rang=0.3, point=31, *, max_retries=3):
     """
     Align GISAXS theta using a relative scan.
 
@@ -182,13 +183,12 @@ def align_gisaxs_ch(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil2M], piezo.ch, -rang, rang, point)
-    ps(plot=False)
-    yield from bps.mv(piezo.ch, ps.peak)
+    yield from _scan_and_center([pil2M], piezo.ch, rang, point, ps,
+                                target="peak", max_retries=max_retries)
 
 
 
-def align_bdm_th(rang=0.3, point=31):
+def align_bdm_th(rang=0.3, point=31, *, max_retries=3):
     """
     Align BDM theta using a relative scan.
 
@@ -196,13 +196,9 @@ def align_bdm_th(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil2M], bdm.th, -rang, rang, point)
-    ps(plot=False)
-    # print(f'Moving to peak position at {ps.peak}')
-    # yield from bps.mv(bdm.th, ps.peak)
-    # using center instead of peak
+    yield from _scan_and_center([pil2M], bdm.th, rang, point, ps,
+                                max_retries=max_retries)
     print(f'Moving to peak center position at {ps.cen}')
-    yield from bps.mv(bdm.th, ps.cen)
 
 
 # def align_xrr_prs(rang=0.3, point=31):
@@ -218,7 +214,7 @@ def align_bdm_th(rang=0.3, point=31):
 #     yield from bps.mv(prs, ps.peak)
 
 
-def align_xrr_height(rang=0.3, point=31, der=False):
+def align_xrr_height(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align XRR height using a relative scan.
 
@@ -227,12 +223,11 @@ def align_xrr_height(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], piezo.z, -rang, rang, point)
-    ps(der=der, plot=False)
-    yield from bps.mv(piezo.z, ps.peak)
+    yield from _scan_and_center([pil2M], piezo.z, rang, point, ps,
+                                der=der, target="peak", max_retries=max_retries)
 
 
-def align_xrr_height_motx(rang=0.3, point=31, der=False):
+def align_xrr_height_motx(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align XRR height using the piezo.x motor.
 
@@ -241,12 +236,11 @@ def align_xrr_height_motx(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], piezo.x, -rang, rang, point)
-    ps(der=der, plot=False)
-    yield from bps.mv(piezo.x, ps.peak)
+    yield from _scan_and_center([pil2M], piezo.x, rang, point, ps,
+                                der=der, target="peak", max_retries=max_retries)
 
 
-def align_gisaxs_height_hex(rang=0.3, point=31, der=False):
+def align_gisaxs_height_hex(rang=0.3, point=31, der=False, *, max_retries=3):
     """
     Align GISAXS height using the hexapod stage.
 
@@ -255,12 +249,11 @@ def align_gisaxs_height_hex(rang=0.3, point=31, der=False):
         point (int): Number of points in the scan.
         der (bool): Whether to calculate the derivative.
     """
-    yield from bp.rel_scan([pil2M], stage.y, -rang, rang, point)
-    ps(der=der, plot=False)
-    yield from bps.mv(stage.y, ps.cen)
+    yield from _scan_and_center([pil2M], stage.y, rang, point, ps,
+                                der=der, max_retries=max_retries)
 
 
-def align_gisaxs_th_hex(rang=0.3, point=31):
+def align_gisaxs_th_hex(rang=0.3, point=31, *, max_retries=3):
     """
     Align GISAXS theta using the hexapod stage.
 
@@ -268,9 +261,8 @@ def align_gisaxs_th_hex(rang=0.3, point=31):
         rang (float): Range for the scan.
         point (int): Number of points in the scan.
     """
-    yield from bp.rel_scan([pil2M], stage.th, -rang, rang, point)
-    ps(plot=False)
-    yield from bps.mv(stage.th, ps.peak)
+    yield from _scan_and_center([pil2M], stage.th, rang, point, ps,
+                                target="peak", max_retries=max_retries)
 
 
 @sample_name_decorator("alignment_gisaxs")
