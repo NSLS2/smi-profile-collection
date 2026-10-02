@@ -159,13 +159,17 @@ class SMIFastShutter(Device):
     status_pv = Cpt(EpicsSignalRO, "XF:12IDA-BI:2{EM:BPM1}DAC3")
     status = Cpt(Signal, value="")
     status_values = {0: "OPEN", 7: "NOT OPEN"}
+    # Initialization/control reads must allow EPICS discovery time. The short
+    # read_state default is only for responsive diagnostic displays.
+    status_timeout = 5.0
 
     def read_state(self, *, read_signal=_read_signal):
         """Read the live controller state, not the cached software status."""
         return numeric_state(read_signal(self.status_pv), self.status_values)
 
     def check_status(self):
-        state = self.read_state()
+        state = self.read_state(read_signal=lambda signal: signal.get(
+            timeout=self.status_timeout, connection_timeout=self.status_timeout))
         if state == "NOT OPEN":
             self.status.put("Closed")
         elif state == "OPEN":
@@ -173,7 +177,8 @@ class SMIFastShutter(Device):
         else:
             raise RuntimeError(f'Shutter "{self.name}" is in a weird state.')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, status_timeout=5.0, **kwargs):
+        self.status_timeout = status_timeout
         super().__init__(*args, **kwargs)
         self.check_status()
 

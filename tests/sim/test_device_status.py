@@ -29,6 +29,29 @@ def test_fast_shutter_reads_live_state_without_updating_software_cache():
         assert device.status.get() == "old cached state"
 
 
+def test_fast_shutter_constructor_allows_slow_connection(monkeypatch):
+    fake = make_fake_device(SMIFastShutter)
+    original_get = fake.status_pv.cls.get
+    timeouts = []
+
+    def slow_get(signal, **kwargs):
+        if getattr(signal, "_name", "").endswith("status_pv"):
+            timeouts.append((kwargs.get("timeout"), kwargs.get("connection_timeout")))
+            if kwargs.get("connection_timeout", 0) < 1:
+                raise TimeoutError("simulated connection needs at least one second")
+        return original_get(signal, **kwargs)
+
+    monkeypatch.setattr(fake.status_pv.cls, "get", slow_get)
+    device = fake(name="fs")
+    assert device.status.get() == "Open"
+    assert timeouts == [(5.0, 5.0)]
+    with pytest.raises(TimeoutError):
+        device.read_state()
+    assert timeouts[-1] == (0.15, 0.15)
+    device = fake(name="custom_fs", status_timeout=10)
+    assert timeouts[-1] == (10, 10)
+
+
 def test_front_end_and_valve_polarity():
     fe = make_fake_device(FrontEndShutterReadback)("FAKE:", name="fe")
     fe.status.sim_put(1)

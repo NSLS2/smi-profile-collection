@@ -102,17 +102,29 @@ class TiledInserter:
 
 tiled_inserter = TiledInserter()
 
-nslsii.configure_base(
-    _user_ns,
-    broker_name="smi",
-    bec_derivative=True,
-    publish_documents_with_kafka=True,
-    magics=not IS_QS_WORKER,
-    mpl=not IS_QS_WORKER,
-    redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
-    redis_port=6380,
-    redis_ssl=True,
-)
+# Tiled 0.2 uses httpx for its in-process catalog client. Starlette still
+# supports it but emits this migration notice. Suppress only that notice,
+# locally; do not replace Tiled's HTTP stack or hide other startup warnings.
+import warnings as _warnings
+
+with _warnings.catch_warnings():
+    _warnings.filterwarnings(
+        "ignore",
+        message=r"^Using `httpx` with `starlette\.testclient` is deprecated; install `httpx2` instead\.$",
+        category=UserWarning,
+        module=r"^tiled\.client\.context$",
+    )
+    nslsii.configure_base(
+        _user_ns,
+        broker_name="smi",
+        bec_derivative=True,
+        publish_documents_with_kafka=True,
+        magics=not IS_QS_WORKER,
+        mpl=not IS_QS_WORKER,
+        redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
+        redis_port=6380,
+        redis_ssl=True,
+    )
 
 RE = _user_ns["RE"]
 bec = _user_ns["bec"]
@@ -326,6 +338,13 @@ try:
 except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers block startup
     print(f"\u2717 OAV snapshot helpers NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
+
+# --- Interactive smi-plans peak/edge analysis helper. ---
+if ipython is not None and not IS_QS_WORKER:
+    try:
+        from smi_plans import pf
+    except ImportError as _exc:
+        print(f"pf unavailable: {_exc}")
 
 # --- Standalone console magics (moves/scans/exposure/snapshots use this session's RE). ---
 if ipython is not None and not IS_QS_WORKER:
