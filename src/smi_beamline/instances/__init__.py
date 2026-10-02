@@ -120,8 +120,7 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
     total = time.monotonic() - t_start
     n_fail = len(modules) - n_ok
     if verbose:
-        mark = "\u2713" if n_fail == 0 else "\u2717"
-        msg = "{} {} device groups built in {:.1f}s".format(mark, n_ok, total)
+        msg = "{} device groups built in {:.1f}s".format(n_ok, total)
         if n_fail:
             failed = ", ".join(r["label"] for r in report if r["status"] == "FAIL")
             msg += "  ({} FAILED: {})".format(n_fail, failed)

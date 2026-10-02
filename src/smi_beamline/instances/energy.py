@@ -149,7 +149,7 @@ def dcm_diag():
 # Installed by default at startup (startup.py calls enable_managed_energy_moves()); call
 # disable_managed_energy_moves() at the console to turn it off for a session.
 # ---------------------------------------------------------------------------------------------
-def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
+def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, *, verbose=True, **kwargs):
     """Install the energy-move preprocessor on ``RE``: every plan energy move with
     ``|target-current| > threshold_eV`` is routed through the feedback-managed ``energy_walk`` in
     ``step_eV`` sub-steps (silent unless it errors, with one warning line per large move); smaller
@@ -159,6 +159,7 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
 
     Installed by default at startup; call this again to change ``threshold_eV``/``step_eV``.
     Idempotent (re-installing de-dups).  ``disable_managed_energy_moves()`` removes it.
+    Set ``verbose=False`` to suppress the installation confirmation at startup.
     """
     from smi_beamline.plans.energy_move_preprocessor import install_energy_move_preprocessor
     RE = _smiclasses_context.get_re()
@@ -167,7 +168,7 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     walk_kwargs.setdefault("diag", diag)
     return install_energy_move_preprocessor(
         RE, energy, threshold_eV=threshold_eV, step_eV=step_eV,
-        diag=diag, walk_kwargs=walk_kwargs, verbose=True, **kwargs)
+        diag=diag, walk_kwargs=walk_kwargs, verbose=verbose, **kwargs)
 
 
 def disable_managed_energy_moves():

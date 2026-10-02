@@ -448,7 +448,7 @@ def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
         If True (default), first remove any previously-installed RE-busy preprocessor so
         re-running in a live session does not stack duplicates.
     verbose : bool
-        Print whether a Redis client was found (and the key being published).
+        Print the key being published. A missing Redis client is always reported.
 
     Returns
     -------
@@ -474,15 +474,14 @@ def install_re_busy_signal(RE, *, status_store=None, ttl=DEFAULT_TTL,
 
     RE.preprocessors.append(_pp)
 
-    if verbose:
-        client = _resolve_client(status_store)
-        if client is None:
-            print("RE-busy signal: no Redis status store wired -- flag will NOT be published "
-                  "(plans still run normally).")
-        else:
-            skip_note = (f"; opt-out plans: {', '.join(sorted(skip_plans))}" if skip_plans else "")
-            print(f"RE-busy signal: publishing '{RE_BUSY_KEY}' "
-                  f"(ttl={ttl}s, heartbeat={interval}s) while plans run{skip_note}.")
+    client = _resolve_client(status_store)
+    if client is None:
+        print("RE-busy signal: no Redis status store wired -- flag will NOT be published "
+              "(plans still run normally).")
+    elif verbose:
+        skip_note = (f"; opt-out plans: {', '.join(sorted(skip_plans))}" if skip_plans else "")
+        print(f"RE-busy signal: publishing '{RE_BUSY_KEY}' "
+              f"(ttl={ttl}s, heartbeat={interval}s) while plans run{skip_note}.")
     return _pp
 
 

@@ -126,7 +126,6 @@ _seam.configure(run_engine=RE, config_dict=mdsave, sd=sd, bec=bec,
                 sample_store=samplestore, status_store=statusclient)
 
 if not IS_QS_WORKER:
-    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
     tiled_reading_client = from_profile("nsls2", username=None)["smi"]["raw"]
     tiled_reading_client.context.http_client.headers["tiled-qos"] = "acquisition"
     db = Broker(tiled_reading_client)
@@ -208,14 +207,11 @@ tw = BufferingWrapper(tw)
 RE.subscribe(tw)
 
 if not IS_QS_WORKER:
-    print("\nInitializing Tiled reading client...\nMake sure you check for duo push.")
     tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
 
 # --- User metadata cleanup helper (manual only; does not run automatically). ---
 try:
     from smi_beamline.plans.metadata_cleanup import RE_MD_WHITELIST, clean_re_md
-
-    print("✓ RE.md cleanup helper exposed (clean_re_md)")
 except Exception as _exc:  # noqa: BLE001 -- never let an optional console helper block startup
     print(f"✗ RE.md cleanup helper NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -241,10 +237,8 @@ globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith(
 try:
     from startup import wire_smi_plans as _wire_smi_plans
 
-    _smi_plans_ns = _wire_smi_plans(globals(), verbose=True)
+    _smi_plans_ns = _wire_smi_plans(globals())
     globals().update(_smi_plans_ns)
-    if _smi_plans_ns:
-        print(f"\u2713 smi-plans queue surface exposed ({len(_smi_plans_ns)} plans)")
 except Exception as _exc:  # noqa: BLE001 -- never let smi-plans wiring block the session
     print(f"\u2717 smi-plans queue surface NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -264,9 +258,7 @@ except Exception as _exc:  # noqa: BLE001 -- never let smi-plans wiring block th
 try:
     from smi_beamline.plans.scan_naming import install_default_scan_naming as _install_scan_naming
 
-    _install_scan_naming(_seam.get_re(), globals(), verbose=True)
-    print("\u2713 default scan-naming preprocessor installed "
-          "(sample_name += recorded-field template)")
+    _install_scan_naming(_seam.get_re(), globals())
 except Exception as _exc:  # noqa: BLE001 -- never let naming setup block the session
     print(f"\u2717 default scan-naming preprocessor NOT installed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -284,9 +276,7 @@ except Exception as _exc:  # noqa: BLE001 -- never let naming setup block the se
 try:
     from smi_beamline.plans.re_status import install_re_busy_signal as _install_re_busy
 
-    _install_re_busy(_seam.get_re(), verbose=True)
-    print("\u2713 RE-busy signal preprocessor installed "
-          "(Redis 'swaxsstatus:re_busy' held while plans run)")
+    _install_re_busy(_seam.get_re())
 except Exception as _exc:  # noqa: BLE001 -- never let the busy signal block the session
     print(f"\u2717 RE-busy signal preprocessor NOT installed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -303,7 +293,7 @@ except Exception as _exc:  # noqa: BLE001 -- never let the busy signal block the
 try:
     from smi_beamline.instances.energy import enable_managed_energy_moves as _enable_managed_energy_moves
 
-    _enable_managed_energy_moves()   # prints its own "energy-move preprocessor installed" line
+    _enable_managed_energy_moves(verbose=False)
 except Exception as _exc:  # noqa: BLE001 -- never let managed energy moves block the session
     print(f"\u2717 managed energy-move preprocessor NOT installed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -313,8 +303,6 @@ except Exception as _exc:  # noqa: BLE001 -- never let managed energy moves bloc
 # dated candidate table to mdsave only; it never overwrites the production IVU lookup-table config.
 try:
     from smi_beamline.plans.epu_calibration import calibrate_epu_lookup, EPUCalibrationLivePlot
-
-    print("\u2713 EPU calibration plan exposed (calibrate_epu_lookup)")
 except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning plan block startup
     print(f"\u2717 EPU calibration plan NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -322,8 +310,6 @@ except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning
 # --- Human-run attenuator effective-thickness calibration plan. ---
 try:
     from smi_beamline.plans.attenuator_calibration import attenuator_thickness_calibration
-
-    print("\u2713 Attenuator calibration plan exposed (attenuator_thickness_calibration)")
 except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning plan block startup
     print(f"\u2717 Attenuator calibration plan NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
@@ -331,8 +317,6 @@ except Exception as _exc:  # noqa: BLE001 -- never let an optional commissioning
 # --- Optional OAV before/after snapshot wrapper. ---
 try:
     from smi_beamline.plans.oav_snapshot import oav_snapshot, with_oav_snapshots
-
-    print("\u2713 OAV snapshot helpers exposed (oav_snapshot, with_oav_snapshots)")
 except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers block startup
     print(f"\u2717 OAV snapshot helpers NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
