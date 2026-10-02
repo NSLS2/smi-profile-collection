@@ -225,7 +225,13 @@ from smi_beamline.instances import make_devices as _make_devices
 
 _ctx = {"RE": _seam.get_re(), "sd": _seam.get_sd(),
         "bec": _seam.get_bec(), "db": _seam.get_db(), "mdsave": mdsave}
-_devices_ns = _make_devices(_ctx, verbose=True)
+_load_color = None
+if ipython is not None and not IS_QS_WORKER:
+    from functools import partial as _partial
+    from smi_beamline.motor_magics import _color as _console_color
+
+    _load_color = _partial(_console_color, ipython)
+_devices_ns = _make_devices(_ctx, verbose=True, color=_load_color)
 globals().update({_k: _v for _k, _v in _devices_ns.items() if not _k.startswith("_")})
 
 # --- smi-plans queue surface (technique presets + *_from_spec wrappers). ---
@@ -324,3 +330,11 @@ except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers b
 # --- Standalone console magics (moves/scans/exposure/snapshots use this session's RE). ---
 if ipython is not None and not IS_QS_WORKER:
     ipython.extension_manager.load_extension("smi_beamline.motor_magics")
+    from smi_beamline.beamline_status import show_status as _show_status
+
+    try:
+        # Call the read-only renderer directly: startup is not a user magic cell.
+        _show_status(ipython, _console_color)
+    except Exception as _exc:  # optional overview must not prevent a usable prompt
+        print(_console_color(ipython, f"Status unavailable: {_exc}", "93"))
+    print("Type " + _console_color(ipython, "help", "1;36") + " for quick commands.")

@@ -513,3 +513,32 @@ def test_syntax_colors_match_argument_order(console, capsys, monkeypatch):
     assert "\033[1;36mxscan\033[0m \033[94m-1\033[0m \033[92m1\033[0m \033[95m3\033[0m" in capsys.readouterr().out
     monkeypatch.setenv("NO_COLOR", "1")
     assert _syntax(console, "xscan -1000 1000 21") == "xscan -1000 1000 21"
+
+
+def test_status_magic_without_re(console, capsys):
+    del console.user_ns["RE"]
+    assert console.run_cell("status").success
+    output = capsys.readouterr().out
+    assert "SMI STATUS" in output and "Hutch A" in output and "SAXS position" in output
+
+
+@pytest.mark.parametrize("source", ["%status extra", "def action():\n    %status\naction()"])
+def test_status_guards(console, source):
+    result = console.run_cell(source)
+    assert isinstance(result.error_in_exec, UsageError)
+
+
+def test_status_help_does_not_read(console, capsys):
+    console.user_ns["energy"] = Mock()
+    assert console.run_cell("status ?").success
+    console.user_ns["energy"].assert_not_called()
+    assert "read-only" in capsys.readouterr().out
+
+
+def test_front_end_shutter_readback_definition():
+    from ophyd import EpicsSignalRO
+    from smi_beamline.devices.shutter import FrontEndShutterReadback
+
+    assert FrontEndShutterReadback.status.cls is EpicsSignalRO
+    assert FrontEndShutterReadback.status.suffix == "Sts:Cls-Sts"
+    assert FrontEndShutterReadback.component_names == ("status",)

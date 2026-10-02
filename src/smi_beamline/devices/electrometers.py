@@ -46,7 +46,11 @@ class new_LakeShore(Device):
     output3 = Cpt(output_lakeshore, "{Env:01-Out:3}")
     output4 = Cpt(output_lakeshore, "{Env:01-Out:4}")
 
+from .status import XBPM_STATUS
+
+
 class XBPM(Device):
+    status_description = XBPM_STATUS
     """
     XBPM are diamond windows that generate current when the beam come through. It is used to know the position
     of the beam at the bpm postion as well as the amount of incoming photons. 3 bpms are available at SMI: bpm1

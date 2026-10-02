@@ -12,9 +12,11 @@ import threading
 import time as _time
 
 logger = logging.getLogger("bluesky")
+from .status import ACCELERATOR_STATUS
 
 
 class Ring(Device):
+    status_description = ACCELERATOR_STATUS
     current = EpicsSignalRO("SR:C03-BI{DCCT:1}I:Real-I", name="ring_current")
     lifetime = EpicsSignalRO("SR:OPS-BI{DCCT:1}Lifetime-I", name="ring_lifetime")
     energy = EpicsSignalRO("SR{}Energy_SRBend", name="ring_energy")
@@ -169,4 +171,3 @@ class InsertionDevice(EpicsMotor):
                 status._finished(success=False)
             except Exception:
                 pass
-

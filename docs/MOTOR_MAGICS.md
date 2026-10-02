@@ -61,6 +61,76 @@ Colors respect IPython's `%colors nocolor` and the `NO_COLOR` environment variab
 These colors apply to the guide, readouts, and printed command echoes; the live
 input editor retains IPython's own syntax highlighting.
 
+## Beamline overview and startup
+
+Device-state APIs, field descriptions, and location metadata are documented in
+[Device state and beamline layout](DEVICE_STATUS.md).
+
+`status` (or `%status`) displays a read-only overview in **36 lines**, with a
+132-column box. `status ?` explains the command without reading hardware.
+The first row is **Accelerator / FE**: ring current in mA, IVU gap, and FE permit
+(`smi_shutter_enable`), independently of the shutter-position readbacks below.
+Interactive startup displays the same overview after devices and plans load,
+followed by **“Type help for quick commands.”** QueueServer workers skip it.
+The module-loading report uses cyan names, green successes, red failures, and
+blue timings; the normal no-color settings apply throughout.
+
+The display follows the requested upstream-to-downstream group order:
+
+- Accelerator / FE: ring current, IVU gap, FE permit
+- **Hutch A wall — FE shutter**: WBS, energy/DCM, HFM/VFM/VDM and bimorphs, then xBPM2
+- **Hutch B wall — photon shutter**: SSA, then xBPM3
+- **Hutch C wall — fast shutter**: ESlit, then the downstream rows below
+- Attenuation factor/transmission at current energy, plus inserted foil labels
+- Inserted CRL holder list (`abs(position) < 3 mm`); unknown holders listed separately
+- CSlit gaps and centers
+- Chamber pressures, isolation valves, turbo/power commands
+- Piezo and stage translation/rotation positions
+- WAXS then SAXS detector state, exposure, images, energy/threshold settings,
+  energy mismatch, detector positioning axes, and selected SAXS beamstop X/Y
+
+This is a curated operational overview of those groups, rather than a recursive
+dump of every ophyd signal (which would include command PVs and image arrays).
+Each xBPM row shows X/Y stage positions from `xbpm2_pos` / `xbpm3_pos` and the
+electrometer's `sumX` readback. Sum units come from signal metadata, or `raw` when
+unavailable; the X/Y values are motor positions rather than beam-centroid signals.
+`fe_shutter` is a read-only device using `XF:12ID-PPS{Sh:FE}Sts:Cls-Sts`
+(closed-status bit: 0 `OPEN`, 1 `NOT OPEN`). `ph_shutter` is the A-hutch photon
+shutter. Fast-shutter state comes directly from `fs.status_pv` (0 `OPEN`, 7 `NOT OPEN`),
+not its cached software status. Valve enum strings and per-device polarity are
+respected. Hutch boundaries are horizontal walls with a green `OPEN` or red
+`CLOSED` shutter opening; `CLOSED` is the compact display label for closed/not-open
+readbacks. Missing or unrecognized values remain amber (`N/A`, `UNKNOWN`, etc.),
+never converted to open/closed. Ordinary valve rows retain `NOT OPEN` verbatim.
+
+Values have aligned columns: **blue numbers in every column**, neutral units,
+green open/ON/idle/OK states, and amber closed/OFF/unknown states. Other text is
+yellow; errors and detector energy differences greater than 100 eV are red. Motor units come from the motor record
+where unspecified. Sample translations use um/mm and rotations deg. Pressure
+units come from signal metadata; absent metadata is labeled `raw`, and gauge
+strings such as `LO` are preserved. Turbo/power command values are explicitly
+labeled `cmd`, not presented as independent running/power confirmations.
+For numeric pressure readings, values **greater than 7e3** display red `Vented`,
+and values **less than 5e-3** display green `Pumped`. Intermediate values,
+including the exact boundaries, remain numeric with units. These thresholds
+apply directly to the gauge values; red `Vented` indicates state, not a read error.
+
+Attenuation comes from `attenuation.read_state()`, which evaluates the object's
+live foil states without changing its computed signals or `RE.md`. Foil labels
+use `bank_number` (e.g. `1_3,2_5`); an unknown foil state is reported rather than
+treated as out. This read-only method is separate from the existing `compute()` /
+`read()` methods, which refresh stored state. The SAXS beamstop row uses
+`pil2M.active_beamstop` (the reported selection) and the corresponding rod/pin
+motor readbacks; removed selections retain their `_removed` label. Selection
+`none` leaves X/Y unavailable rather than choosing a beamstop arbitrarily.
+
+Reads use **150 ms timeouts and a 3 s total read budget**, with cached duplicate
+reads within each invocation. Missing, offline, failed, and deferred fields stay
+inline as `N/A`, `OFFLINE`, `ERROR`, `TIMEOUT`, or `BUDGET`. Long fields are clipped
+with `…` to preserve alignment. This is a sequential snapshot, not a simultaneous
+measurement. No RE, `put`, `set`, `stage`, or `trigger` calls are made. Read-only
+status is available even with RE paused; normal standalone-command rules apply.
+
 ## Scans
 
 Every motor command has `scan` and `rscan` variants, using **pil2M** and its

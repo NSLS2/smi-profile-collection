@@ -6,6 +6,7 @@ import bluesky.plan_stubs as bps
 # polarity if needed.  (Previously this imported nslsii's directly while shutter.py had its own
 # divergent copy.)
 from .shutter import TwoButtonShutter
+from .status import CHAMBER_STATUS, finite_number, read_signal as _read_signal
 
 class Valve(TwoButtonShutter):
     def stop(self,*,success=False):
@@ -13,6 +14,27 @@ class Valve(TwoButtonShutter):
 
 # Read the pressure from the waxs chamber
 class Sample_Chamber(Device):
+    # Diagnostic classifications only; pump/vent plans retain their own setpoints.
+    pumped_below = 5e-3
+    status_description = CHAMBER_STATUS
+    vented_above = 7e3
+
+    def pressure_state(self, axis, *, read_signal=_read_signal):
+        """Return raw pressure, units, and a diagnostic state without writing."""
+        if axis not in ("waxs", "maxs"):
+            raise ValueError(f"Unknown chamber pressure axis: {axis}")
+        signal = getattr(self, axis)
+        raw = read_signal(signal)
+        units = signal.metadata.get("units") or "raw"
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return {"value": raw, "units": units, "state": "UNKNOWN"}
+        value = finite_number(value)
+        state = "Vented" if value > self.vented_above else (
+            "Pumped" if value < self.pumped_below else "INTERMEDIATE")
+        return {"value": value, "units": units, "state": state}
+
     waxs = Cpt(EpicsSignal, "XF:12IDC-VA:2{Det:300KW-TCG:7}P:Raw-I")  # Change PVs
     maxs = Cpt(EpicsSignal, "XF:12IDC-VA:2{B1:WAXS-TCG:9}P:Raw-I")  # Change PVs
 
@@ -104,4 +126,3 @@ class Sample_Chamber(Device):
 # pump cooling water valve      XF:12IDC-PU{PCHW-Vlv:Supply}Cmd:Opn-Cmd         - 1     timeout 10
 # turbo pump on                 XF:12IDC-VA:2{Det:300KW-TMP:1}OnOff             - 1     timeout 10
 # detector power enable         XF:12ID-EPS{PLC}DetOutlet-Cmd                   - 1     timeout 10
-

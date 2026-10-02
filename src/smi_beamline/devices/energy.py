@@ -86,6 +86,9 @@ class DCMInternals(Device):
     theta = Cpt(EpicsMotor, "XF:12ID:m65")
 
 
+from .status import ENERGY_STATUS
+
+
 class Energy(PseudoPositioner):
     """
     PseudoPositioner for controlling the monochromator energy.
@@ -105,6 +108,7 @@ class Energy(PseudoPositioner):
     """
     # Synthetic axis
     energy = Cpt(PseudoSingle, kind="normal", labels=["mono"])
+    status_description = ENERGY_STATUS
 
     # Real motors
     dcmgap = Cpt(EpicsMotor, "XF:12ID:m66", read_attrs=["user_readback"], kind="normal", labels=["mono"])

@@ -13,6 +13,7 @@ from ophyd import (
 import bluesky.plan_stubs as bps
 
 from . import _config
+from .status import BIMORPH_STATUS, finite_number, enum_value, read_signal as _read_signal
 
 
 #: number of bimorph channels
@@ -81,7 +82,17 @@ class _BimorphChannels:
 
     #: per-channel status string that means "settled / not moving"
     STATUS_IDLE = "On"
+    status_description = BIMORPH_STATUS
     STATUS_BUSY = "Busy"
+
+    def read_output_state(self, *, read_signal=_read_signal):
+        """Return live output range/state without applying or staging targets."""
+        values = [finite_number(read_signal(getattr(self, f"ch{i}"))) for i in range(N_BIMORPH_CH)]
+        states = [str(enum_value(getattr(self, f"ch{i}_status"), read_signal)).casefold()
+                  for i in range(N_BIMORPH_CH)]
+        state = "ON" if all(s == self.STATUS_IDLE.casefold() for s in states) else (
+            "BUSY" if self.STATUS_BUSY.casefold() in states else "CHECK")
+        return {"state": state, "first": values[0], "min": min(values), "max": max(values), "units": "V"}
 
     def read_outputs(self):
         """Return the 16 live OUTPUT voltages (GET-VOUT) as a list of floats. (Not a plan.)"""

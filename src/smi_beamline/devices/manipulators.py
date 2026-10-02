@@ -10,7 +10,11 @@ from ophyd import (
 )
 
 
+from .status import sample_status
+
+
 class SMARACT(Device):
+    status_description = sample_status("um")
    # x = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:0}Mtr", labels=["piezo"])
    # y = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:3}Mtr", labels=["piezo"])
    # z = Cpt(EpicsMotor, "XF:12IDC-ES:2{MCS:1-Ax:6}Mtr", labels=["piezo"])
@@ -266,6 +270,7 @@ class STG_pseudo(PseudoPositioner):
     """
 
     real_move_deadband = 0.001
+    status_description = sample_status("mm")
 
     # ------------------------------------------------------------------
     # PSEUDO AXES

@@ -61,7 +61,7 @@ def _public_names(module):
     return [n for n in vars(module) if not n.startswith("_")]
 
 
-def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=False):
+def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=False, color=None):
     """Build the beamline devices by importing the device modules in order, with timing.
 
     Parameters
@@ -77,6 +77,8 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
     halt_on_error : bool
         If True, re-raise the first module that fails to build (stops the load).  If False
         (default), report the failure and continue, so one broken device does not block the rest.
+    color : callable, optional
+        ``color(text, ansi_code)`` for interactive progress output. Default is plain text.
 
     Returns
     -------
@@ -87,9 +89,10 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
     modules = modules if modules is not None else DEVICE_MODULES
     namespace = {}
     report = []
+    paint = color if color is not None else lambda text, code: text
 
     if verbose:
-        print("\nBuilding SMI devices...")
+        print("\n" + paint("Building SMI devices...", "1;36"))
 
     t_start = time.monotonic()
     n_ok = 0
@@ -110,9 +113,13 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
                        "seconds": dt, "error": err})
         if verbose:
             dots = "." * max(1, 20 - len(label))
-            line = "  {} {} {:>4}   {:4.1f}s".format(label, dots, status, dt)
+            line = "  {} {} {}   {}".format(
+                paint(label, "36"), dots,
+                paint(f"{status:>4}", "92" if err is None else "1;91"),
+                paint(f"{dt:4.1f}s", "94"),
+            )
             if err is not None:
-                line += "   {}: {}".format(type(err).__name__, err)
+                line += "   " + paint("{}: {}".format(type(err).__name__, err), "91")
             print(line)
         if err is not None and halt_on_error:
             raise err
@@ -124,7 +131,10 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
         if n_fail:
             failed = ", ".join(r["label"] for r in report if r["status"] == "FAIL")
             msg += "  ({} FAILED: {})".format(n_fail, failed)
-        print(msg)
+        print(paint(msg, "93" if n_fail else "92"))
 
+    from .layout import configure_layout
+
+    configure_layout(namespace)
     namespace["_load_report"] = report
     return namespace

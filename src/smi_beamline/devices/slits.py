@@ -10,7 +10,11 @@ from ophyd import (
 
 
 # SLIT = 4-axis position/gap type device
+from .status import SLIT_STATUS
+
+
 class SLIT(Device):
+    status_description = SLIT_STATUS
     h = Cpt(EpicsMotor, "Hpos}Mtr")
     hg = Cpt(EpicsMotor, "Hgap}Mtr")
     v = Cpt(EpicsMotor, "Vpos}Mtr")

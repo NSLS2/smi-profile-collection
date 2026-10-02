@@ -6,6 +6,7 @@ from ophyd import (EpicsMotor,
                    PseudoPositioner)
 
 from .crl_optics import CRLModel, DEFAULT_HOLDERS
+from .status import CRL_STATUS, finite_number, read_signal as _read_signal
 
 
 class CRL(Device):
@@ -32,6 +33,20 @@ class CRL(Device):
     z = Cpt(EpicsMotor, "Z}Mtr")
     ph = Cpt(EpicsMotor, "Ph}Mtr")
     th = Cpt(EpicsMotor, "Th}Mtr")
+
+    inserted_tolerance_mm = 3.0
+    status_description = CRL_STATUS
+
+    def read_lens_state(self, *, read_signal=_read_signal):
+        """Classify each holder as IN/OUT/UNKNOWN from its actual readback."""
+        states = {}
+        for i in range(1, 13):
+            try:
+                value = finite_number(read_signal(getattr(self, f"lens{i}").user_readback))
+                states[i] = "IN" if abs(value) < self.inserted_tolerance_mm else "OUT"
+            except Exception:
+                states[i] = "UNKNOWN"
+        return states
 
     @property
     def lens_inventory(self):

@@ -1,11 +1,12 @@
 
-from smi_beamline.devices.shutter import TwoButtonShutter, SMIFastShutter
+from smi_beamline.devices.shutter import TwoButtonShutter, SMIFastShutter, FrontEndShutterReadback
 from ophyd import EpicsMotor
 from smi_beamline.instances.energy import energy
 import bluesky.plan_stubs as bps
 
 
 ph_shutter = TwoButtonShutter("XF:12IDA-PPS:2{PSh}", name="ph_shutter")
+fe_shutter = FrontEndShutterReadback("XF:12ID-PPS{Sh:FE}", name="fe_shutter")
 
 
 def shopen(feedback=True):

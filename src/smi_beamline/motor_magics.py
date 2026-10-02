@@ -14,6 +14,7 @@ from bluesky import plan_stubs as bps
 from bluesky import plans as bp
 from IPython.core.error import UsageError
 from IPython.core.magic import no_var_expand
+from smi_beamline.devices.status import compare_energy
 
 
 # Use the public axis aliases (stage.th/ph/ch are pseudo-positioner axes).
@@ -41,7 +42,7 @@ SNAPSHOTS = {
     "snapsw": ("pil2M", "pil900KW"),
 }
 SHUTTERS = {"so": "shopen", "sopen": "shopen", "sc": "shclose", "sclose": "shclose"}
-COMMANDS = (*MOTOR_MAGICS, *SCAN_MAGICS, "wh", "exp", "e", *SNAPSHOTS, *SHUTTERS, "stop", "help")
+COMMANDS = (*MOTOR_MAGICS, *SCAN_MAGICS, "wh", "status", "exp", "e", *SNAPSHOTS, *SHUTTERS, "stop", "help")
 ARGUMENT_COLORS = ("94", "92", "95")  # blue, green, magenta
 ENERGY_MATCH_TOLERANCE_EV = 100.0
 _SYNTAX_TOKEN = re.compile(
@@ -50,6 +51,13 @@ _SYNTAX_TOKEN = re.compile(
 
 
 def _help(command):
+    if command == "status":
+        return (
+            "%status: read-only upstream-to-downstream beamline overview (~36 lines).\n"
+            "Shutters, DCM, mirrors, attenuators, CRLs, slits, vacuum, sample, detectors.\n"
+            "No RE call or device writes. Missing/offline readings remain visible; "
+            "150 ms read timeout, 3 s read budget. Detector energy mismatch >100 eV."
+        )
     if command == "e":
         return (
             "%e: read beamline and detector energies in eV; highlight differences > 100 eV.\n"
@@ -287,10 +295,9 @@ def _energies(shell):
             camera_energy = float(_namespace(shell, name).cam.cam_energy.get(timeout=2)) * 1000
             if not math.isfinite(camera_energy):
                 raise ValueError("non-finite detector energy readback")
-            difference = camera_energy - value
-            mismatch = abs(difference) > ENERGY_MATCH_TOLERANCE_EV and not math.isclose(
-                abs(difference), ENERGY_MATCH_TOLERANCE_EV, rel_tol=0, abs_tol=1e-9
-            )
+            comparison = compare_energy(camera_energy, value, ENERGY_MATCH_TOLERANCE_EV)
+            difference = comparison["difference_eV"]
+            mismatch = not comparison["matches"]
             display_difference = 0.0 if round(difference, 2) == 0 else difference
             rows.append([
                 name, f"{camera_energy:.2f} eV", f"{display_difference:+.2f} eV",
@@ -327,6 +334,7 @@ def _guide(shell):
         ["sc / sclose", "RE(shclose()): disable feedback + close shutter"],
         ["stop", "RE.stop(): gracefully stop a paused run"],
         ["help / COMMAND ?", "This guide / detailed command help"],
+        ["status", "Upstream → downstream device overview (~36 lines)"],
     ], command_column=True, description_arguments={
         3: (0, 0),
         5: (0, 1, 2, 1),
@@ -425,6 +433,13 @@ def _command(shell, command, line):
             raise UsageError(usage)
         return _where(shell)
 
+    if command == "status":
+        if tokens:
+            raise UsageError(usage)
+        from smi_beamline.beamline_status import show_status
+
+        return show_status(shell, _color)
+
     if command == "e":
         if not tokens:
             return _energies(shell)
@@ -485,6 +500,9 @@ def load_ipython_extension(ipython):
     """Register the pilot commands without binding/deleting user variables."""
     if ipython.user_ns.get("IS_QS_WORKER", False):
         raise UsageError("Motor magics are for interactive sessions, not QueueServer workers.")
+    from smi_beamline.instances.layout import configure_layout
+
+    configure_layout(ipython.user_ns)
     commands = COMMANDS
     for command in commands:
         magic = partial(_command, ipython, command)
@@ -503,6 +521,3 @@ def load_ipython_extension(ipython):
     transform = partial(_bare_help, ipython)
     transform._smi_bare_help = True
     ipython.input_transformers_cleanup.append(transform)
-    shadowed = sorted(set(commands).intersection(ipython.user_ns))
-    if shadowed:
-        print("Use the % prefix for names shadowed by variables: " + ", ".join(shadowed))
