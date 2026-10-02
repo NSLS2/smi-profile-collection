@@ -66,6 +66,7 @@ class _BimorphChannels:
       * ``GET-VTRGT<n>``   : read-back of the staged target           (``ch<n>_trg_rb``)
       * ``GET-STATUS<n>``  : per-channel state: "On" / "Busy"         (``ch<n>_status``)
       * ``SET-ALLTRGT``    : the APPLY trigger                        (``apply``)
+      * ``SET-ALLSHIFT``   : immediate relative shift of ALL outputs (``move_voltages`` fast path)
       * ``SET-VOUT<n>``    : set the OUTPUT directly (unused here; slow, one channel at a time)
       * ``SET-ALLON`` / ``SET-ALLOFF`` : HV on/off ; ``GET-STATUS`` / ``GET-LASTERR`` : diagnostics
 
@@ -74,8 +75,8 @@ class _BimorphChannels:
       2. write ``SET-ALLTRGT = 1`` (``apply``) -> over a few seconds each ``GET-VTRGT<n>`` is
          ramped onto ``GET-VOUT<n>``, with ``GET-STATUS<n>`` going "On" -> "Busy" -> "On".
 
-    So staging is safe (never moves), and a move is only triggered by ``apply``.  Completion is
-    detected by every channel's ``GET-STATUS`` returning to "On" (not "Busy").
+    Staging never moves; ``apply`` or ``SET-ALLSHIFT`` actuates. The combined
+    ``move_voltages`` method verifies both actual outputs and On states.
 
     Helpers are plain reads + generator (plan) writers so they compose into RunEngine plans.
     """
@@ -109,6 +110,91 @@ class _BimorphChannels:
     def is_busy(self):
         """True if ANY channel reports busy (mid-ramp). (Not a plan.)"""
         return any(s == self.STATUS_BUSY for s in self.channel_states())
+
+    @staticmethod
+    def validate_voltages(voltages):
+        values = np.asarray(list(voltages), dtype=float)
+        if values.shape != (N_BIMORPH_CH,) or not np.all(np.isfinite(values)):
+            raise ValueError(f"expected {N_BIMORPH_CH} finite scalar voltages")
+        return values
+
+    def _read_move_state(self):
+        """PLAN: read actual outputs and channel states through RE messages."""
+        outputs, states = [], []
+        for i in range(N_BIMORPH_CH):
+            outputs.append(float((yield from bps.rd(getattr(self, f"ch{i}")))))
+            states.append(str((yield from bps.rd(getattr(self, f"ch{i}_status")))))
+        return np.asarray(outputs), states
+
+    def _verify_outputs(self, targets, *, tolerance, settle, timeout, poll, debug=False):
+        import time as _time
+
+        deadline = _time.monotonic() + timeout
+        stable_since = None
+        while True:
+            outputs, states = yield from self._read_move_state()
+            matches = np.all(np.isfinite(outputs)) and np.all(np.abs(outputs - targets) <= tolerance)
+            idle = all(s.casefold() == self.STATUS_IDLE.casefold() for s in states)
+            now = _time.monotonic()
+            if matches and idle:
+                if stable_since is None:
+                    stable_since = now
+                if now - stable_since >= settle:
+                    if debug:
+                        _bimorph_debug(self.name, "OUTPUTS verified: all 16 channels at requested voltages")
+                    return
+            else:
+                stable_since = None
+            if now >= deadline:
+                raise TimeoutError(
+                    f"{self.name}: outputs did not reach requested voltages within {timeout:g}s; "
+                    f"deltas={(outputs - targets).tolist()}, states={states}. No shift retry sent."
+                )
+            yield from bps.sleep(poll)
+
+    def move_voltages(self, voltages, *, use_shift=True, tolerance=0.5,
+                      settle=1.0, timeout=120.0, poll=0.5, debug=False):
+        """PLAN: move outputs, preferring one SET-ALLSHIFT for a uniform offset.
+
+        All channels must initially be On. A uniform shift must predict every
+        requested output within ``tolerance`` V (absolute; default 0.5 V).
+        Nonuniform changes use the established sequential stage/apply path.
+        Both paths verify all actual GET-VOUT values AND On states for ``settle``.
+
+        A relative command is sent exactly once, never retried or replayed from
+        an RE checkpoint. Failure/interrupt propagates without fallback motion.
+        Staging-only APIs retain their no-motion contract.
+        """
+        targets = self.validate_voltages(voltages)
+        for name, value in (("tolerance", tolerance), ("settle", settle), ("timeout", timeout), ("poll", poll)):
+            if not np.isfinite(value) or value < 0 or (name in ("timeout", "poll") and value == 0):
+                raise ValueError(f"invalid {name}: {value}")
+        current, states = yield from self._read_move_state()
+        if not np.all(np.isfinite(current)) or not all(s.casefold() == self.STATUS_IDLE.casefold() for s in states):
+            raise RuntimeError(f"{self.name}: require finite outputs and all channels On before moving; states={states}")
+        deltas = targets - current
+        # Midrange minimizes the worst-channel error, using only absolute volts.
+        shift = float(np.min(deltas) / 2 + np.max(deltas) / 2)
+        uniform = np.isfinite(shift) and np.all(np.abs(deltas - shift) <= tolerance)
+        if np.all(np.abs(deltas) <= tolerance):
+            if debug:
+                _bimorph_debug(self.name, "OUTPUTS already at target; verifying without a write")
+        elif use_shift and uniform:
+            if debug:
+                _bimorph_debug(self.name, f"SHIFT WRITE pv={self.shift_rel.pvname} delta={shift:+.3f}V")
+            # This action PV is relative, so EpicsSignal.set's equality handling
+            # and RE checkpoint replay are inappropriate. Match apply's direct
+            # non-put-completion write, then verify actual hardware readbacks.
+            yield from bps.clear_checkpoint()
+            with contextlib.nullcontext() if debug else _quiet_ca_messages():
+                self.shift_rel.put(shift, wait=False, timeout=5)
+        else:
+            if debug:
+                _bimorph_debug(self.name, "Nonuniform/disabled shift: using sequential targets + APPLY")
+            yield from self.set_targets(targets, debug=debug)
+            yield from self.apply_and_wait(settle=settle, timeout=timeout, poll=poll, debug=debug)
+        yield from self._verify_outputs(targets, tolerance=tolerance, settle=settle,
+                                       timeout=timeout, poll=poll, debug=debug)
 
     def set_targets(self, voltages, *, debug=False):
         """PLAN: stage the 16 per-channel targets (SET-VTRGT).  Does NOT move the mirror.
@@ -291,7 +377,7 @@ class HFM_voltage(_BimorphChannels, Device):
                                                   string=True)
     del _i
 
-    shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT")
+    shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT", put_complete=False)
     # SET-ALLTRGT is the APPLY trigger: writing 1 ramps the staged SET-VTRGT targets onto the
     # outputs (GET-STATUS goes On->Busy->On).  put_complete False: the controller's put-callback
     # always fails though the put lands.
@@ -320,9 +406,8 @@ class HFM_voltage(_BimorphChannels, Device):
         yield from bps.mv(self.shift_rel, relative_value)
 
     def move_abs(self, mode="SWAXS"):
-        yield from self.set_target(mode=mode)
-        yield from bps.sleep(5)
-        yield from self.move_target()
+        defaults = np.asarray(self.default_hfm_v.get())
+        yield from self.move_voltages(defaults + self.lowdiv_offset_v.get())
 
 
 
@@ -337,7 +422,7 @@ class VFM_voltage(_BimorphChannels, Device):
                                                   string=True)
     del _i
 
-    shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT")
+    shift_rel = Cpt(EpicsSignal, "SET-ALLSHIFT", put_complete=False)
     apply_sig = Cpt(EpicsSignal, "SET-ALLTRGT", put_complete=False)  # APPLY trigger (write 1)
     set_tar = apply_sig  # backwards-compat alias
 
@@ -369,6 +454,7 @@ class VFM_voltage(_BimorphChannels, Device):
         yield from bps.mv(self.shift_rel, relative_value)
 
     def move_abs(self, mode="SWAXS"):
-        yield from self.set_target(mode=mode)
-        yield from bps.sleep(5)
-        yield from self.move_target()
+        if mode not in ("SWAXS", "OPLS"):
+            raise ValueError("mode must be SWAXS or OPLS")
+        table = self.default_vfm_v if mode == "SWAXS" else self.default_vfm_opls_v
+        yield from self.move_voltages(table.get())

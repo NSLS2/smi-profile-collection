@@ -525,8 +525,7 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
                 ch = int(str(row["name"]).rsplit("ch", 1)[1])
                 targets[ch] = float(row["target"])
             debug_options = {"debug": True} if bimorph_debug else {}
-            yield from dev.set_targets(targets, **debug_options)
-            yield from dev.apply_and_wait(**debug_options)
+            yield from dev.move_voltages(targets, **debug_options)
             for row in dev_rows:
                 row["status"] = "moved"
         print("restore complete: photon shutter remains closed; DCM feedback remains off", flush=True)

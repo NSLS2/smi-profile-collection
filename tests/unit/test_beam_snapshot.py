@@ -77,6 +77,10 @@ def _voltage(prefix):
     dev.read_outputs = read_outputs
     dev.set_targets = set_targets
     dev.apply_and_wait = apply_and_wait
+    def move_voltages(voltages, **kwargs):
+        yield from dev.set_targets(voltages, **kwargs)
+        yield from dev.apply_and_wait(**kwargs)
+    dev.move_voltages = move_voltages
     return dev
 
 

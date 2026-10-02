@@ -27,6 +27,7 @@ future starts. The environment-variable setting above lasts only for the launche
 - [Beam position snapshots](docs/BEAM_POSITION_SNAPSHOTS.md)
 - [Sorensen power supply](docs/SORENSEN_POWER_SUPPLY.md)
 - [Pilot Bluesky console magics](docs/MOTOR_MAGICS.md)
+- [Bimorph voltage moves](docs/BIMORPH_MOVES.md)
 
 ## Plan writing
 
