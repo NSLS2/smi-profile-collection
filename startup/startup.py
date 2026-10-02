@@ -320,3 +320,7 @@ try:
 except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers block startup
     print(f"\u2717 OAV snapshot helpers NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
+
+# --- Standalone console magics (moves/scans/exposure/snapshots use this session's RE). ---
+if ipython is not None and not IS_QS_WORKER:
+    ipython.extension_manager.load_extension("smi_beamline.motor_magics")
