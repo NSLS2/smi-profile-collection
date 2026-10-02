@@ -17,7 +17,7 @@ class Sample_Chamber(Device):
     # Diagnostic classifications only; pump/vent plans retain their own setpoints.
     pumped_below = 5e-3
     status_description = CHAMBER_STATUS
-    vented_above = 7e3
+    vented_above = 7e2
 
     def pressure_state(self, axis, *, read_signal=_read_signal):
         """Return raw pressure, units, and a diagnostic state without writing."""
