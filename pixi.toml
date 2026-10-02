@@ -1,11 +1,8 @@
 [workspace]
 channels = ["conda-forge"]
 name = "smi-profile-collection"
-platforms = ["linux-64"]
+platforms = [{ platform = "linux-64", glibc = "2.17" }]
 version = "2026.2.0"
-
-[system-requirements]
-libc = "2.17"
 
 [activation.env]
 REDIS_HOST="xf12id2-smi-redis1.nsls2.bnl.gov"
@@ -25,6 +22,9 @@ tiled-client = ">=0.2.17"
 hdf5-external-filter-plugins = ">=0.1.0,<0.2"
 blosc-hdf5-plugin = ">=1.0.1,<2"
 databroker = "==2.0.0"
+# Broker.named("smi") opens a local Tiled catalog using SQLAlchemy asyncio.
+# SQLAlchemy 2.1 no longer brings greenlet in as a default dependency.
+greenlet = ">=3,<4"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
 bluesky-tiled-plugins = ">=2.0.2"
 ophyd-async = ">=0.13.7,<0.14"
