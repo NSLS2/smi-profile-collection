@@ -7,6 +7,10 @@ class PowerSupply(Device):
     # EpicsSignal supplies metadata internally; passing metadata= here raises a
     # duplicate-keyword TypeError. Writable PV units come from the IOC's EGU.
     max_current = Cpt(EpicsSignal, "I-Lim", kind="omitted")
+
+    @property
+    def current_limit(self):
+        return self.max_current
     out_main_readback = Cpt(
         EpicsSignalRO,
         "E:OutMain-RB",
