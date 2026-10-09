@@ -93,11 +93,10 @@ RE(restore_beam_position_snapshot(
 - Older snapshots do not contain photon energy or BPM3 gain. They remain readable, but these
   missing settings cannot be restored; save a new snapshot to capture them.
 - `names`, `groups`, `exclude`, and `tolerance` still limit which moves enter each batch.
-- Bimorph voltages are restored through `read_outputs()`, `set_targets(...)`, and
-  `apply_and_wait()` after the motor batches. These are the same device helpers used by
-  `load_bimorph(...)`: stage and verify targets sequentially within each mirror, then trigger
-  apply and wait for settling. The controller requires sequential target staging; live testing
-  found that batched channel writes could leave targets stale.
+- Bimorph voltages are restored after the motor batches with `move_voltages()`. Its uniform-offset
+  fast path writes `SET-ALLSHIFT`; otherwise, it stages targets sequentially through `SET-VTRGT<n>`
+  and triggers `SET-ALLTRGT`. The selected path depends on the requested and current outputs, so a
+  restore may write either action PV. Both paths verify the output readbacks.
 - For partial bimorph restores, unselected channels are staged from current outputs before apply;
   this avoids applying stale target values to unselected channels.
 - Restore leaves the photon shutter closed and feedback disabled. It does not automatically
