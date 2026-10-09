@@ -23,7 +23,8 @@ hfm_voltage = HFM_voltage("HFM:", name="hfm_voltage")
 #   1. write SET-VTRGT<n> to stage each per-channel target -- does NOT move the mirror;
 #   2. write SET-ALLTRGT = 1 (the apply trigger) -- ramps the staged targets onto the outputs,
 #      with each GET-STATUS<n> going On -> Busy -> On.
-# load_bimorph stages then applies and waits for all channels to leave Busy.
+# load_bimorph prefers SET-ALLSHIFT for a uniform output offset; otherwise it
+# stages/applies. Both paths confirm actual output voltages and On states.
 # ---------------------------------------------------------------------------
 _BIMORPH_MIRRORS = {"hfm": hfm_voltage, "vfm": vfm_voltage}
 
@@ -67,7 +68,7 @@ def delete_bimorph_state(name):
     print("deleted bimorph state {!r}".format(name))
 
 
-def stage_bimorph(name):
+def stage_bimorph(name, *, debug=False):
     """PLAN: stage the saved state ``name`` onto both mirrors' SET-VTRGT targets (NO motion).
 
     Writes the targets only; does not apply, so the mirror does not move.  Follow with
@@ -80,24 +81,31 @@ def stage_bimorph(name):
     snap = states[name]
     for key, dev in _BIMORPH_MIRRORS.items():
         if key in snap:
-            yield from dev.set_targets(snap[key])
+            yield from dev.set_targets(snap[key], debug=debug)
     print("staged bimorph state {!r} onto SET-VTRGT (not yet applied)".format(name))
 
 
-def apply_bimorph(settle=1.0, timeout=120.0):
+def apply_bimorph(settle=1.0, timeout=120.0, *, debug=False):
     """PLAN: apply the currently-staged targets on BOTH mirrors and wait until they settle."""
     for dev in _BIMORPH_MIRRORS.values():
-        yield from dev.apply_and_wait(settle=settle, timeout=timeout)
+        yield from dev.apply_and_wait(settle=settle, timeout=timeout, debug=debug)
 
 
-def load_bimorph(name, settle=1.0, timeout=120.0):
-    """PLAN: stage the saved state ``name`` and apply it (ramp both mirrors), waiting to settle.
+def load_bimorph(name, settle=1.0, timeout=120.0, *, debug=False, use_shift=True):
+    """PLAN: load saved outputs, using one uniform shift per mirror when possible.
 
-    ``RE(load_bimorph('tender'))``.  Stages SET-VTRGT (safe, no motion), then triggers the apply
-    and polls GET-STATUS until every channel leaves 'Busy'.
+    Both paths confirm actual output voltages. ``use_shift=False`` forces the
+    sequential stage/apply path. ``stage_bimorph`` remains staging-only.
     """
-    yield from stage_bimorph(name)
-    yield from apply_bimorph(settle=settle, timeout=timeout)
+    states = _config.load("bimorph_states")
+    if name not in states:
+        raise KeyError(f"no saved bimorph state {name!r}; have {sorted(states)}")
+    snapshot = states[name]
+    moves = [(dev, dev.validate_voltages(snapshot[key]))
+             for key, dev in _BIMORPH_MIRRORS.items() if key in snapshot]
+    for dev, targets in moves:
+        yield from dev.move_voltages(targets, settle=settle, timeout=timeout,
+                                     debug=debug, use_shift=use_shift)
     print("loaded bimorph state {!r}".format(name))
 
 

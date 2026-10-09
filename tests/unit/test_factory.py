@@ -67,3 +67,18 @@ def test_default_device_modules_excludes_bootstrap():
     assert "smi_beamline.instances.energy" in names
     assert "smi_beamline.instances.suspenders" in names
     assert not any(name.startswith("smibase.") for name in names)
+
+
+def test_colored_report_preserves_status_and_alignment(capsys):
+    import re
+
+    modules = [("good", "math"), ("broken", "this_module_does_not_exist_xyz")]
+    ns = instances.make_devices(modules=modules, color=lambda text, code: f"\033[{code}m{text}\033[0m")
+    output = capsys.readouterr().out
+    assert "\033[36mgood" in output
+    assert "\033[92m  ok" in output
+    assert "\033[1;91mFAIL" in output
+    assert ns["_load_report"][1]["status"] == "FAIL"
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    lines = [line for line in plain.splitlines() if line.startswith("  ")]
+    assert lines[0].index("ok") + 2 == lines[1].index("FAIL") + 4

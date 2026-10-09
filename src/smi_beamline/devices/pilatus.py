@@ -34,6 +34,7 @@ from warnings import warn
 from .beamstop import SAXSBeamStops
 from . import _context
 from . import _config
+from .status import WAXS_STATUS, SAXS_STATUS, compare_energy, finite_number, read_signal as _read_signal
 
 # Persistent-config dict (Redis ``mdsave`` on the live beamline; ``{}`` fallback under bare
 # import / tests so the class-body ``Cpt(Signal, value=mdsave.get(...))`` seeding still works
@@ -154,6 +155,13 @@ class TIFFPluginWithFileStore(TIFFPlugin, FileStoreTIFFIterativeWrite):
 
 
 class Pilatus(SingleTriggerV33, PilatusDetector):
+    energy_match_tolerance_eV = 100.0
+
+    def energy_difference(self, beamline_energy_eV, *, read_signal=_read_signal):
+        """Return detector energy offset and agreement in eV, without changes."""
+        detector_energy = finite_number(read_signal(self.cam.cam_energy)) * 1000
+        return compare_energy(detector_energy, beamline_energy_eV, self.energy_match_tolerance_eV)
+
     tiff = Cpt(
         TIFFPluginWithFileStore,
         suffix="TIFF1:",
@@ -419,6 +427,7 @@ class WAXS_Motors(Device):
 
 
 class WAXS_Detector(Pilatus):
+    status_description = WAXS_STATUS
 ## real positions of the SAXS detector and the beamstop
     ## WAXS det position and beamstop (mounted on the same stage)
     motors = Cpt(WAXS_Motors,"",add_prefix= "", kind="normal")
@@ -448,6 +457,15 @@ class DetMotor(Device):
 
 
 class SAXS_Detector(Pilatus):
+    status_description = SAXS_STATUS
+
+    def selected_beamstop_motors(self, *, read_signal=_read_signal):
+        """Return the reported rod/pin selection's motors, or None if unselected."""
+        selection = str(read_signal(self.active_beamstop)).removesuffix("_removed")
+        if selection not in ("rod", "pin"):
+            return None
+        return (getattr(self.beamstop, "x_" + selection), getattr(self.beamstop, "y_" + selection))
+
 ## real positions of the SAXS detector and the beamstop
     ## SAXS det position
     motor = Cpt(DetMotor,"XF:12IDC-ES:2{Det:1M-Ax:",add_prefix= "", kind="normal")

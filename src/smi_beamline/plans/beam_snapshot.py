@@ -1,7 +1,7 @@
-"""Beam-positioning snapshot helpers for commissioning.
+"""Beam-positioning snapshots, comparisons, and batched restore plans.
 
-This module intentionally starts with save + dry-run compare.  Restore should
-remain conservative until the saved scope and ordering are validated live.
+NEEDS TESTING: energy/gain capture and shutter/feedback-controlled restoration,
+including DCM pitch/roll restoration. Bimorph diagnostics still need live testing.
 """
 
 from datetime import datetime, timezone
@@ -13,7 +13,24 @@ from smi_beamline.devices.bimorph import N_BIMORPH_CH
 
 SNAPSHOT_KEY_PREFIX = "beam_position_snapshots"
 SNAPSHOT_INDEX_KEY = "beam_position_snapshots:index"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Keep coupled coordinates in separate batches; independent devices move together.
+_XBPM_POSITION_NAMES = tuple(
+    "{}.{}".format(dev, axis)
+    for dev in ("xbpm2_pos", "xbpm3_pos") for axis in ("x", "y")
+)
+_MOTOR_RESTORE_BATCHES = (
+    ("DCM pitch/roll", ("dcm_config.pitch", "dcm_config.roll")),
+    ("slit centers", tuple("{}.{}".format(dev, axis)
+                           for dev in ("wbs", "ssa", "eslit", "cslit") for axis in ("h", "v"))),
+    ("slit gaps", tuple("{}.{}".format(dev, axis)
+                        for dev in ("wbs", "ssa", "eslit", "cslit") for axis in ("hg", "vg"))),
+    ("mirror translations", tuple("{}.{}".format(dev, axis)
+                                  for dev in ("hfm", "vfm", "vdm") for axis in ("x", "y"))),
+    ("mirror pitch", tuple("{}.th".format(dev) for dev in ("hfm", "vfm", "vdm"))),
+    ("XBPM positions", _XBPM_POSITION_NAMES),
+)
 
 
 __all__ = [
@@ -126,12 +143,12 @@ def _registry_from_namespace(ns):
     entries.extend([
         ("energy.bragg", "dcm", ns["energy"].bragg, False),
         ("energy.dcmgap", "dcm", ns["energy"].dcmgap, False),
-        ("dcm_config.pitch", "dcm", ns["dcm_config"].pitch, False),
-        ("dcm_config.roll", "dcm", ns["dcm_config"].roll, False),
-        ("xbpm2_pos.x", "diagnostics", ns["xbpm2_pos"].x, False),
-        ("xbpm2_pos.y", "diagnostics", ns["xbpm2_pos"].y, False),
-        ("xbpm3_pos.x", "diagnostics", ns["xbpm3_pos"].x, False),
-        ("xbpm3_pos.y", "diagnostics", ns["xbpm3_pos"].y, False),
+        ("dcm_config.pitch", "dcm", ns["dcm_config"].pitch, True),
+        ("dcm_config.roll", "dcm", ns["dcm_config"].roll, True),
+        ("xbpm2_pos.x", "diagnostics", ns["xbpm2_pos"].x, True),
+        ("xbpm2_pos.y", "diagnostics", ns["xbpm2_pos"].y, True),
+        ("xbpm3_pos.x", "diagnostics", ns["xbpm3_pos"].x, True),
+        ("xbpm3_pos.y", "diagnostics", ns["xbpm3_pos"].y, True),
         ("energy.ivugap", "undulator", ns["energy"].ivugap, False),
     ])
 
@@ -151,6 +168,13 @@ def _bimorph_registry(ns):
     return {"hfm_voltage": ns["hfm_voltage"], "vfm_voltage": ns["vfm_voltage"]}
 
 
+def _signal_registry(ns):
+    return (
+        ("energy.energy", "energy", "energy", ns["energy"].energy.readback, "eV"),
+        ("xbpm3.range", "diagnostics", "signal", ns["xbpm3"].range, "range index"),
+    )
+
+
 def beam_snapshot_devices(namespace=None):
     """Return the explicit commissioning registry used by snapshots."""
     ns = namespace if namespace is not None else globals()
@@ -162,6 +186,11 @@ def beam_snapshot_devices(namespace=None):
             "kind": "motor",
             "device": getattr(motor, "name", name),
             "restore": restore,
+        })
+    for name, group, kind, signal, units in _signal_registry(ns):
+        registry.append({
+            "name": name, "group": group, "kind": kind,
+            "device": signal.name, "restore": True,
         })
     for dev_name in ("hfm_voltage", "vfm_voltage"):
         for i in range(N_BIMORPH_CH):
@@ -180,6 +209,13 @@ def _collect_snapshot_items(ns):
     items = []
     for name, group, motor, restore in _registry_from_namespace(ns):
         items.append(_motor_item(name, group, motor, restore=restore))
+    for name, group, kind, signal, units in _signal_registry(ns):
+        items.append({
+            "name": name, "group": group, "kind": kind,
+            "device": signal.name, "pv": getattr(signal, "pvname", None),
+            "restore": True, "readback": _signal_value(signal),
+            "units": units, "timestamp": _now(),
+        })
     items.extend(_bimorph_voltage_items("hfm_voltage", "mirror_voltages", ns["hfm_voltage"]))
     items.extend(_bimorph_voltage_items("vfm_voltage", "mirror_voltages", ns["vfm_voltage"]))
     return items
@@ -236,6 +272,14 @@ def _current_by_name(ns):
     return {item["name"]: item for item in _collect_snapshot_items(ns)}
 
 
+def _restorable(item):
+    # Apply the current restore policy to positioning axes in older snapshots too.
+    return item.get("restore") or (
+        item.get("kind") == "motor"
+        and item.get("name") in _XBPM_POSITION_NAMES + ("dcm_config.pitch", "dcm_config.roll")
+    )
+
+
 def _diff_status(current, saved):
     cur = _num(current.get("readback")) if current else None
     old = _num(saved.get("readback")) if saved else None
@@ -250,7 +294,7 @@ def _diff_status(current, saved):
     delta = cur - old
     if math.isclose(delta, 0.0, abs_tol=1e-9):
         return "unchanged", delta
-    if not saved.get("restore"):
+    if not _restorable(saved):
         return "read-only diff", delta
     return "would move", delta
 
@@ -281,17 +325,20 @@ def _restore_rows(saved, current, *, names=None, groups=None, exclude=None, tole
             "units": item.get("units"),
             "status": "pending",
         }
-        if not item.get("restore"):
+        if not _restorable(item):
             row["status"] = "skipped read-only"
-        elif item.get("kind") not in ("motor", "bimorph_voltage"):
-            row["status"] = "skipped non-motor"
+        elif item.get("kind") not in ("motor", "bimorph_voltage", "energy", "signal"):
+            row["status"] = "skipped unsupported kind"
         elif _num(item.get("readback")) is None:
             row["status"] = "skipped non-numeric target"
         else:
             cur = _num(row["current"])
             target = _num(row["target"])
             row["delta"] = None if cur is None else target - cur
-            if cur is not None and math.isclose(cur, target, abs_tol=float(tolerance)):
+            # Gain is a discrete enum: positional tolerance must never suppress a range change.
+            matches = (cur == target if item.get("name") == "xbpm3.range" else
+                       cur is not None and math.isclose(cur, target, abs_tol=float(tolerance)))
+            if matches:
                 row["status"] = "already there"
             else:
                 row["status"] = "would move"
@@ -367,11 +414,20 @@ def compare_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
 
 def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=None,
                                    names=None, groups=None, exclude=None, dry_run=True,
-                                   tolerance=0.0, print_table=True):
-    """Restore restorable motors from a beam-position snapshot.
+                                   tolerance=0.0, print_table=True, bimorph_debug=False):
+    """Restore motor positions and bimorph voltages from a beam-position snapshot.
 
-    This is intentionally conservative: diagnostic/DCM axes saved as ``restore=False`` are never
-    moved.  Bimorph voltages are restored by staging all 16 channel targets on a mirror, then
+    NEEDS TESTING: the shutter/feedback sequence and expanded restore scope.
+    Before any changes, disable pitch/roll feedback and confirm the photon shutter closed.
+    Leave feedback off and the shutter closed afterwards, including on failure.
+    Restore energy through its calculated real-axis targets with feedback off, then BPM3 gain.
+    Motors move concurrently within ordered batches: DCM pitch/roll, slit centers, slit gaps, mirror
+    translations, mirror pitch, then XBPM positions.  Each batch finishes before the next starts.
+    XBPM positioning motors are restored even from older snapshots marked ``restore=False``;
+    DCM pitch/roll are also restored from older snapshots. Raw Bragg/DCM/IVU gap entries remain
+    comparison-only; energy restoration calculates these targets using the current energy
+    configuration (including enabled axes and harmonic). Bimorph voltages are then restored by
+    staging all 16 channel targets on a mirror, then
     applying that mirror once; unselected channels are staged from current outputs to avoid
     applying stale targets.  The default ``dry_run=True`` prints the planned actions without
     yielding any move messages; pass ``dry_run=False`` to emit the restore plan.
@@ -386,6 +442,9 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
         If True, only report.  If False, move selected restorable motors to saved readbacks.
     tolerance : float
         Skip moves whose current readback is already within this absolute tolerance.
+    bimorph_debug : bool
+        Print timestamped bimorph staging/write/readback/apply diagnostics to stderr.
+        Also leave CA messages unsuppressed during bimorph writes.
     """
     ns = namespace if namespace is not None else globals()
     saved = _load_snapshot(snapshot_or_name, ns, store)
@@ -403,18 +462,58 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
 
     def _plan():
         import bluesky.plan_stubs as bps
+        from bluesky.utils import short_uid
 
         motors = _motor_registry(ns)
         bimorphs = _bimorph_registry(ns)
+        if not any(row["status"] == "would move" for row in rows):
+            return rows
+        energy = ns["energy"]
+        shutter = ns["ph_shutter"]
+        print("restore: disabling DCM feedback, then closing photon shutter", flush=True)
+        yield from bps.mv(energy.pitch_feedback_disabled, "1",
+                          energy.roll_feedback_disabled, "1")
+        yield from bps.sleep(3)  # Match the established shclose feedback-off dwell.
+        shutter_group = short_uid("snapshot-shutter")
+        yield from bps.abs_set(shutter, "Close", group=shutter_group)
+        yield from bps.wait(group=shutter_group, timeout=30)
+
         for row in rows:
-            if row["status"] != "would move" or str(row["name"]).split(".", 1)[0] in bimorphs:
+            if row["name"] != "energy.energy" or row["status"] != "would move":
                 continue
-            motor = motors.get(row["name"])
-            if motor is None:
-                print("skipping missing motor {!r}".format(row["name"]))
-                continue
-            yield from bps.mv(motor, float(row["target"]))
+            # Energy.move() re-enables feedback; the managed-energy preprocessor needs beam.
+            # Use the same forward calculation, but issue real-axis messages while shuttered.
+            # IVU motion still uses InsertionDevice's brake confirmation and retry logic.
+            real = energy.forward(energy.PseudoPosition(energy=float(row["target"])))
+            selected_harmonic, _ = energy._harmonic_and_gap(float(row["target"]))
+            args = [energy.bragg, real.bragg]
+            if energy.enabledcmgap.get():
+                args.extend((energy.dcmgap, real.dcmgap))
+            if energy.enableivu.get():
+                args.extend((energy.ivugap, real.ivugap))
+            print("restore: energy -> {} eV (feedback off)".format(row["target"]), flush=True)
+            yield from bps.mv(*args)
+            if energy.enableivu.get():
+                yield from bps.mv(energy.harmonic, selected_harmonic)
             row["status"] = "moved"
+
+        for row in rows:
+            if row["name"] == "xbpm3.range" and row["status"] == "would move":
+                yield from bps.mv(ns["xbpm3"].range, int(row["target"]))
+                row["status"] = "moved"
+        for batch_name, batch_names in _MOTOR_RESTORE_BATCHES:
+            batch_rows = [row for row in rows
+                          if row["status"] == "would move" and row["name"] in batch_names]
+            if not batch_rows:
+                continue
+            args = []
+            for row in batch_rows:
+                args.extend((motors[row["name"]], float(row["target"])))
+            if print_table:
+                print("restoring {}: {} motors".format(batch_name, len(batch_rows)))
+            yield from bps.mv(*args)
+            for row in batch_rows:
+                row["status"] = "moved"
         for dev_name, dev in bimorphs.items():
             dev_rows = [row for row in rows
                         if row["status"] == "would move"
@@ -425,10 +524,11 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
             for row in dev_rows:
                 ch = int(str(row["name"]).rsplit("ch", 1)[1])
                 targets[ch] = float(row["target"])
-            yield from dev.set_targets(targets)
-            yield from dev.apply_and_wait()
+            debug_options = {"debug": True} if bimorph_debug else {}
+            yield from dev.move_voltages(targets, **debug_options)
             for row in dev_rows:
                 row["status"] = "moved"
+        print("restore complete: photon shutter remains closed; DCM feedback remains off", flush=True)
         return rows
 
     return _plan()
@@ -453,6 +553,8 @@ try:
     from smi_beamline.instances.energy import energy, dcm_config  # noqa: F401
     from smi_beamline.instances.xbpms import xbpm2_pos, xbpm3_pos  # noqa: F401
     from smi_beamline.instances.mirrors import hfm, vfm, vdm, hfm_voltage, vfm_voltage  # noqa: F401
+    from smi_beamline.instances.electrometers import xbpm3  # noqa: F401
+    from smi_beamline.instances.shutter import ph_shutter  # noqa: F401
 except Exception:
     # Keep import-clean for tests/offline use; callers can pass namespace/store explicitly.
     pass

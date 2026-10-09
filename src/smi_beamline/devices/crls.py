@@ -5,7 +5,17 @@ from ophyd import (EpicsMotor,
                    Component as Cpt,
                    PseudoPositioner)
 
+from .crl_optics import CRLModel, DEFAULT_HOLDERS
+from .status import CRL_STATUS, finite_number, read_signal as _read_signal
+
+
 class CRL(Device):
+    """CRL motors plus hardware-independent inventory and focus calculations.
+
+    Energies for the optics helpers are explicitly in keV. These helpers do
+    not read motor positions, connect to EPICS, or issue motion commands.
+    """
+
     lens1 = Cpt(EpicsMotor, "L1}Mtr")
     lens2 = Cpt(EpicsMotor, "L2}Mtr")
     lens3 = Cpt(EpicsMotor, "L3}Mtr")
@@ -24,6 +34,44 @@ class CRL(Device):
     ph = Cpt(EpicsMotor, "Ph}Mtr")
     th = Cpt(EpicsMotor, "Th}Mtr")
 
+    inserted_tolerance_mm = 3.0
+    status_description = CRL_STATUS
 
+    def read_lens_state(self, *, read_signal=_read_signal):
+        """Classify each holder as IN/OUT/UNKNOWN from its actual readback."""
+        states = {}
+        for i in range(1, 13):
+            try:
+                value = finite_number(read_signal(getattr(self, f"lens{i}").user_readback))
+                states[i] = "IN" if abs(value) < self.inserted_tolerance_mm else "OUT"
+            except Exception:
+                states[i] = "UNKNOWN"
+        return states
+
+    @property
+    def lens_inventory(self):
+        """Immutable holder records, including nominal IN/OUT positions (mm)."""
+        return DEFAULT_HOLDERS
+
+    def recommend_focus(self, energy_keV, *, geometry=None):
+        """Return the fewest-holder solution; raise if focus is unreachable.
+
+        ``geometry`` may be a CRLGeometry with measured sample distance,
+        working travel limits, and incident curvature. Defaults: sample is
+        1600 mm from the CRL center at crl.z=0, Z=-300..300 mm, and an SSA
+        secondary source 10.5 m upstream of the CRL center at crl.z=0.
+        Calculates only.
+        """
+        model = CRLModel() if geometry is None else CRLModel(geometry)
+        return model.recommend(energy_keV)
+
+    def focus_candidates(self, energy_keV, *, geometry=None):
+        """Return all feasible solutions ranked by holder count, then elements."""
+        model = CRLModel() if geometry is None else CRLModel(geometry)
+        return model.candidates(energy_keV)
+
+    def focal_length(self, energy_keV, holders):
+        """Calculate effective focal length in mm for explicit holder numbers."""
+        return CRLModel().focal_length_mm(energy_keV, holders)
 
 # aperture motors, see 10-slits.py

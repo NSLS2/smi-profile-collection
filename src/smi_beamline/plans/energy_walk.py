@@ -34,6 +34,8 @@ m67/m68, BPM3 sum) and the verified per-axis sign / flux thresholds come from a
 :class:`smi_beamline.plans.dcm_diag.DCMDiag` instance, so the PV wiring and Phase-0 calibration
 live in one place.
 """
+import math
+
 import bluesky.plan_stubs as bps
 import bluesky.preprocessors as bpp
 
@@ -141,7 +143,8 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
                        sample_interval=0.15, adapt=True, verbose=True,
                        rail_step_factor=10.0, rail_max_steps=10,
                        wrong_way_oval=500.0, wrong_way_max=2,
-                       flux_drop_frac=0.5, flux_drop_consec=2, flux_floor=None):
+                       flux_drop_frac=0.5, flux_drop_consec=2, flux_floor=None,
+                       wrong_way_wait=5.0):
     """Message-pure version of ``DCMDiag.recenter``: step the coarse motor for ``axis`` until
     ``|OVAL[axis]| < target``, judging on the **settled** OVAL direction (waits ``settle`` s so a
     brief wrong-way transient does not abort), with an adaptive step and a wrong-way abort.
@@ -157,16 +160,21 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
     for ``flux_drop_consec`` consecutive rail steps (i.e. it *fell and stayed down*), the recenter
     **aborts** (the rail-stepping is losing the beam).
 
-    Wrong-way handling: a settled step that moves OVAL *away* from 0 aborts **immediately** only if it
-    is large (``|dOVAL| >= wrong_way_oval``, default 500) -- a real sign/coupling error.  A *small*
-    wrong-way move is treated as OVAL noise / motor hysteresis (the loop is jumpy) and forgiven up to
-    ``wrong_way_max`` (default 2) times in a row (a correct step resets the count); a bigger
-    corrective step usually wins on the retry.
+    Wrong-way handling: before aborting for a large wrong-way change (``|dOVAL| >= wrong_way_oval``,
+    default 500) or too many small ones, hold the coarse motor stationary and sample for another
+    ``wrong_way_wait`` seconds (default 5; 0 disables).  Re-evaluate the mean of the final third
+    against the ORIGINAL pre-step OVAL; a delayed feedback response can then recover.  This is one
+    bounded confirmation window per suspect step, not another motor move.  Small wrong-way changes
+    are forgiven up to ``wrong_way_max`` (default 2) times in a row; a correct step resets the count.
 
     Raises ``RuntimeError`` on a *large* settled wrong-way step (or too many small ones in a row), on
     ``|OVAL|`` reading *beyond* the axis hardware rail, on a sustained flux drop while rail-stepping,
     or if ``max_steps`` / ``rail_max_steps`` is hit without progress.
     """
+    if not math.isfinite(wrong_way_wait) or wrong_way_wait < 0:
+        raise ValueError("wrong_way_wait must be finite and >= 0")
+    if not math.isfinite(sample_interval) or sample_interval <= 0:
+        raise ValueError("sample_interval must be finite and > 0")
     # Default abort = the axis rail + margin (per-axis: roll ~+/-4095, pitch ~+/-8191).  Being AT
     # the rail is allowed -- that's when stepping toward 0 matters; only a reading clearly beyond
     # the rail is treated as invalid.
@@ -183,6 +191,23 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
     wrong_way_run = 0       # consecutive SMALL wrong-way settled steps (noise/hysteresis tolerance)
     flux_low_run = 0        # consecutive rail steps with flux below the floor (fell & stayed down)
     flux_baseline = None    # flux at entry (set on the first rail step we take)
+
+    def _sample_oval(seconds):
+        # Average only the final third, so the early transient does not dominate the verdict.
+        samples = []
+        waited = 0.0
+        while waited < seconds:
+            delay = min(sample_interval, seconds - waited)
+            yield from bps.sleep(delay)
+            waited += delay
+            value = yield from _rd(sig)
+            if abs(value) > oval_abort:
+                raise RuntimeError(
+                    f"{axis} OVAL {value:.1f} reads beyond the hardware rail (+/-{rail:.0f}); "
+                    "treating as invalid -- aborting recenter (check PV/connection).")
+            samples.append(value)
+        tail = samples[max(1, 2 * len(samples) // 3):] or samples[-1:]
+        return sum(tail) / len(tail)
 
     for i in range(1, max_steps + 1):
         cur = yield from _rd(sig)
@@ -219,43 +244,41 @@ def recenter_axis_plan(diag, axis, target=400.0, step=0.0001, settle=1.5, rate=1
                   f"settling {per_step_settle:.1f}s ...{railnote}")
         yield from bps.mv(mot, mot.position + motor_delta)
 
-        # settle: poll OVAL for the window; judge on the mean of the final third.
-        samples = []
-        waited = 0.0
-        while waited < per_step_settle:
-            samples.append((yield from _rd(sig)))
-            yield from bps.sleep(sample_interval)
-            waited += sample_interval
-        if not samples:
-            samples = [(yield from _rd(sig))]
-        tail = samples[max(1, 2 * len(samples) // 3):] or samples[-1:]
-        after = sum(tail) / len(tail)
+        after = yield from _sample_oval(per_step_settle)
         delta_oval = after - before
+        correct = abs(delta_oval) <= deadband or delta_oval * want > 0
+        would_abort = not correct and (
+            abs(delta_oval) >= wrong_way_oval or wrong_way_run >= wrong_way_max)
+        confirmed = False
+        if would_abort and wrong_way_wait > 0:
+            if verbose:
+                print(f"{axis}: suspect wrong-way OVAL {before:+.1f} -> {after:+.1f}; "
+                      f"holding {mot.name} stationary for {wrong_way_wait:g}s to confirm ...")
+            after = yield from _sample_oval(wrong_way_wait)
+            confirmed = True
+            delta_oval = after - before
+            correct = abs(delta_oval) <= deadband or delta_oval * want > 0
         gain = (delta_oval / motor_delta) if motor_delta else 0.0
-        moved = abs(delta_oval) > deadband
-        correct = (not moved) or (delta_oval * want > 0)
+        confirmation_note = (f" after an extra {wrong_way_wait:g}s confirmation" if confirmed else "")
         if verbose:
-            print(f"{axis}: OVAL {before:+.1f} -> {after:+.1f} settled "
+            print(f"{axis}: OVAL {before:+.1f} -> {after:+.1f} settled{confirmation_note} "
                   f"(dOVAL={delta_oval:+.1f}, gain~{gain:+.0f} OVAL/EGU, "
                   f"{'toward 0' if correct else 'WRONG WAY'})")
         if correct:
             wrong_way_run = 0
         else:
-            # A wrong-way settled step.  A LARGE one is a real sign/coupling error -> abort now,
-            # before the piezo is driven into the rail.  A SMALL one is most likely OVAL noise /
-            # motor hysteresis (the loop is jumpy), so forgive up to wrong_way_max of them in a row
-            # (a correct step resets the count) -- a bigger corrective step usually wins next.
+            # Apply the original thresholds to the confirmed reading, without moving again first.
             if abs(delta_oval) >= wrong_way_oval:
                 raise RuntimeError(
                     f"{axis}: settled OVAL moved the WRONG way ({before:+.1f} -> {after:+.1f}, "
                     f"dOVAL={delta_oval:+.1f} >= {wrong_way_oval:.0f}) after a {motor_delta:+.5f} "
-                    f"step on {mot.name} -- sign/coupling not as assumed; aborting before the piezo "
+                    f"step on {mot.name}{confirmation_note} -- sign/coupling not as assumed; aborting before the piezo "
                     "is driven into the rail.")
             wrong_way_run += 1
             if wrong_way_run > wrong_way_max:
                 raise RuntimeError(
                     f"{axis}: settled OVAL kept moving the WRONG way for {wrong_way_run} small "
-                    f"steps (last {before:+.1f} -> {after:+.1f}, dOVAL={delta_oval:+.1f}) -- not "
+                    f"steps (last {before:+.1f} -> {after:+.1f}, dOVAL={delta_oval:+.1f}){confirmation_note} -- not "
                     "noise/hysteresis; aborting before the piezo is driven into the rail.")
             if verbose:
                 print(f"    small wrong-way move (dOVAL={delta_oval:+.1f} < {wrong_way_oval:.0f}); "
@@ -300,7 +323,7 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
                 flux_settle=1.0, oval_settle_s=3.0, oval_settle_window=300.0,
                 oval_window=None, oval_target=None, recenter_step=0.0001,
                 recenter_rate=1.0, recenter_settle=1.5, move_tol_eV=1.0,
-                set_bpm3_range=True, verbose=True):
+                set_bpm3_range=True, verbose=True, recenter_wrong_way_wait=5.0):
     """Plan: feedback-managed move of the photon energy to ``target_eV`` (eV).
 
     Parameters
@@ -335,6 +358,9 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
         Re-centre drives ``|OVAL|`` below this; ``None`` (default) uses ``diag.OVAL_TARGET`` (~400).
     recenter_step, recenter_rate, recenter_settle : float
         Coarse-motor step (EGU), max steps/s, and per-step settle for the recenter loop.
+    recenter_wrong_way_wait : float
+        Extra stationary sampling window before a wrong-way recenter abort (default 5 s;
+        0 disables). Normal, correct steps incur no extra delay.
     move_tol_eV : float
         Tolerance for "the energy actually moved / reached target".
     set_bpm3_range : bool
@@ -418,7 +444,8 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
                 _emit(f"    {axis}: |OVAL|={abs(ov):.0f} > {win:.0f} -> recentering to <{tgt:.0f}")
                 yield from recenter_axis_plan(
                     diag, axis, target=tgt, step=recenter_step, settle=recenter_settle,
-                    rate=recenter_rate, verbose=verbose, flux_floor=thr)
+                    rate=recenter_rate, verbose=verbose, flux_floor=thr,
+                    wrong_way_wait=recenter_wrong_way_wait)
         return now_eV
 
     def _substep_targets(start_eV, final_eV):
@@ -428,6 +455,15 @@ def energy_walk(target_eV, *, diag=None, energy=None, step_eV=500.0,
 
     def _body():
         start_eV = _now()
+        # Preflight the whole managed path while locked, before moving any sub-step.
+        # Plain positioners used by off-beamline callers need not implement this feature.
+        locked = 0
+        if hasattr(energy, "locked_harmonic"):
+            locked = yield from bps.rd(energy.locked_harmonic)
+            if locked:
+                if not (yield from bps.rd(energy.enableivu)):
+                    raise RuntimeError("A harmonic lock requires enableivu=True.")
+                energy.harmonic_for_range(start_eV, target_eV, harmonic=locked)
         targets = _substep_targets(start_eV, float(target_eV))
         _emit(f"energy_walk: {start_eV:.2f} -> {float(target_eV):.2f} eV "
               f"({len(targets)} step(s); <= {step_eV} eV, {LOW_ENERGY_STEP_eV:g} eV below "

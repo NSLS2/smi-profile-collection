@@ -78,6 +78,30 @@ def test_no_foils_reports_unity(attset):
     assert "none" in info["description"].lower()
 
 
+def test_read_state_is_live_and_does_not_update_signals_or_metadata(attset, monkeypatch):
+    from smi_beamline.beamline_status import Reader
+    from smi_beamline.devices import attenuator_data as ad
+
+    att, b1, b2 = attset
+    b1.f3.status.sim_put("Open")
+    b2.f5.status.sim_put("Open")
+    for signal in (att.energy_eV, att.attenuation_factor, att.transmission, att.description, att.inserted):
+        monkeypatch.setattr(signal, "put", lambda *a, **k: pytest.fail("read_state wrote a signal"))
+    monkeypatch.setattr(att, "_update_run_md", lambda *a, **k: pytest.fail("read_state wrote metadata"))
+    info = att.read_state(energy_eV=16150, read_signal=Reader({}).signal)
+    assert info["inserted"] == ["1_3", "2_5"]
+    assert info["attenuation_factor"] == pytest.approx(ad.attenuation_factor(info["inserted"], 16150))
+    assert info["energy_eV"] == 16150
+    assert att.inserted.get() == ""
+
+
+def test_read_state_rejects_unknown_foil_state(attset):
+    att, b1, b2 = attset
+    b1.f1.status.sim_put("Moving")
+    with pytest.raises(ValueError, match="Unknown state for foil"):
+        att.read_state(energy_eV=16150)
+
+
 def test_reports_factor_and_description_for_inserted_foils(attset):
     att, b1, b2 = attset
     # manually insert a known foil (att2_1 == Mo 20um) and one Cu (att1_1)
@@ -245,4 +269,3 @@ def test_md_write_is_noop_without_run_engine(attset):
     # get_md() returns a throwaway {}; compute() should still succeed
     info = att.compute()
     assert info["attenuation_factor"] == 1.0
-

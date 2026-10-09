@@ -68,6 +68,27 @@ def test_small_move_passes_through_plain(energy):
     assert fb_writes == [], "small move wrongly triggered the managed walk (feedback toggled)"
 
 
+@pytest.mark.parametrize("target", [9100.0, 10000.0])
+def test_wrong_way_wait_setting_reaches_both_recenter_paths(energy, monkeypatch, target):
+    """One console setting controls confirmation in large walks and fine-step drift correction."""
+    diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 3000.0, "pitch": 0.0})
+    calls = []
+
+    def recenter(diag, axis, **kwargs):
+        calls.append((axis, kwargs["wrong_way_wait"]))
+        yield from bps.null()
+
+    monkeypatch.setattr("smi_beamline.plans.energy_walk.recenter_axis_plan", recenter)
+    monkeypatch.setattr("smi_beamline.plans.energy_move_preprocessor.recenter_axis_plan", recenter)
+    RE = RunEngine({})
+    _install(RE, energy, diag, walk_kwargs={"recenter_wrong_way_wait": 8.0})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        RE(bps.mv(energy, target))
+    assert calls
+    assert all(axis == "roll" and wait == 8.0 for axis, wait in calls)
+
+
 def test_large_move_emits_one_warning(energy):
     energy.set(9000.0)
     diag = FakeDiag(energy, sumY=10.0, oval0={"roll": 50.0, "pitch": 50.0})

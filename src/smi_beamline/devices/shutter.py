@@ -8,6 +8,7 @@ from ophyd import (
     DeviceStatus,
 )
 import datetime, time
+from .status import SHUTTER_STATUS, enum_value, numeric_state, read_signal as _read_signal
 
 # Unify on the maintained upstream TwoButtonShutter from nslsii (robust set(): handles
 # str/int enum read-backs, short-circuits when already in position, MAX_ATTEMPTS retry,
@@ -54,11 +55,21 @@ class TwoButtonShutter(_NSLSIITwoButtonShutter):
     # 'Insert'/'Retract', which was flagged in-code as "correct for FOILS ONLY" -- foils now have
     # their own Attenuator class, so valves use the sensible Open/Close.)
     open_str = "Open"
+    status_description = SHUTTER_STATUS
     close_str = "Close"
 
     #: value written to the *pressed* command PV (Cmd:Opn-Cmd for open, Cmd:Cls-Cmd for close).
     #: Default 1 == historical behavior.  Override per instance for a valve actuated by 0.
     cmd_actuate_val = 1
+
+    def read_state(self, *, read_signal=_read_signal):
+        """Read actual position with this valve's polarity; no signal writes."""
+        value = enum_value(self.status, read_signal)
+        if value == self.open_val:
+            return "OPEN"
+        if value == self.close_val:
+            return "NOT OPEN" if str(value).casefold() == "not open" else "CLOSED"
+        return f"UNKNOWN({value})"
 
     def set(self, val):
         """Open/close the valve, retrying actuation until ``status`` confirms.
@@ -130,21 +141,44 @@ class TwoButtonShutter(_NSLSIITwoButtonShutter):
         return st
 
 
+class FrontEndShutterReadback(Device):
+    """Read-only FE shutter closed-status bit; no actuation interface."""
+
+    status = Cpt(EpicsSignalRO, "Sts:Cls-Sts", kind="hinted")
+    status_description = SHUTTER_STATUS
+    status_values = {0: "OPEN", 1: "NOT OPEN"}
+
+    def read_state(self, *, read_signal=_read_signal):
+        return numeric_state(read_signal(self.status), self.status_values)
+
+
 class SMIFastShutter(Device):
+    status_description = SHUTTER_STATUS
     open_cpt = Cpt(EpicsSignal, "XF:12IDC-ES:2{PSh:ES}pz:sh:open")
     close_cpt = Cpt(EpicsSignal, "XF:12IDC-ES:2{PSh:ES}pz:sh:close")
     status_pv = Cpt(EpicsSignalRO, "XF:12IDA-BI:2{EM:BPM1}DAC3")
     status = Cpt(Signal, value="")
+    status_values = {0: "OPEN", 7: "NOT OPEN"}
+    # Initialization/control reads must allow EPICS discovery time. The short
+    # read_state default is only for responsive diagnostic displays.
+    status_timeout = 5.0
+
+    def read_state(self, *, read_signal=_read_signal):
+        """Read the live controller state, not the cached software status."""
+        return numeric_state(read_signal(self.status_pv), self.status_values)
 
     def check_status(self):
-        if int(self.status_pv.get()) == 7:
+        state = self.read_state(read_signal=lambda signal: signal.get(
+            timeout=self.status_timeout, connection_timeout=self.status_timeout))
+        if state == "NOT OPEN":
             self.status.put("Closed")
-        elif int(self.status_pv.get()) == 0:
+        elif state == "OPEN":
             self.status.put("Open")
         else:
             raise RuntimeError(f'Shutter "{self.name}" is in a weird state.')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, status_timeout=5.0, **kwargs):
+        self.status_timeout = status_timeout
         super().__init__(*args, **kwargs)
         self.check_status()
 

@@ -86,6 +86,9 @@ class DCMInternals(Device):
     theta = Cpt(EpicsMotor, "XF:12ID:m65")
 
 
+from .status import ENERGY_STATUS
+
+
 class Energy(PseudoPositioner):
     """
     PseudoPositioner for controlling the monochromator energy.
@@ -99,11 +102,13 @@ class Energy(PseudoPositioner):
         ivugap (InsertionDevice): Real motor controlling the IVU gap.
         enableivu (Signal): Signal to enable or disable IVU movement.
         enabledcmgap (Signal): Signal to enable or disable DCM gap movement.
-        target_harmonic (Signal): Target harmonic for the undulator.
+        target_harmonic (Signal): Starting harmonic for the automatic downward search.
+        locked_harmonic (Signal): Zero for automatic selection, or an exact odd harmonic.
         harmonic (Signal): Current harmonic being used.
     """
     # Synthetic axis
     energy = Cpt(PseudoSingle, kind="normal", labels=["mono"])
+    status_description = ENERGY_STATUS
 
     # Real motors
     dcmgap = Cpt(EpicsMotor, "XF:12ID:m66", read_attrs=["user_readback"], kind="normal", labels=["mono"])
@@ -151,7 +156,11 @@ class Energy(PseudoPositioner):
 
     # Harmonic signals
     target_harmonic = Cpt(Signal, value=21)
+    locked_harmonic = Cpt(Signal, value=0, kind="config")
     harmonic = Cpt(Signal, kind="normal", value=21)
+
+    IVU_GAP_MIN_UM = 6200.0
+    IVU_GAP_MAX_UM = 15100.0
 
 
     def __init__(self, *args, **kwargs):
@@ -177,6 +186,123 @@ class Energy(PseudoPositioner):
         )
         return bragg_angle
 
+    @staticmethod
+    def _ideal_gap_um(target_energy, harmonic):
+        """Uncorrected fit, strictly increasing with energy for a fixed harmonic."""
+        f = target_energy / float(harmonic)
+        return 1000 * (-533.56314 + 1926.52257 * (
+            0.28544 / (1 + 10 ** ((-10782.55855 - f) * 1.44995e-4))
+            + (1 - 0.28544) / (1 + 10 ** ((7180.06758 - f) * 6.34167e-4))))
+
+    @staticmethod
+    def _validate_energy(value):
+        value = float(value)
+        if not np.isfinite(value) or not 2050 < value < 24001:
+            raise ValueError("Energy must be finite and satisfy 2050 < energy < 24001 eV.")
+        return value
+
+    @staticmethod
+    def _validate_harmonic(value, *, allow_auto=False):
+        if (isinstance(value, (bool, np.bool_)) or not np.isfinite(value)
+                or value != int(value)
+                or not ((allow_auto and value == 0) or (value > 0 and value % 2 == 1))):
+            raise ValueError("Harmonic must be a positive odd integer"
+                             + (" (or 0 for automatic selection)." if allow_auto else "."))
+        return int(value)
+
+    def _gap_offsets(self):
+        energies = np.asarray(self.ivu_gap_offset_energies_eV.get(), dtype=float)
+        offsets = np.asarray(self.ivu_gap_offset_values_um.get(), dtype=float)
+        if (energies.ndim != 1 or offsets.ndim != 1 or not len(energies)
+                or len(energies) != len(offsets)
+                or not np.all(np.isfinite(energies)) or not np.all(np.isfinite(offsets))
+                or not np.all(np.diff(energies) > 0)):
+            raise ValueError("IVU offset table must contain finite, matching arrays with "
+                             "strictly increasing energies.")
+        return energies, offsets
+
+    def harmonic_for_range(self, start, stop, *, max_harmonic=None, harmonic=None,
+                           gap_margin_um=0):
+        """Return the highest valid odd harmonic for the entire interval (energies in eV).
+
+        No motion or signal writes. The search starts at ``max_harmonic`` (default:
+        ``target_harmonic``). Supply ``harmonic`` to validate an exact choice instead.
+        The current lock is ignored. A nonnegative margin shrinks the allowed gap window.
+        Raises ValueError for malformed inputs or RuntimeError if no harmonic covers the range.
+
+        Adaptive interval bounds use the monotone uncorrected fit and each linear offset
+        segment, including both sides of discontinuities. Thus an interior gap excursion
+        cannot be missed by sampling. Numerically ambiguous intervals narrower than 1e-6 eV
+        are conservatively rejected.
+        """
+        lo, hi = sorted((self._validate_energy(start), self._validate_energy(stop)))
+        margin = float(gap_margin_um)
+        if not np.isfinite(margin) or not 0 <= margin < (self.IVU_GAP_MAX_UM - self.IVU_GAP_MIN_UM) / 2:
+            raise ValueError("gap_margin_um must be finite, nonnegative, and leave a gap window.")
+        if harmonic is not None and max_harmonic is not None:
+            raise ValueError("Specify harmonic or max_harmonic, not both.")
+        candidates = ([self._validate_harmonic(harmonic)] if harmonic is not None else
+                      range(self._validate_harmonic(self.target_harmonic.get()
+                            if max_harmonic is None else max_harmonic), 0, -2))
+        energies, offsets = self._gap_offsets()
+        lower, upper = self.IVU_GAP_MIN_UM + margin, self.IVU_GAP_MAX_UM - margin
+
+        def offset(e):
+            return (20.0 if e < 3000 else
+                    float(np.interp(e, energies, offsets, left=min(offsets), right=max(offsets))))
+
+        knots = sorted({lo, hi, *(float(e) for e in energies if lo < e < hi),
+                        *([3000.0] if lo < 3000 < hi else [])})
+
+        def valid(h):
+            def gap(e):
+                return self._ideal_gap_um(e, h) - offset(e)
+
+            if any(not lower <= gap(e) < upper for e in knots):
+                return False
+            intervals = [(np.nextafter(a, b), np.nextafter(b, a))
+                         for a, b in zip(knots[:-1], knots[1:])]
+            while intervals:
+                a, b = intervals.pop()
+                if a > b:
+                    continue
+                oa, ob = offset(a), offset(b)
+                ga, gb = self._ideal_gap_um(a, h), self._ideal_gap_um(b, h)
+                if not (lower <= ga - oa < upper and lower <= gb - ob < upper):
+                    return False
+                # Every gap in this segment is enclosed by these conservative bounds.
+                if lower <= ga - max(oa, ob) and gb - min(oa, ob) < upper:
+                    continue
+                if b - a < 1e-6:
+                    return False
+                mid = (a + b) / 2
+                intervals.extend(((a, mid), (mid, b)))
+            return True
+
+        for h in candidates:
+            if valid(h):
+                return h
+        raise RuntimeError(f"No single harmonic covers {lo:g}–{hi:g} eV "
+                           f"within {lower:g} <= IVU gap < {upper:g} um.")
+
+    def _harmonic_and_gap(self, target_energy):
+        """Resolve a move without changing any device state."""
+        target_energy = self._validate_energy(target_energy)
+        locked = self._validate_harmonic(self.locked_harmonic.get(), allow_auto=True)
+        if locked:
+            if not self.enableivu.get():
+                raise RuntimeError("A harmonic lock requires enableivu=True.")
+            gap = self.energy_to_gap(target_energy, locked)
+            if not self.IVU_GAP_MIN_UM <= gap < self.IVU_GAP_MAX_UM:
+                raise RuntimeError(f"Locked harmonic {locked} is invalid at {target_energy:g} eV: "
+                                   f"IVU gap {gap:g} um is out of range.")
+            return locked, gap
+        for h in range(self._validate_harmonic(self.target_harmonic.get()), 0, -2):
+            gap = self.energy_to_gap(target_energy, h)
+            if self.IVU_GAP_MIN_UM <= gap < self.IVU_GAP_MAX_UM:
+                return h, gap
+        raise RuntimeError("Cannot find a valid gap.")
+
     def energy_to_gap(self, target_energy, undulator_harmonic=1, man_offset=0):
         """
         Convert energy to IVU gap.
@@ -187,29 +313,21 @@ class Energy(PseudoPositioner):
             man_offset (float): Manual offset for the gap.
 
         Returns:
-            float: IVU gap in mm.
+            float: IVU gap in um.
         """
-        fundamental_energy = target_energy / float(undulator_harmonic)
-        f = fundamental_energy
-
-        # Calculate the gap using a piecewise function
-        gap_mm = -533.56314 + (1926.52257) * (
-            0.28544 / (1 + 10 ** ((-10782.55855 - f) * 1.44995e-4))
-            + (1 - 0.28544) / (1 + 10 ** ((7180.06758 - f) * 6.34167e-4))
-        )
+        ideal_gap = self._ideal_gap_um(target_energy, undulator_harmonic)
 
         # Experimental offsets for specific energies (seeded from persistent config; defaults
         # match the values previously hardcoded here).  Read back as lists -> np.asarray.
-        e_exp = np.asarray(self.ivu_gap_offset_energies_eV.get(), dtype=float)
-        off_exp = np.asarray(self.ivu_gap_offset_values_um.get(), dtype=float)
+        e_exp, off_exp = self._gap_offsets()
 
         # Interpolate the offset for the target energy
         auto_offset = np.interp(target_energy, e_exp, off_exp, left=min(off_exp), right=max(off_exp))
-        gap = gap_mm * 1000 - auto_offset - man_offset
+        gap = ideal_gap - auto_offset - man_offset
 
         # Apply a minimum gap correction for low energies
         if target_energy < 3000:
-            gap = gap_mm * 1000 - 20
+            gap = ideal_gap - 20
         return gap
 
     @pseudo_position_argument
@@ -224,27 +342,7 @@ class Energy(PseudoPositioner):
             RealPosition: Calculated real positions.
         """
         energy = p_pos.energy
-        self.harmonic.put(int(self.target_harmonic.get()))
-
-        if not self.harmonic.get() % 2:
-            raise RuntimeError("Harmonic must be odd.")
-
-        # Hard guardrails (a few eV outside the operational/validated 2.1 -> 16.1 keV range): the
-        # validated floor / low-energy warn threshold is 2100 eV (the beamline minimum), and this
-        # 2050 eV ValueError is the absolute backstop just below it.
-        if energy <= 2050:
-            raise ValueError("Minimum energy is 2050 eV.")
-
-        if energy >= 24001:
-            raise ValueError("Maximum energy is 24000 eV.")
-
-        # Calculate target positions
-        target_ivu_gap = self.energy_to_gap(energy, self.harmonic.get())
-        while not (6200 <= target_ivu_gap < 15100):
-            self.harmonic.put(int(self.harmonic.get()) - 2)
-            if self.harmonic.get() < 1:
-                raise RuntimeError("Cannot find a valid gap.")
-            target_ivu_gap = self.energy_to_gap(energy, self.harmonic.get())
+        _, target_ivu_gap = self._harmonic_and_gap(energy)
 
         target_bragg_angle = self.energy_to_bragg(energy)
 
@@ -314,7 +412,12 @@ class Energy(PseudoPositioner):
         small nudges aren't managed anyway, so neither is nagged.  The move still proceeds normally.
         """
         (energy,) = position
-        if np.abs(energy - self.position[0]) < 0.01:
+        harmonic, gap = self._harmonic_and_gap(energy)
+        # Validate before touching feedback, even at the current energy. A changed harmonic
+        # (or calibration) can require IVU motion with no Bragg motion at all.
+        if (np.abs(energy - self.position[0]) < 0.01
+                and (not self.enableivu.get() or
+                     (harmonic == self.harmonic.get() and abs(gap - self.ivugap.position) < 0.01))):
             return MoveStatus(self, energy, success=True, done=True)
 
         # Courtesy reminder: a LARGE move made directly (not via the RunEngine) skips the managed
@@ -355,6 +458,12 @@ class Energy(PseudoPositioner):
         # through to the ophyd machinery.
         try:
             move_status = super().move(position, wait=False, timeout=timeout, moved_cb=moved_cb)
+            if self.enableivu.get():
+                def _record_harmonic(status):
+                    if status.success:
+                        self.harmonic.put(harmonic)
+
+                move_status.add_callback(_record_harmonic)
         except Exception:
             # Move failed to even start -> re-enable feedback and re-raise.
             self._reenable_feedback()
@@ -403,6 +512,8 @@ class Energy(PseudoPositioner):
         * The harmonic is taken as-is from ``self.harmonic``; the target IVU gap must fall in
           the valid range for that harmonic or a ``RuntimeError`` is raised (small moves should
           not cross a harmonic boundary -- use the normal move path if they do).
+          With a lock, the requested harmonic must already have been established by a normal
+          move. A mismatched lock is rejected before changing motor speeds.
         * The temporary speed changes are restored on success **and on error/abort** (via a
           ``finalize``), so an interrupted small move never leaves the axes at a wrong speed.
 
@@ -417,15 +528,24 @@ class Energy(PseudoPositioner):
             below the floor is clamped to it (the move then takes a little less than
             ``move_time`` for that axis, which is the safe direction).
         """
+        self._validate_energy(target_energy)
+        locked = self._validate_harmonic(self.locked_harmonic.get(), allow_auto=True)
+        if locked:
+            harmonic, target_ivu = self._harmonic_and_gap(target_energy)
+            if harmonic != self.harmonic.get():
+                raise RuntimeError("Establish the locked harmonic with a normal energy move "
+                                   "before using small_move.")
+        else:
+            harmonic = self._validate_harmonic(self.harmonic.get())
+            target_ivu = self.energy_to_gap(target_energy, harmonic)
         current_bragg = self.bragg.position
         current_ivu = self.ivugap.position
 
         target_bragg = self.energy_to_bragg(target_energy)
-        target_ivu = self.energy_to_gap(target_energy, self.harmonic.get())
         logger.debug("small_move -> E=%.3f eV: bragg %.5f->%.5f deg, IVU %.3f->%.3f um",
                      target_energy, current_bragg, target_bragg, current_ivu, target_ivu)
 
-        if not (6200 <= target_ivu < 15100):
+        if not (self.IVU_GAP_MIN_UM <= target_ivu < self.IVU_GAP_MAX_UM):
             raise RuntimeError(
                 "Target IVU gap {:.1f} um out of range for a small move (harmonic={}); "
                 "use the normal energy move.".format(target_ivu, int(self.harmonic.get())))
@@ -465,5 +585,3 @@ class Energy(PseudoPositioner):
 
         # Restore speeds whether the move succeeds, errors, or is aborted.
         yield from bpp.finalize_wrapper(_do_move(), _restore())
-
-

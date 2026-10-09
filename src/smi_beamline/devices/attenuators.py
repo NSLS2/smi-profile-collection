@@ -18,6 +18,7 @@ import threading
 from . import _context
 from . import _config
 from . import attenuator_data as _ad
+from .status import ATTENUATION_STATUS
 
 import math as _math
 _math_isfinite = _math.isfinite
@@ -434,6 +435,7 @@ class AttenuatorSet(Device):
     #: start & end of every run); the start-doc copy is refreshed whenever attenuation is
     #: set/changed/read so a run started after a change carries the up-to-date value.
     md_key = "beamline_attenuators"
+    status_description = ATTENUATION_STATUS
 
     def __init__(self, *args, banks, bank_prefixes=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -472,6 +474,36 @@ class AttenuatorSet(Device):
             for name in bank.inserted_foils():        # child attrs like 'f5'
                 labels.append("{}_{}".format(pfx, name[1:]))
         return tuple(sorted(labels, key=_ad._foil_sort_key))
+
+    def read_state(self, *, energy_eV=None, read_signal=None):
+        """Read current foils and calculate attenuation without updating signals/RE.md.
+
+        ``read_signal(signal)`` may supply bounded/cached reads for console displays.
+        Unknown foil states raise rather than being silently treated as retracted.
+        """
+        read = read_signal if read_signal is not None else lambda signal: signal.get()
+        labels = []
+        for label, (bank, name) in self._label_to_bank.items():
+            foil = getattr(bank, name)
+            value = read(foil.status)
+            if not isinstance(value, str):
+                enums = foil.status.metadata.get("enum_strs")
+                if enums and int(value) == value and 0 <= int(value) < len(enums):
+                    value = enums[int(value)]
+            if value == foil.open_val:
+                labels.append(label)
+            elif value != foil.close_val:
+                raise ValueError(f"Unknown state for foil {label}: {value!r}")
+        labels = tuple(sorted(labels, key=_ad._foil_sort_key))
+        energy = self._current_energy(energy_eV)
+        factor = _ad.attenuation_factor(labels, energy)
+        trans = _ad.transmission(labels, energy)
+        return {
+            "inserted": list(labels), "energy_eV": energy,
+            "attenuation_factor": factor if _math_isfinite(factor) else _ad_MAX_FACTOR,
+            "transmission": max(trans, 1.0 / _ad_MAX_FACTOR),
+            "description": self._describe(labels),
+        }
 
     def compute(self, labels=None, energy_eV=None):
         """Compute (and store) factor/transmission/description for ``labels`` at energy.

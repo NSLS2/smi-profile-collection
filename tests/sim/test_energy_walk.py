@@ -206,8 +206,7 @@ def test_recenter_forgives_a_small_wrongway_blip(energy):
 
 
 def test_recenter_still_aborts_on_a_large_wrongway_step(energy):
-    """A LARGE wrong-way step (real sign error, |dOVAL| >= wrong_way_oval) aborts immediately even
-    with the small-blip tolerance enabled."""
+    """A persistent LARGE wrong-way step still aborts after confirmation."""
     diag = FakeDiag(energy, gains={"roll": -600000.0, "pitch": -600000.0},
                     oval0={"roll": 3000.0})
     RE = RunEngine({})
@@ -226,6 +225,89 @@ def test_recenter_aborts_after_too_many_small_wrongway_steps(energy):
     with pytest.raises(RuntimeError, match="WRONG way"):
         RE(recenter_axis_plan(diag, "pitch", target=400.0, settle=0.05, sample_interval=0.02,
                               deadband=10.0, wrong_way_oval=500.0, wrong_way_max=2, verbose=False))
+
+
+@pytest.mark.parametrize("polarity", [1, -1])
+@pytest.mark.parametrize("bad_delta,wrong_way_max", [(729.1, 2), (120.0, 0)])
+def test_recenter_waits_for_delayed_response_without_another_move(
+        energy, polarity, bad_delta, wrong_way_max):
+    """A transient lasting longer than normal settle recovers while the motor stays put."""
+    diag = FakeDiag(energy)
+    clock = {"seconds": 0.0}
+    moves = []
+    motor = diag.motor["roll"]
+
+    class DelayedOval(Signal):
+        def get(self):
+            if not moves:
+                return polarity * 904.9
+            # Lasts 3 seconds: well beyond the normal 1.5 s settle.
+            return polarity * (904.9 + bad_delta if clock["seconds"] < 3.0 else 300.0)
+
+    diag.oval["roll"] = DelayedOval(name="oval_roll")
+    RE = RunEngine({})
+
+    async def sleep(msg):
+        clock["seconds"] += msg.args[0]
+
+    RE.register_command("sleep", sleep)
+    RE.msg_hook = lambda msg: moves.append(msg) if msg.command == "set" and msg.obj is motor else None
+    RE(recenter_axis_plan(diag, "roll", step=0.002, wrong_way_max=wrong_way_max, verbose=False))
+    assert len(moves) == 1
+    assert clock["seconds"] == pytest.approx(6.5)
+    assert abs(diag.oval["roll"].get()) == 300.0
+
+
+@pytest.mark.parametrize("extra_wait", [0.0, 5.0])
+def test_recenter_persistent_wrong_way_has_bounded_wait(energy, extra_wait):
+    """Confirmation never retries the motor or waits indefinitely; 0 opts out."""
+    diag = FakeDiag(energy)
+    clock = {"seconds": 0.0}
+    moves = []
+    motor = diag.motor["roll"]
+
+    class WrongOval(Signal):
+        def get(self):
+            return 1634.0 if moves else 904.9
+
+    diag.oval["roll"] = WrongOval(name="oval_roll")
+    RE = RunEngine({})
+
+    async def sleep(msg):
+        clock["seconds"] += msg.args[0]
+
+    RE.register_command("sleep", sleep)
+    RE.msg_hook = lambda msg: moves.append(msg) if msg.command == "set" and msg.obj is motor else None
+    with pytest.raises(RuntimeError, match="WRONG way"):
+        RE(recenter_axis_plan(diag, "roll", step=0.002, wrong_way_wait=extra_wait, verbose=False))
+    assert len(moves) == 1
+    assert clock["seconds"] == pytest.approx(1.5 + extra_wait)
+
+
+def test_recenter_invalid_rail_reading_aborts_during_confirmation(energy):
+    diag = FakeDiag(energy)
+    clock = {"seconds": 0.0}
+    moves = []
+    motor = diag.motor["roll"]
+
+    class InvalidOval(Signal):
+        def get(self):
+            if not moves:
+                return 904.9
+            return 1634.0 if clock["seconds"] < 2.0 else 5000.0
+
+    diag.oval["roll"] = InvalidOval(name="oval_roll")
+    RE = RunEngine({})
+
+    async def sleep(msg):
+        clock["seconds"] += msg.args[0]
+
+    RE.register_command("sleep", sleep)
+    RE.msg_hook = lambda msg: moves.append(msg) if msg.command == "set" and msg.obj is motor else None
+    with pytest.raises(RuntimeError, match="beyond the hardware rail"):
+        RE(recenter_axis_plan(diag, "roll", step=0.002, verbose=False))
+    assert len(moves) == 1
+    assert 2.0 <= clock["seconds"] < 2.2
 
 
 def test_settle_oval_returns_true_when_stable(energy):

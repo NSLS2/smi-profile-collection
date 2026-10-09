@@ -6,7 +6,7 @@ energy = Energy(
     prefix="",
     name="energy",
     read_attrs=["energy", "ivugap", "bragg", "harmonic"],
-    configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic"],
+    configuration_attrs=["enableivu", "enabledcmgap", "target_harmonic", "locked_harmonic"],
 )
 energy.settle_time = 1
 
@@ -35,7 +35,7 @@ bragg.read_attrs = ["user_readback"]
 # Do this AFTER the ``bragg.read_attrs = [...]`` reassignment above (which would otherwise re-hint
 # bragg.user_readback).
 energy.energy.kind = "normal"
-energy.energy.readback.kind = "normal"
+energy.energy.readback.kind = "hinted"
 energy.bragg.user_readback.kind = "normal"
 energy.ivugap.user_readback.kind = "normal"
 energy.dcmgap.user_readback.kind = "normal"
@@ -64,6 +64,19 @@ def feedback(action=None):
 
 
 import bluesky.plan_stubs as bps
+from smi_beamline.plans.harmonic_lock import with_harmonic_lock as _with_harmonic_lock
+
+
+def with_harmonic_lock(plan, start, stop, *, harmonic=None, max_harmonic=None,
+                       gap_margin_um=0):
+    """Run a plan on one harmonic spanning start..stop (eV), restoring the previous lock.
+
+    Selects and establishes the harmonic before acquisition. See
+    ``docs/ENERGY_SCAN_HARMONICS.md`` for examples and approach/cleanup semantics.
+    """
+    return (yield from _with_harmonic_lock(
+        plan, start, stop, energy=energy, harmonic=harmonic,
+        max_harmonic=max_harmonic, gap_margin_um=gap_margin_um))
 
 
 def move_energy(target_energy):
@@ -136,7 +149,7 @@ def dcm_diag():
 # Installed by default at startup (startup.py calls enable_managed_energy_moves()); call
 # disable_managed_energy_moves() at the console to turn it off for a session.
 # ---------------------------------------------------------------------------------------------
-def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
+def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, *, verbose=True, **kwargs):
     """Install the energy-move preprocessor on ``RE``: every plan energy move with
     ``|target-current| > threshold_eV`` is routed through the feedback-managed ``energy_walk`` in
     ``step_eV`` sub-steps (silent unless it errors, with one warning line per large move); smaller
@@ -146,6 +159,7 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
 
     Installed by default at startup; call this again to change ``threshold_eV``/``step_eV``.
     Idempotent (re-installing de-dups).  ``disable_managed_energy_moves()`` removes it.
+    Set ``verbose=False`` to suppress the installation confirmation at startup.
     """
     from smi_beamline.plans.energy_move_preprocessor import install_energy_move_preprocessor
     RE = _smiclasses_context.get_re()
@@ -154,7 +168,7 @@ def enable_managed_energy_moves(threshold_eV=500.0, step_eV=500.0, **kwargs):
     walk_kwargs.setdefault("diag", diag)
     return install_energy_move_preprocessor(
         RE, energy, threshold_eV=threshold_eV, step_eV=step_eV,
-        diag=diag, walk_kwargs=walk_kwargs, verbose=True, **kwargs)
+        diag=diag, walk_kwargs=walk_kwargs, verbose=verbose, **kwargs)
 
 
 def disable_managed_energy_moves():

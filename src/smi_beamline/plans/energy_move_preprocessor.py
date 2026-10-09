@@ -90,6 +90,7 @@ def energy_move_preprocessor(plan, energy, *, threshold_eV=500.0, step_eV=500.0,
         is effectively "below the validated floor" and normally never fires.
     walk_kwargs : dict, optional
         Extra kwargs forwarded to ``energy_walk`` (e.g. ``oval_window``, ``recenter_settle``).
+        ``recenter_wrong_way_wait`` (default 5 s) also applies to small-move drift recentering.
     verbose_walk : bool
         If True, let ``energy_walk`` print its per-step detail (default False -> silent, just the
         one-line large-move warning).
@@ -125,7 +126,8 @@ def energy_move_preprocessor(plan, energy, *, threshold_eV=500.0, step_eV=500.0,
                     stacklevel=2,
                 )
                 yield from recenter_axis_plan(
-                    diag, axis, target=drift_target, verbose=verbose_walk, flux_floor=None)
+                    diag, axis, target=drift_target, verbose=verbose_walk, flux_floor=None,
+                    wrong_way_wait=walk_kwargs.get("recenter_wrong_way_wait", 5.0))
 
     def _needs_managed(cur, target):
         """True if this move should go through ``energy_walk`` (sub-stepped): either the jump

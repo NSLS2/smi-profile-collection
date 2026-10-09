@@ -243,7 +243,7 @@ def install_default_scan_naming(RE, ns=None, *, sets=None, template=None, replac
         If True (default), first remove any previously-installed scan-name preprocessor (tagged
         ``_smi_scan_naming``) so re-running this in a live session does not stack duplicates.
     verbose : bool
-        Print the resolved template and which token devices were/weren't found.
+        Print the resolved template and found token devices. Missing devices are always reported.
     **devices
         Optional ``var_name=device`` overrides merged over ``ns`` (handy for tests, or to inject a
         device not in the namespace).
@@ -271,15 +271,15 @@ def install_default_scan_naming(RE, ns=None, *, sets=None, template=None, replac
             for tok in active_tokens(sets)
             if tok.device and any(k in token_devices for k in tok.keys)
         })
-        missing = sorted({
-            tok.device
-            for tok in active_tokens(sets)
-            if tok.device and not any(k in token_devices for k in tok.keys)
-        })
         print(f"scan-naming template: {template}")
         print(f"  token devices found: {found_names}")
-        if missing:
-            print(f"  NOT FOUND (token skipped): {missing}")
+    missing = sorted({
+        tok.device
+        for tok in active_tokens(sets)
+        if tok.device and not any(k in token_devices for k in tok.keys)
+    })
+    if missing:
+        print(f"scan-naming: NOT FOUND (token skipped): {missing}")
 
     if replace:
         RE.preprocessors[:] = [

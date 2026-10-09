@@ -20,19 +20,20 @@ def _inject_namespace_into_smi_plans(ns):
 
 
 def wire_smi_plans(ns, *, verbose=False):
-    """Inject the live namespace into ``smi_plans`` and return its curated queue surface."""
+    """Inject the live namespace and return the queue surface; always report wiring failures."""
     try:
         import smi_plans._qserver as qs
     except Exception as exc:
-        if verbose:
-            print(f"smi-plans: not wired ({type(exc).__name__}: {exc}); "
-                  "no queue plans exposed (install the smi-plans pixi dep).")
+        print(f"smi-plans: not wired ({type(exc).__name__}: {exc}); "
+              "no queue plans exposed (install the smi-plans pixi dep).")
         return {}
 
     n_mods = _inject_namespace_into_smi_plans(ns)
     names = [name for name in getattr(qs, "__all__", []) if not name.startswith("_")]
     surface = {name: getattr(qs, name) for name in names if hasattr(qs, name)}
 
+    if not surface:
+        print("smi-plans: no queue plans exposed (queue surface is empty).")
     if verbose:
         print(f"smi-plans: injected session namespace into {n_mods} module(s); "
               f"exposed {len(surface)} queue plan(s) "

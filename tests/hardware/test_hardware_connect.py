@@ -47,7 +47,7 @@ DEVICES = [
     ("ph_shutter", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDA-PPS:2{PSh}", {}),
     ("GV7", "smi_beamline.devices.shutter:TwoButtonShutter", "XF:12IDC-VA:2{Det:1M-GV:7}", {}),
     # power supplies
-    ("es_ps1", "smi_beamline.devices.power_supply:PowerSupply", "XF:12ID2-ES{PS:1}", {}),
+    ("sorensen_ps1", "smi_beamline.devices.power_supply:PowerSupply", "XF:12ID2-ES{PS:1}", {}),
     # a representative attenuator foil (the one smi-plans uses)
     ("att2_9", "smi_beamline.devices.attenuators:Attenuator", "XF:12IDC-OP:2{Fltr:2-9}", {}),
 ]
