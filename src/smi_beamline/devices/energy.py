@@ -459,7 +459,11 @@ class Energy(PseudoPositioner):
         try:
             move_status = super().move(position, wait=False, timeout=timeout, moved_cb=moved_cb)
             if self.enableivu.get():
-                self.harmonic.put(harmonic)
+                def _record_harmonic(status):
+                    if status.success:
+                        self.harmonic.put(harmonic)
+
+                move_status.add_callback(_record_harmonic)
         except Exception:
             # Move failed to even start -> re-enable feedback and re-raise.
             self._reenable_feedback()
