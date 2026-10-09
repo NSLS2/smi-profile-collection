@@ -343,8 +343,8 @@ except Exception as _exc:  # noqa: BLE001 -- never let optional camera helpers b
 if ipython is not None and not IS_QS_WORKER:
     try:
         from smi_plans import pf
-    except ImportError as _exc:
-        print(f"pf unavailable: {_exc}")
+    except Exception as _exc:
+        print(f"pf unavailable: {type(_exc).__name__}: {_exc}")
 
 # --- Standalone console magics (moves/scans/exposure/snapshots use this session's RE). ---
 if ipython is not None and not IS_QS_WORKER:
