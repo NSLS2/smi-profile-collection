@@ -42,7 +42,7 @@ import time
 import nslsii
 import redis
 from bluesky.callbacks.buffer import BufferingWrapper
-from bluesky_tiled_plugins import TiledWriter
+from bluesky_tiled_plugins import TiledInserter, TiledWriter
 from databroker import Broker
 from IPython.terminal.prompts import Prompts
 import matplotlib.pyplot as plt
@@ -78,29 +78,17 @@ samplestore = RedisJSONDict(sampleclient, "swaxssamples")
 statusclient = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=3, ssl=True, port=6380,
                            password=redis_secret)
 
-tiled_writing_client = from_profile(
+tiled_writing_client_raw = from_profile(
     "nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
-tiled_writing_client.context.http_client.headers["tiled-qos"] = "acquisition"
+tiled_writing_client_raw.context.http_client.headers["tiled-qos"] = "acquisition"
+TILED_BACKUP_ROOT = "/nsls2/data/smi/shared/config/bluesky/tiled_backup"
 
-
-class TiledInserter:
-    def insert(self, name, doc):
-        attempts = 20
-        error = None
-        for _ in range(attempts):
-            try:
-                tiled_writing_client.post_document(name, doc)
-            except Exception as exc:
-                print("Document saving failure:", repr(exc))
-                error = exc
-            else:
-                break
-            time.sleep(2)
-        else:
-            raise error
-
-
-tiled_inserter = TiledInserter()
+tiled_inserter = TiledInserter(
+    tiled_writing_client_raw,
+    "smi",
+    backup_directory=f"{TILED_BACKUP_ROOT}/raw",
+)
+tiled_inserter = BufferingWrapper(tiled_inserter)  # in-process queue
 
 # Reads use the remote Tiled client below; writes use tiled_inserter and Kafka.
 # Do not construct the unused local Mongo broker: its adapter couples startup to
@@ -120,7 +108,7 @@ nslsii.configure_base(
 RE = _user_ns["RE"]
 bec = _user_ns["bec"]
 sd = _user_ns["sd"]
-RE.subscribe(tiled_inserter.insert)
+RE.subscribe(tiled_inserter)
 
 from smi_beamline.devices import _context as _seam
 
@@ -203,7 +191,9 @@ def patch_resource(doc):
 tiled_writing_client_sql = from_uri(
     "https://tiled.nsls2.bnl.gov", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"]
 )["smi/migration"]
+tiled_writing_client_sql.context.http_client.headers["tiled-qos"] = "acquisition"
 tw = TiledWriter(tiled_writing_client_sql, batch_size=10000,
+                 backup_directory=f"{TILED_BACKUP_ROOT}/sql",
                  patches={"resource": patch_resource, "descriptor": patch_descriptor})
 tw = BufferingWrapper(tw)
 RE.subscribe(tw)

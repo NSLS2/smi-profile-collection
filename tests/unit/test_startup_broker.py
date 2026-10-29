@@ -42,9 +42,17 @@ def test_startup_uses_remote_broker_and_preserves_callbacks(monkeypatch, worker)
     monkeypatch.setattr(nslsii, "configure_kafka_publisher", configure_kafka)
     monkeypatch.setattr(BestEffortCallback, "__call__",
                         lambda self, name, doc: bec_documents.append(name))
+    
+    class CallableNamespace(SimpleNamespace):
+        def __hash__(self):
+            return id(self)  # Uses the object's unique memory address
+
+        def __call__(self, name, doc):
+            documents.append(name)
+
     ns = {"nslsii": SimpleNamespace(configure_base=configure_base), "_user_ns": {},
           "IS_QS_WORKER": worker,
-          "tiled_inserter": SimpleNamespace(insert=lambda name, doc: documents.append(name))}
+          "tiled_inserter": CallableNamespace()}
     exec(compile(ast.Module(body=tree.body[start:end + 1], type_ignores=[]), str(path), "exec"), ns)
 
     def plan():
