@@ -27,7 +27,7 @@ databroker = "==2.0.0"
 # SQLAlchemy 2.1 no longer brings greenlet in as a default dependency.
 greenlet = ">=3,<4"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
-bluesky-tiled-plugins = ">=2.0.12"
+bluesky-tiled-plugins = ">=2.0.13"
 ophyd-async = ">=0.13.7,<0.14"
 openai = ">=2.15.0,<3"
 anthropic = ">=0.77.0,<0.78"

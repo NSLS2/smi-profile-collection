@@ -41,8 +41,7 @@ import time
 
 import nslsii
 import redis
-from bluesky.callbacks.buffer import BufferingWrapper
-from bluesky_tiled_plugins import TiledInserter, TiledWriter
+from bluesky_tiled_plugins import BufferingWrapper, TiledInserter, TiledWriter
 from databroker import Broker
 from IPython.terminal.prompts import Prompts
 import matplotlib.pyplot as plt
