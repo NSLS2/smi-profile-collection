@@ -146,6 +146,8 @@ def ps(
     ps.fit_success = False
     ps.fit_kind = None
 
+    _context.get_flush()()  # wait for buffered documents to reach Tiled
+
     # get the scan information:
     h = db[uid]
     uid = h.start['scan_id']
