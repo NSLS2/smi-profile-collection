@@ -41,7 +41,7 @@ classes import-clean and hardware-free at import time.
 __all__ = [
     "configure", "get_md", "get_config", "current_energy_eV", "is_configured",
     "get_re", "get_sd", "get_bec", "get_db", "get_sample_store", "get_status_store",
-    "baseline_register",
+    "get_flush", "baseline_register",
 ]
 
 
@@ -55,10 +55,12 @@ _bec = None            # BestEffortCallback
 _db = None             # databroker / Broker
 _sample_store = None   # Redis-backed sample/holder store (RedisJSONDict on db=2) or dict fallback
 _status_store = None   # raw Redis client for EPHEMERAL RE liveness/status (db=3), or None
+_flush = None          # zero-arg callable that blocks until buffered documents reach Tiled
 
 
 def configure(*, run_engine=None, config_dict=None, energy_source=None,
-              sd=None, bec=None, db=None, sample_store=None, status_store=None):
+              sd=None, bec=None, db=None, sample_store=None, status_store=None,
+              flush=None):
     """Wire the real runtime objects into the seam (called once, early, by the profile).
 
     Parameters
@@ -89,8 +91,13 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         ``RedisJSONDict``) so the busy flag can be written with a TTL (``SETEX``) and refreshed by
         a heartbeat -- see :mod:`smi_beamline.plans.re_status`.  Reached via
         :func:`get_status_store`.
+    flush : callable(), optional
+        A zero-arg callable that blocks until all buffered documents have been written to
+        Tiled (the profile's ``flush_tiled``).  Documents are written through buffered
+        callbacks, so Tiled's view may lag behind Bluesky; plans that read a just-acquired run
+        back from ``get_db()`` must call :func:`get_flush` first.  Reached via :func:`get_flush`.
     """
-    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db, _sample_store, _status_store
+    global _run_engine, _config_dict, _energy_source, _sd, _bec, _db, _sample_store, _status_store, _flush
     if run_engine is not None:
         _run_engine = run_engine
     if config_dict is not None:
@@ -107,6 +114,8 @@ def configure(*, run_engine=None, config_dict=None, energy_source=None,
         _sample_store = sample_store
     if status_store is not None:
         _status_store = status_store
+    if flush is not None:
+        _flush = flush
 
 
 def is_configured():
@@ -132,6 +141,17 @@ def get_bec():
 def get_db():
     """Return the injected databroker, or ``None`` if not configured."""
     return _db
+
+
+def get_flush():
+    """Return the injected Tiled-buffer flush callable, or a no-op if not configured.
+
+    Always returns a callable, so call sites can flush unconditionally:
+    ``_context.get_flush()()``.  Call it before reading a just-acquired run back
+    from ``get_db()``: documents are buffered, so Tiled's view may lag behind
+    Bluesky.
+    """
+    return _flush if _flush is not None else (lambda: None)
 
 
 def baseline_register(*devices):

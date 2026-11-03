@@ -197,6 +197,30 @@ tw = TiledWriter(tiled_writing_client_sql, batch_size=10000,
 tw = BufferingWrapper(tw)
 RE.subscribe(tw)
 
+
+def flush_tiled(timeout=30):
+    """Block until all buffered documents have been written to Tiled.
+
+    Call this before reading a just-acquired run back from Tiled: documents
+    are buffered, so Tiled's view may lag behind Bluesky. Flushes every
+    writer buffer, so it stays correct regardless of which writers are
+    subscribed to RE.
+
+    Raises RuntimeError if a buffer does not drain within ``timeout``
+    seconds or its worker thread has died.
+    """
+    for label, buffer in (("raw", tiled_inserter), ("migration", tw)):
+        if not buffer.flush(timeout):
+            raise RuntimeError(
+                f"Tiled {label} buffer was not flushed within {timeout} s "
+                "(timed out or its worker thread died)."
+            )
+
+
+# Wire the flush into the smi_beamline seam, so package plans that read a
+# just-acquired run back from the injected db can wait for Tiled to catch up.
+_seam.configure(flush=flush_tiled)
+
 if not IS_QS_WORKER:
     tiled_reading_client_sql = from_uri("https://tiled.nsls2.bnl.gov")["smi/migration"]
 
