@@ -9,6 +9,7 @@ def test_pil2M():
     print("counting pil2M")
     uid, = RE(bp.count([pil2M]))
     print("accessing the count data")
+    flush_tiled()  # wait for buffered documents to reach Tiled
     db[uid].table(fill=True)
     print("found the data")
 

@@ -85,6 +85,7 @@ def knife_edge_scan(
 
     from smi_plans import pf
 
+    _context.get_flush()()  # wait for buffered documents to reach Tiled
     result = pf(model="erf", plot=plot, show=show, db=_context.get_db())
     print(f"Knife edge center: {pf.cen}")
     print(f"Knife edge FWHM: {pf.fwhm}")

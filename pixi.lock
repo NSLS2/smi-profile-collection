@@ -634,11 +634,11 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/textual-plotext-1.0.1-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/threadpoolctl-3.7.0-pyhc455866_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tifffile-2026.9.20-pyhc364b38_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.19-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.20-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.5.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/toolz-1.2.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tqdm-4.70.1-pyhfa0c392_0.conda
@@ -1329,11 +1329,11 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/textual-plotext-1.0.1-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/threadpoolctl-3.7.0-pyhc455866_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tifffile-2026.9.20-pyhc364b38_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.19-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.20-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/toml-0.10.2-pyhcf101f3_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.5.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/toolz-1.2.0-pyh5ded981_0.conda
@@ -2007,11 +2007,11 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/textual-plotext-1.0.1-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/threadpoolctl-3.7.0-pyhc455866_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tifffile-2026.9.20-pyhc364b38_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.19-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.20-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.5.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/toolz-1.2.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tqdm-4.70.1-pyhfa0c392_0.conda
@@ -2688,11 +2688,11 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/textual-plotext-1.0.1-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/threadpoolctl-3.7.0-pyhc455866_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tifffile-2026.9.20-pyhc364b38_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.19-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.19-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.20-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.20-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.5.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/toolz-1.2.0-pyh5ded981_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tqdm-4.70.1-pyhfa0c392_0.conda
@@ -13293,22 +13293,23 @@ packages:
   run_exports: {}
   size: 232972
   timestamp: 1790152430274
-- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.19-pyhd8ed1ab_0.conda
-  sha256: 67481fced27384e9d538dec666cd822bc14e4e4afc9ac87090931b114ac88716
-  md5: 51650ee77fbbf6046c01f856ca7943dd
+- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-0.2.20-pyhd8ed1ab_0.conda
+  sha256: 8b7c2ca92d78204183824de65420446f302402094138246b6dc0340b7c7a2b44
+  md5: ce7ea23cbc273716892824c47c3af78c
   depends:
   - python >=3.11
-  - tiled-client 0.2.19 pyhd8ed1ab_0
-  - tiled-formats 0.2.19 pyhd8ed1ab_0
-  - tiled-server 0.2.19 pyhd8ed1ab_0
+  - tiled-client 0.2.20 pyhd8ed1ab_0
+  - tiled-formats 0.2.20 pyhd8ed1ab_0
+  - tiled-server 0.2.20 pyhd8ed1ab_0
   license: BSD-3-Clause
+  license_family: BSD
   purls: []
   run_exports: {}
-  size: 8749
-  timestamp: 1791987590637
-- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.19-pyhd8ed1ab_0.conda
-  sha256: c36a68bfc756491d72f2fcfc11c10a4693daac2557f7558ddd7588ceb432c05e
-  md5: b11e2acfdc2025fe2c6d5fea68c61f33
+  size: 8769
+  timestamp: 1792713639477
+- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-base-0.2.20-pyhd8ed1ab_0.conda
+  sha256: 991590da2e07071dc3dfbf5381807a3b8c7299a1c0c84c5e90a528a29c6dbf68
+  md5: 596872a9101abad84565444476e1eae0
   depends:
   - appdirs
   - awkward
@@ -13336,14 +13337,15 @@ packages:
   - xarray
   - zstandard
   license: BSD-3-Clause
+  license_family: BSD
   purls:
   - pkg:pypi/tiled?source=hash-mapping
   run_exports: {}
-  size: 1564113
-  timestamp: 1791987572122
-- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.19-pyhd8ed1ab_0.conda
-  sha256: 4355aeb0f6ab2aa8d1aa185b497e3034d15897439b6d7edf288dc971d8c3fb11
-  md5: b854f1c382ffa47f27e0fa48cf49ae4e
+  size: 1568006
+  timestamp: 1792713631472
+- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-client-0.2.20-pyhd8ed1ab_0.conda
+  sha256: f84b82aec7874ef8e60fc6a70df0dd64730b47ae146d412c13c57ccdca86ecfc
+  md5: 01972027cadac376711b1a2eb2180d61
   depends:
   - entrypoints
   - platformdirs
@@ -13351,16 +13353,17 @@ packages:
   - python >=3.11
   - rich
   - stamina
-  - tiled-base 0.2.19 pyhd8ed1ab_0
+  - tiled-base 0.2.20 pyhd8ed1ab_0
   - websockets
   license: BSD-3-Clause
+  license_family: BSD
   purls: []
   run_exports: {}
-  size: 8303
-  timestamp: 1791987577614
-- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.19-pyhd8ed1ab_0.conda
-  sha256: 7f778a8e33142fbd844e2d81e67756e7afd6a2b6f2e21679c45832d3bbd7b2d7
-  md5: e828e88eda26035fec112f5db471c8a6
+  size: 8291
+  timestamp: 1792713634592
+- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-formats-0.2.20-pyhd8ed1ab_0.conda
+  sha256: 91505098c4c897088a89b00b98f7f598de0aa99595590fd6ac59ffb11cbed9da
+  md5: d330a3984e76a8c1ac64fdd005c3fcc0
   depends:
   - h5netcdf
   - h5py
@@ -13369,15 +13372,16 @@ packages:
   - pillow
   - python >=3.11
   - tifffile
-  - tiled-base 0.2.19 pyhd8ed1ab_0
+  - tiled-base 0.2.20 pyhd8ed1ab_0
   license: BSD-3-Clause
+  license_family: BSD
   purls: []
   run_exports: {}
-  size: 8145
-  timestamp: 1791987581191
-- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.19-pyhd8ed1ab_0.conda
-  sha256: a319f910187af10738d000f4db31fe5c97cde7ea8d368e86dd7773e10cec5e0b
-  md5: 57bb24a5b05deaa958aa5428b47af818
+  size: 8131
+  timestamp: 1792713636203
+- conda: https://conda.anaconda.org/conda-forge/noarch/tiled-server-0.2.20-pyhd8ed1ab_0.conda
+  sha256: 62515023f04015bf01f494003c503df89bd702211398599a8ada4e6592440412
+  md5: e441178334018eb8b3684b94c991e970
   depends:
   - adbc-driver-manager
   - adbc-driver-postgresql
@@ -13409,16 +13413,17 @@ packages:
   - stamina
   - starlette >=0.48.0
   - strawberry-graphql >=0.315.3
-  - tiled-base 0.2.19 pyhd8ed1ab_0
+  - tiled-base 0.2.20 pyhd8ed1ab_0
   - toolz
   - uvicorn
   - watchfiles
   - zarr
   license: BSD-3-Clause
+  license_family: BSD
   purls: []
   run_exports: {}
-  size: 8591
-  timestamp: 1791987584791
+  size: 8593
+  timestamp: 1792713637860
 - conda: https://conda.anaconda.org/conda-forge/noarch/toml-0.10.2-pyhcf101f3_3.conda
   sha256: fd30e43699cb22ab32ff3134d3acf12d6010b5bbaa63293c37076b50009b91f8
   md5: d0fc809fa4c4d85e959ce4ab6e1de800
