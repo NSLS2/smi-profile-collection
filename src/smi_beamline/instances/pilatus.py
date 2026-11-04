@@ -280,15 +280,17 @@ def set_energy(en_ev, thresh_ev=None, gain=1):
 # def check_condition():
 #     #TODO: check if the pressure in the chamber is low enough or if the 900KW power is enabled
 
-def pump_waxs():
+def pump_waxs(turnon_waxs=True):
     # Opt out of the RE-busy GUI lock: pumping holds the RE for ~10-15 min but never moves the
     # alignment motors, so let the operator keep aligning via the GUI while it runs.
     yield from no_re_busy_lock()
     print(f'starting chamber pumping - this can take ~10-15 minutes')
     # perform the autopumping routine
     yield from chamber_pressure.pump_and_wait(verbose=False)
-    print('starting the WAXS detector - this can take a couple minutes')
-    yield from startWAXS()
+
+    if turnon_waxs:
+        print('starting the WAXS detector - this can take a couple minutes')
+        yield from startWAXS()
 
 def vent_waxs():
     # Opt out of the RE-busy GUI lock (see pump_waxs): venting holds the RE for several minutes but
@@ -296,4 +298,3 @@ def vent_waxs():
     yield from no_re_busy_lock()
     print(f'starting chamber venting - this can take 5-10 minutes')
     yield from chamber_pressure.vent()
-

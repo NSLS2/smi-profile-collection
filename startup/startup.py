@@ -158,7 +158,7 @@ class ProposalIDPrompt(Prompts):
             (_PromptToken.Prompt, "SMI "),
             (_PromptToken.Prompt, f"{data_session} "),
             (_PromptToken.Name.Class, f"{project_name} "),
-            (_PromptToken.Comment, f"{now} "),
+            # (_PromptToken.Comment, f"{now} "),
             (_PromptToken.Prompt, "["),
             (_PromptToken.PromptNum, str(self.shell.execution_count)),
             (_PromptToken.Prompt, "]: "),

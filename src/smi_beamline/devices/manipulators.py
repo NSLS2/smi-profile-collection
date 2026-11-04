@@ -254,12 +254,13 @@ class STG_pseudo(PseudoPositioner):
 
         R_lab = Ry(phi) @ Rz(chi) @ Rx(theta)
 
-    The real axes form the nested chain R_real = Rx(theta_real) @
-    Rz(chi_real) @ Ry(phi_real). Thus pseudo angles are generally NOT the
+    The real axes form the nested chain R_real = Rx(-theta_real) @
+    Rz(chi_real) @ Ry(-phi_real). Thus pseudo angles are generally NOT the
     real motor angles, and moving any pseudo angle can move multiple motors.
     At finite rotations Euler coordinates are not three independent rotations
     about fixed lab axes. Real motor EPICS user coordinates supply the angular
-    zeros; no extra angular zero is applied here.
+    zeros; no extra angular zero is applied here. The real rotation signs are
+    provisional until directions are measured and EPICS settings reviewed.
 
     For GI CD-SAXS the physical phi axis must be NORMAL to the sample plane.
     After aligning the axis and sample to the beam, fly phi_real alone: theta
@@ -267,8 +268,8 @@ class STG_pseudo(PseudoPositioner):
     substitute. For a fixed illuminated point during a phi_real-only fly, that
     point must also lie on the physical phi axis; no XYZ compensation occurs.
     Verify beam direction, signs, centers, limits, and physical performance
-    before using this idealized model. Motor signs (especially Z) are not yet
-    experimentally confirmed.
+    before using this idealized model. Z uses the EPICS user coordinate without
+    an additional software reversal; verify its direction after the EPICS change.
 
     ================================================================
     ROTATION CENTERS
@@ -332,6 +333,8 @@ class STG_pseudo(PseudoPositioner):
 
     phi = Cpt(
         PseudoSingle,
+        # Provisional pseudo limits; confirm real direction and physical limits
+        # separately. At zero cradle angles pseudo phi is -phi_real.
         limits=(-250, 120),
         kind="hinted",
         doc="Lab Euler phi in Ry(phi) Rz(chi) Rx(theta)",
@@ -397,6 +400,14 @@ class STG_pseudo(PseudoPositioner):
     # ------------------------------------------------------------------
     # ROTATION CENTER CONFIGURATION SIGNALS
     # ------------------------------------------------------------------
+    # In-air observations, Oct 30, 2026:
+    # at -90, stage.z_real 0 = -3.02
+    # at 90, stage.z_real 0 = 1.08
+    # at 0, stage.x_real 0 = -0.030 mm
+    # Incoming in-air defaults for each axis: cx=1.9, cy=-1.5, cz=-1.0.
+    # Reported in-air estimates: cx=1.95 and cz=-0.97. Historical cx=2.35
+    # was also noted. These values and the active defaults require validation
+    # in the joint parent frames and with the current EPICS motor directions.
 
     # theta center
     cx_theta = Cpt(Signal, value=2.7, kind="config")
@@ -410,7 +421,7 @@ class STG_pseudo(PseudoPositioner):
 
     # phi center
     cx_phi = Cpt(Signal, value=2.7, kind="config")
-    #cx_phi = Cpt(Signal, value=2.19, kind="config")
+    # cx_phi = Cpt(Signal, value=2.19, kind="config")  # historical
     cy_phi = Cpt(Signal, value=-1.5, kind="config")
     cz_phi = Cpt(Signal, value=-1.38, kind="config")
 
@@ -501,7 +512,9 @@ class STG_pseudo(PseudoPositioner):
         real_theta = np.arctan2(rot[2, 1], rot[1, 1])
         real_phi = np.arctan2(rot[0, 2], rot[0, 0])
         theta, chi, phi_principal = np.rad2deg([real_theta, real_chi, real_phi])
-        return theta, chi, cls._unwrap_near(phi_principal, phi)
+        # The theta and phi motor coordinates have the opposite sign to the
+        # corresponding rotations. Unwrap against the motor-coordinate winding.
+        return -theta, chi, cls._unwrap_near(-phi_principal, -phi)
 
     @classmethod
     def _joints_to_lab(cls, theta, chi, phi):
@@ -509,13 +522,13 @@ class STG_pseudo(PseudoPositioner):
         if not np.all(np.isfinite([theta, chi, phi])) or abs(chi) >= 90:
             raise ValueError("Real chi must be finite and strictly between -90 and 90 degrees")
         t, c, p = np.deg2rad([theta, chi, phi])
-        rot = cls.Rx(t) @ cls.Rz(c) @ cls.Ry(p)
+        rot = cls.Rx(-t) @ cls.Rz(c) @ cls.Ry(-p)
         lab_chi = np.arcsin(np.clip(rot[1, 0], -1.0, 1.0))
         cls._check_rotation(rot, np.cos(lab_chi))
         lab_theta = np.arctan2(-rot[1, 2], rot[1, 1])
         lab_phi = np.arctan2(-rot[2, 0], rot[0, 0])
         theta, chi, phi_principal = np.rad2deg([lab_theta, lab_chi, lab_phi])
-        return theta, chi, cls._unwrap_near(phi_principal, phi)
+        return theta, chi, cls._unwrap_near(phi_principal, -phi)
 
     # ------------------------------------------------------------------
     # FORWARD TRANSFORM
@@ -571,9 +584,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(theta)
+        Rtheta = self.Rx(-theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(phi)
+        Rphi = self.Ry(-phi)
 
         # --------------------------------------------------------------
         # STACK ORDER:
@@ -656,9 +669,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(theta)
+        Rtheta = self.Rx(-theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(phi)
+        Rphi = self.Ry(-phi)
 
         # --------------------------------------------------------------
         # Apply from top to bottom: each lower axis carries the axes above it.

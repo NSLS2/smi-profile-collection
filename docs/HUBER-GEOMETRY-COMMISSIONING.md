@@ -25,14 +25,19 @@ relevant checks below pass and the responsible staff accept the result.
   sample normal. They need not be identical. A beam-parallel sample surface at
   zero incidence is not by itself a measurement of gravity vertical.
 - [ ] Note the revised pseudo convention: `R_lab = Ry(phi) Rz(chi) Rx(theta)`;
-  physical orientation is `Rx(theta_real) Rz(chi_real) Ry(phi_real)`. A pseudo
+  physical orientation is `Rx(-theta_real) Rz(chi_real) Ry(-phi_real)`. A pseudo
   angular move may move several real axes. Saved pseudo angles and plans from
   the old pass-through convention are **not automatically equivalent**.
-  Euler angles are not independent fixed-lab rotations at finite angles.
+  Euler angles are not independent fixed-lab rotations at finite angles. The
+  negative theta and phi signs are provisional pending physical measurements;
+  they do not establish the correct EPICS directions.
 - [ ] Note provisional pseudo phi limits of -250 to +120 degrees. Confirm real
   EPICS limits, both ends of travel, all intermediate clearances, and the
   encoder's multi-turn convention. The pseudo angle is a lab Euler angle, not
-  necessarily equal to physical phi; its limits do not certify real travel.
+  necessarily equal to physical phi; under the current model, at zero cradle
+  angles it has the opposite sign. These pseudo limits are retained unchanged
+  pending determination of the real motor direction; they do not certify real
+  travel and must be reviewed against the physical motor limits.
 - [ ] Record EPICS user/dial readbacks, direction, offset and offset-freeze/set
   configuration for each real motor. EPICS owns angular zeros; changing a motor
   zero or direction alters the model's zero frame and requires revalidation.
@@ -40,6 +45,22 @@ relevant checks below pass and the responsible staff accept the result.
   Ophyd motor fields, including `user_offset`, to Bluesky. A write to an offset
   can change motor-coordinate interpretation: use the approved motor-record
   procedure and explicit authorization, not an ad hoc put.
+- [ ] First measure each motor's physical direction against the agreed
+  right-handed coordinate system, including the actual EPICS user and dial
+  readbacks, `DIR`, offset, limits and angular zero. Use only independently
+  approved small moves and a safe envelope. Record the measurements and their
+  uncertainty; do not infer a direction from the current software signs.
+- [ ] After measurement and staff review, decide whether any EPICS `DIR` and
+  associated motor-record settings need correction so user coordinates follow
+  the agreed right-hand-rule geometry. Changes belong to an authorized EPICS
+  procedure with before/after records, limit and offset review, and a rollback
+  plan; this checklist does not authorize or perform them.
+- [ ] After any approved EPICS changes, independently remeasure directions,
+  zeros, limits and rotation centers. Update the software transformations,
+  pseudo limits, documentation and offline tests together to match the verified
+  user-coordinate convention, removing provisional sign reversals only when
+  the measurements justify it. Repeat the commissioning and safety review
+  before using the revised transform for sample motion.
 - [ ] Record all nine center signals. Their existing defaults are not measured
   calibrations and are in-memory signals; retain the measured calibration
   externally and restore it deliberately when needed. Each center is expressed
@@ -59,8 +80,9 @@ relevant checks below pass and the responsible staff accept the result.
   criteria. Start with small, reviewed ranges; do not assume the nominal cradle
   +/-4-degree or phi -250/+120-degree ranges are currently safe or reachable.
 - [ ] Verify motor readbacks, step directions, translations and scale with
-  small, approved independent checks. **Z sign is specifically unconfirmed**;
-  do not infer it from a motor name or change software based on a guess.
+  small, approved independent checks. The Z EPICS direction was changed; the
+  model uses the resulting user coordinate without an additional reversal.
+  Confirm its physical sign and the centers in that coordinate before use.
 - [ ] Use **Huber real motors only** for the baseline Huber calibration and
   keep the SmarAct motors fixed and documented. Move between fixture features
   using Huber translations only after checking reach and clearance. SmarAct may
