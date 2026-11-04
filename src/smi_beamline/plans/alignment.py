@@ -386,7 +386,7 @@ def alignement_gisaxs_doblestack(angle=0.15):
     yield from smi.setReflectedBeamROI(total_angle=angle, technique="gisaxs")
 
     # Scan theta and height
-    yield from align_gisaxs_th(0.2, 21)
+    # yield from align_gisaxs_th(0.2, 21)
     yield from align_gisaxs_height_rb(150, 16)
 
     cb=close_plots()
@@ -774,9 +774,9 @@ def alignement_gisaxs_short(angle=0.15):
     yield from align_gisaxs_th(1.5, 27)
 
     yield from align_gisaxs_height(800, 21, der=True)
-    yield from align_gisaxs_th(1.5, 27)
+    # yield from align_gisaxs_th(1.5, 27)
     cb=close_plots()
-    yield from bpp.subs_wrapper(align_gisaxs_th_hex(0.06, 25), cb) 
+    yield from bpp.subs_wrapper(align_gisaxs_th(1.5, 27), cb) 
 
     yield from smi.modeMeasurement()
 

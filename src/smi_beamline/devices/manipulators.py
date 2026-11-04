@@ -374,22 +374,31 @@ class STG_pseudo(PseudoPositioner):
     # ------------------------------------------------------------------
     # ROTATION CENTER CONFIGURATION SIGNALS
     # ------------------------------------------------------------------
+# in air Oct 30, 2026
+# at -90, stage.z_real 0 = -3.02
+# at 90, stage.z_real 0 = 1.08
+# at 0, stage.x_real 0 = -0.030 mm
 
     # theta center
-    cx_theta = Cpt(Signal, value=2.7, kind="config")
+    cx_theta = Cpt(Signal, value=1.9, kind="config")
+    # 2.7 in vac (historically)   / 1.95 in air 
+    #Guillaume before 2.35
+
     cy_theta = Cpt(Signal, value=-1.5, kind="config")
-    cz_theta = Cpt(Signal, value=-1.38, kind="config")
+    cz_theta = Cpt(Signal, value=-1., kind="config") 
+    #-1.38 (historically) in vac  /   -0.97 in air
 
     # chi center
-    cx_chi = Cpt(Signal, value=2.7, kind="config")
+    cx_chi = Cpt(Signal, value=1.9, kind="config")
     cy_chi = Cpt(Signal, value=-1.5, kind="config")
-    cz_chi = Cpt(Signal, value=-1.38, kind="config")
+    cz_chi = Cpt(Signal, value=-1., kind="config")
 
     # phi center
-    cx_phi = Cpt(Signal, value=2.7, kind="config")
+    cx_phi = Cpt(Signal, value=1.9, kind="config")
+
     #cx_phi = Cpt(Signal, value=2.19, kind="config")
     cy_phi = Cpt(Signal, value=-1.5, kind="config")
-    cz_phi = Cpt(Signal, value=-1.38, kind="config")
+    cz_phi = Cpt(Signal, value=-1., kind="config")
 
     # ------------------------------------------------------------------
     # BACKWARDS-COMPATIBLE AXIS ALIASES
@@ -502,9 +511,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(theta)
+        Rtheta = self.Rx(-theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(phi)
+        Rphi = self.Ry(-phi)
 
         # --------------------------------------------------------------
         # STACK ORDER:
@@ -587,9 +596,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(theta)
+        Rtheta = self.Rx(-theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(phi)
+        Rphi = self.Ry(-phi)
 
         # --------------------------------------------------------------
         # Apply forward transforms in stack order
@@ -657,3 +666,6 @@ class STG_pseudo(PseudoPositioner):
         self.cx_phi.put(x)
         self.cy_phi.put(y)
         self.cz_phi.put(z)
+
+
+

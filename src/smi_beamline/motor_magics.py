@@ -248,6 +248,8 @@ def _position(shell, command):
 
 
 def _where(shell):
+    # TODO: Show the stage pseudo positions and real motor readbacks separately
+    # in %wh so operators can distinguish laboratory coordinates from motor values.
     axes = ("x", "y", "z", "th", "ph", "ch")
     rows, errors = [], []
     for device, prefix in (("piezo", ""), ("stage", "s")):
@@ -408,6 +410,8 @@ def _command(shell, command, line):
 
     if command in MOTOR_MAGICS:
         device_name, axis, units = MOTOR_MAGICS[command]
+        # TODO: For stage magics (%sx, %sy, etc.), show both pseudo positions
+        # and real motor readbacks for clarity, including after a move.
         if not tokens:
             _table(shell, ["Motor", "Position"], [[f"{device_name}.{axis}", _position(shell, command)]])
             return
