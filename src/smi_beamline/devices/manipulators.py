@@ -243,23 +243,41 @@ class STG_pseudo(PseudoPositioner):
     PSEUDO COORDINATES
     ================================================================
 
-    Pseudo XYZ coordinates remain fixed in laboratory space
-    while the real motors compensate during rotations.
+    Pseudo XYZ coordinates are laboratory-frame coordinates of a point on the
+    upper stack. Real translations compensate at the requested endpoint.
 
         x       : inboard / outboard
         y       : up / down
         z       : upstream / downstream
 
-        theta   : rotation about lab X
-        chi     : rotation about lab Z
-        phi     : rotation about lab Y
+    The angular coordinates are a fixed-axis Euler convention, in degrees:
+
+        R_lab = Ry(phi) @ Rz(chi) @ Rx(theta)
+
+    The real axes form the nested chain R_real = Rx(theta_real) @
+    Rz(chi_real) @ Ry(phi_real). Thus pseudo angles are generally NOT the
+    real motor angles, and moving any pseudo angle can move multiple motors.
+    At finite rotations Euler coordinates are not three independent rotations
+    about fixed lab axes. Real motor EPICS user coordinates supply the angular
+    zeros; no extra angular zero is applied here.
+
+    For GI CD-SAXS the physical phi axis must be NORMAL to the sample plane.
+    After aligning the axis and sample to the beam, fly phi_real alone: theta
+    and chi must not move during that exposure. A pseudo phi move is not a
+    substitute. For a fixed illuminated point during a phi_real-only fly, that
+    point must also lie on the physical phi axis; no XYZ compensation occurs.
+    Verify beam direction, signs, centers, limits, and physical performance
+    before using this idealized model. Motor signs (especially Z) are not yet
+    experimentally confirmed.
 
     ================================================================
     ROTATION CENTERS
     ================================================================
 
-    Rotation centers are configuration signals stored in
-    laboratory coordinates.
+    Rotation centers are configuration signals in the shared zero-pose
+    coordinate system (the lab frame when all three real angles are zero).
+    Each center is fixed in its own joint's parent frame. A change to EPICS
+    angular zeros changes this reference and requires revalidation.
 
     Each rotational axis may have an independent center:
         theta center
@@ -270,6 +288,7 @@ class STG_pseudo(PseudoPositioner):
     """
 
     real_move_deadband = 0.001
+    angular_move_deadband = 0.0001
     status_description = sample_status("mm")
 
     # ------------------------------------------------------------------
@@ -301,21 +320,21 @@ class STG_pseudo(PseudoPositioner):
         PseudoSingle,
         limits=(-90, 90),
         kind="hinted",
-        doc="Rotation about laboratory X axis",
+        doc="Lab Euler theta in Ry(phi) Rz(chi) Rx(theta)",
     )
 
     chi = Cpt(
         PseudoSingle,
-        limits=(-180, 180),
+        limits=(-89.999, 89.999),
         kind="hinted",
-        doc="Rotation about laboratory Z axis",
+        doc="Lab Euler chi in Ry(phi) Rz(chi) Rx(theta)",
     )
 
     phi = Cpt(
         PseudoSingle,
-        limits=(-90, 90),
+        limits=(-250, 120),
         kind="hinted",
-        doc="Rotation about laboratory Y axis",
+        doc="Lab Euler phi in Ry(phi) Rz(chi) Rx(theta)",
     )
 
     # ------------------------------------------------------------------
@@ -364,12 +383,16 @@ class STG_pseudo(PseudoPositioner):
         kind="normal",
     )
 
-    def __init__(self, *args, real_move_deadband=None, **kwargs):
+    def __init__(self, *args, real_move_deadband=None, angular_move_deadband=None, **kwargs):
         super().__init__(*args, **kwargs)
         if real_move_deadband is not None:
             self.real_move_deadband = real_move_deadband
-        for motor in self.real_positioners:
+        if angular_move_deadband is not None:
+            self.angular_move_deadband = angular_move_deadband
+        for motor in (self.x_real, self.y_real, self.z_real):
             motor.deadband = self.real_move_deadband
+        for motor in (self.theta_real, self.chi_real, self.phi_real):
+            motor.deadband = self.angular_move_deadband
 
     # ------------------------------------------------------------------
     # ROTATION CENTER CONFIGURATION SIGNALS
@@ -449,6 +472,51 @@ class STG_pseudo(PseudoPositioner):
             [0, 0, 1],
         ])
 
+    @staticmethod
+    def _unwrap_near(angle, reference):
+        """Choose the 360-degree branch nearest the supplied phi coordinate."""
+        return reference + (angle - reference + 180.0) % 360.0 - 180.0
+
+    @staticmethod
+    def _check_rotation(rotation, middle_cosine):
+        if not np.all(np.isfinite(rotation)):
+            raise ValueError("Huber orientation angles must be finite")
+        if abs(middle_cosine) < 1e-10:
+            raise ValueError("Huber Euler orientation is at a singularity")
+
+    @classmethod
+    def _lab_to_joints(cls, theta, chi, phi):
+        """Decompose Ry(phi) Rz(chi) Rx(theta) into nested real joints.
+
+        Select the branch with |real chi| < 90 degrees, appropriate to the
+        cradle. Preserve phi winding rather than wrapping at +/-180 degrees.
+        Real motor limit checks still determine whether the pose is reachable.
+        """
+        if not np.all(np.isfinite([theta, chi, phi])) or abs(chi) >= 90:
+            raise ValueError("Lab Euler chi must be finite and strictly between -90 and 90 degrees")
+        t, c, p = np.deg2rad([theta, chi, phi])
+        rot = cls.Ry(p) @ cls.Rz(c) @ cls.Rx(t)
+        real_chi = np.arcsin(np.clip(-rot[0, 1], -1.0, 1.0))
+        cls._check_rotation(rot, np.cos(real_chi))
+        real_theta = np.arctan2(rot[2, 1], rot[1, 1])
+        real_phi = np.arctan2(rot[0, 2], rot[0, 0])
+        theta, chi, phi_principal = np.rad2deg([real_theta, real_chi, real_phi])
+        return theta, chi, cls._unwrap_near(phi_principal, phi)
+
+    @classmethod
+    def _joints_to_lab(cls, theta, chi, phi):
+        """Decompose nested real joints into the lab Euler convention."""
+        if not np.all(np.isfinite([theta, chi, phi])) or abs(chi) >= 90:
+            raise ValueError("Real chi must be finite and strictly between -90 and 90 degrees")
+        t, c, p = np.deg2rad([theta, chi, phi])
+        rot = cls.Rx(t) @ cls.Rz(c) @ cls.Ry(p)
+        lab_chi = np.arcsin(np.clip(rot[1, 0], -1.0, 1.0))
+        cls._check_rotation(rot, np.cos(lab_chi))
+        lab_theta = np.arctan2(-rot[1, 2], rot[1, 1])
+        lab_phi = np.arctan2(-rot[2, 0], rot[0, 0])
+        theta, chi, phi_principal = np.rad2deg([lab_theta, lab_chi, lab_phi])
+        return theta, chi, cls._unwrap_near(phi_principal, phi)
+
     # ------------------------------------------------------------------
     # FORWARD TRANSFORM
     #
@@ -472,9 +540,10 @@ class STG_pseudo(PseudoPositioner):
         # angles
         # --------------------------------------------------------------
 
-        theta = np.deg2rad(pseudo_pos.theta)
-        chi = np.deg2rad(pseudo_pos.chi)
-        phi = np.deg2rad(pseudo_pos.phi)
+        theta_real, chi_real, phi_real = self._lab_to_joints(
+            pseudo_pos.theta, pseudo_pos.chi, pseudo_pos.phi
+        )
+        theta, chi, phi = np.deg2rad([theta_real, chi_real, phi_real])
 
         # --------------------------------------------------------------
         # centers
@@ -511,14 +580,14 @@ class STG_pseudo(PseudoPositioner):
         #
         # theta -> chi -> phi -> xyz
         #
-        # For pseudo->real compensation we apply inverse transforms
-        # in reverse order.
+        # A point on the top stack is carried by phi, then chi, then theta.
+        # To find the real translations for a lab point, invert theta first.
         # --------------------------------------------------------------
 
-        # phi
+        # theta
         p = (
-            Rphi.T @ (p - c_phi)
-            + c_phi
+            Rtheta.T @ (p - c_theta)
+            + c_theta
         )
 
         # chi
@@ -527,19 +596,19 @@ class STG_pseudo(PseudoPositioner):
             + c_chi
         )
 
-        # theta
+        # phi
         p = (
-            Rtheta.T @ (p - c_theta)
-            + c_theta
+            Rphi.T @ (p - c_phi)
+            + c_phi
         )
 
         return self.RealPosition(
             x_real=p[0],
             y_real=p[1],
             z_real=p[2],
-            theta_real=pseudo_pos.theta,
-            chi_real=pseudo_pos.chi,
-            phi_real=pseudo_pos.phi,
+            theta_real=theta_real,
+            chi_real=chi_real,
+            phi_real=phi_real,
         )
 
     # ------------------------------------------------------------------
@@ -592,13 +661,13 @@ class STG_pseudo(PseudoPositioner):
         Rphi = self.Ry(phi)
 
         # --------------------------------------------------------------
-        # Apply forward transforms in stack order
+        # Apply from top to bottom: each lower axis carries the axes above it.
         # --------------------------------------------------------------
 
-        # theta
+        # phi
         p = (
-            Rtheta @ (p - c_theta)
-            + c_theta
+            Rphi @ (p - c_phi)
+            + c_phi
         )
 
         # chi
@@ -607,10 +676,14 @@ class STG_pseudo(PseudoPositioner):
             + c_chi
         )
 
-        # phi
+        # theta
         p = (
-            Rphi @ (p - c_phi)
-            + c_phi
+            Rtheta @ (p - c_theta)
+            + c_theta
+        )
+
+        lab_theta, lab_chi, lab_phi = self._joints_to_lab(
+            real_pos.theta_real, real_pos.chi_real, real_pos.phi_real
         )
 
         return self.PseudoPosition(
@@ -618,9 +691,9 @@ class STG_pseudo(PseudoPositioner):
             y=p[1],
             z=p[2],
 
-            theta=real_pos.theta_real,
-            chi=real_pos.chi_real,
-            phi=real_pos.phi_real,
+            theta=lab_theta,
+            chi=lab_chi,
+            phi=lab_phi,
         )
 
     # ------------------------------------------------------------------
@@ -628,16 +701,11 @@ class STG_pseudo(PseudoPositioner):
     # ------------------------------------------------------------------
 
     def check_value(self, pos):
-
-        real = self.forward(pos)
-
-        self.x_real.check_value(real.x_real)
-        self.y_real.check_value(real.y_real)
-        self.z_real.check_value(real.z_real)
-
-        self.theta_real.check_value(real.theta_real)
-        self.chi_real.check_value(real.chi_real)
-        self.phi_real.check_value(real.phi_real)
+        # The base implementation checks BOTH pseudo limits and all transformed
+        # real limits. Endpoint checks are not a collision or trajectory check.
+        if not np.all(np.isfinite(pos)):
+            raise ValueError("Huber pseudo coordinates must be finite")
+        super().check_value(pos)
 
     # ------------------------------------------------------------------
     # CONVENIENCE METHODS
