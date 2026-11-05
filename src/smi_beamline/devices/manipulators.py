@@ -412,18 +412,18 @@ class STG_pseudo(PseudoPositioner):
     # theta center
     cx_theta = Cpt(Signal, value=2.7, kind="config")
     cy_theta = Cpt(Signal, value=-1.5, kind="config")
-    cz_theta = Cpt(Signal, value=-1.38, kind="config")
+    cz_theta = Cpt(Signal, value=1.38, kind="config")
 
     # chi center
     cx_chi = Cpt(Signal, value=2.7, kind="config")
     cy_chi = Cpt(Signal, value=-1.5, kind="config")
-    cz_chi = Cpt(Signal, value=-1.38, kind="config")
+    cz_chi = Cpt(Signal, value=1.38, kind="config")
 
     # phi center
     cx_phi = Cpt(Signal, value=2.7, kind="config")
     # cx_phi = Cpt(Signal, value=2.19, kind="config")  # historical
     cy_phi = Cpt(Signal, value=-1.5, kind="config")
-    cz_phi = Cpt(Signal, value=-1.38, kind="config")
+    cz_phi = Cpt(Signal, value=1.38, kind="config")
 
     # ------------------------------------------------------------------
     # BACKWARDS-COMPATIBLE AXIS ALIASES
@@ -584,9 +584,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(-theta)
+        Rtheta = self.Rx(theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(-phi)
+        Rphi = self.Ry(phi)
 
         # --------------------------------------------------------------
         # STACK ORDER:
@@ -669,9 +669,9 @@ class STG_pseudo(PseudoPositioner):
         # rotation matrices
         # --------------------------------------------------------------
 
-        Rtheta = self.Rx(-theta)
+        Rtheta = self.Rx(theta)
         Rchi = self.Rz(chi)
-        Rphi = self.Ry(-phi)
+        Rphi = self.Ry(phi)
 
         # --------------------------------------------------------------
         # Apply from top to bottom: each lower axis carries the axes above it.
