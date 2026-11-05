@@ -15,7 +15,9 @@ relevant checks below pass and the responsible staff accept the result.
   above theta, phi is above the cradle, and Y/X/Z translations carry the sample.
   Confirm axes, signs, coordinate conventions and any nonorthogonality by
   inspection and measurement. The nominal model is theta about X, chi about Z,
-  phi about Y; X is inboard/outboard, Y vertical and Z along the beam.
+  phi about Y. The intended right-handed lab frame is +X inboard, +Y up,
+  +Z upstream (the beam travels along −Z); positive rotations follow the
+  right-hand rule. Verify the physical layout and each motor mapping separately.
 - [ ] For GI CD-SAXS, align the **physical phi axis normal to the sample plane**.
   Then fly **`stage.phi_real` only**, with real theta and chi held fixed, so the
   sample rotates azimuthally at approximately constant incidence. For a fixed
@@ -25,18 +27,18 @@ relevant checks below pass and the responsible staff accept the result.
   sample normal. They need not be identical. A beam-parallel sample surface at
   zero incidence is not by itself a measurement of gravity vertical.
 - [ ] Note the revised pseudo convention: `R_lab = Ry(phi) Rz(chi) Rx(theta)`;
-  physical orientation is `Rx(-theta_real) Rz(chi_real) Ry(-phi_real)`. A pseudo
+  the model's real-joint orientation is `Rx(theta_real) Rz(chi_real) Ry(phi_real)`. A pseudo
   angular move may move several real axes. Saved pseudo angles and plans from
   the old pass-through convention are **not automatically equivalent**.
   Euler angles are not independent fixed-lab rotations at finite angles. The
-  negative theta and phi signs are provisional pending physical measurements;
-  they do not establish the correct EPICS directions.
+  real-joint signs follow the historical source convention; they do not establish
+  actual motor directions or prove the current EPICS user coordinates match it.
 - [ ] Note provisional pseudo phi limits of -250 to +120 degrees. Confirm real
   EPICS limits, both ends of travel, all intermediate clearances, and the
   encoder's multi-turn convention. The pseudo angle is a lab Euler angle, not
   necessarily equal to physical phi; under the current model, at zero cradle
-  angles it has the opposite sign. These pseudo limits are retained unchanged
-  pending determination of the real motor direction; they do not certify real
+  angles it has the same sign. These pseudo limits are retained unchanged
+  pending verification of the real motor direction; they do not certify real
   travel and must be reviewed against the physical motor limits.
 - [ ] Record EPICS user/dial readbacks, direction, offset and offset-freeze/set
   configuration for each real motor. EPICS owns angular zeros; changing a motor
@@ -58,8 +60,7 @@ relevant checks below pass and the responsible staff accept the result.
 - [ ] After any approved EPICS changes, independently remeasure directions,
   zeros, limits and rotation centers. Update the software transformations,
   pseudo limits, documentation and offline tests together to match the verified
-  user-coordinate convention, removing provisional sign reversals only when
-  the measurements justify it. Repeat the commissioning and safety review
+  user-coordinate convention. Repeat the commissioning and safety review
   before using the revised transform for sample motion.
 - [ ] Record all nine center signals. Their existing defaults are not measured
   calibrations and are in-memory signals; retain the measured calibration
@@ -80,9 +81,9 @@ relevant checks below pass and the responsible staff accept the result.
   criteria. Start with small, reviewed ranges; do not assume the nominal cradle
   +/-4-degree or phi -250/+120-degree ranges are currently safe or reachable.
 - [ ] Verify motor readbacks, step directions, translations and scale with
-  small, approved independent checks. The Z EPICS direction was changed; the
-  model uses the resulting user coordinate without an additional reversal.
-  Confirm its physical sign and the centers in that coordinate before use.
+  small, approved independent checks. The historical Z EPICS direction was
+  reported restored; the model uses the user coordinate without an additional
+  reversal. Confirm its physical sign, zero and centers before use.
 - [ ] Use **Huber real motors only** for the baseline Huber calibration and
   keep the SmarAct motors fixed and documented. Move between fixture features
   using Huber translations only after checking reach and clearance. SmarAct may
