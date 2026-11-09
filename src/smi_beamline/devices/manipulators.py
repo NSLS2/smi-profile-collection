@@ -415,20 +415,26 @@ class STG_pseudo(PseudoPositioner):
     # in the joint parent frames and with the current EPICS motor directions.
 
     # theta center
-    cx_theta = Cpt(Signal, value=2.7, kind="config")
+    cx_theta = Cpt(Signal, value=-10, kind="config")
     cy_theta = Cpt(Signal, value=-1.5, kind="config")
-    cz_theta = Cpt(Signal, value=-1.38, kind="config")
+    cz_theta = Cpt(Signal, value=7, kind="config")
+    
 
     # chi center
-    cx_chi = Cpt(Signal, value=2.7, kind="config")
+    cx_chi = Cpt(Signal, value=-10, kind="config")
     cy_chi = Cpt(Signal, value=-1.5, kind="config")
-    cz_chi = Cpt(Signal, value=-1.38, kind="config")
+    cz_chi = Cpt(Signal, value=7, kind="config")
+    # old values:
+    # cx_chi = Cpt(Signal, value=2.7, kind="config")
+    # cy_chi = Cpt(Signal, value=-1.5, kind="config")
+    # cz_chi = Cpt(Signal, value=-1.38, kind="config")
 
     # phi center
-    cx_phi = Cpt(Signal, value=2.7, kind="config")
+    cx_phi = Cpt(Signal, value=-10, kind="config")
     # cx_phi = Cpt(Signal, value=2.19, kind="config")  # historical
     cy_phi = Cpt(Signal, value=-1.5, kind="config")
-    cz_phi = Cpt(Signal, value=-1.38, kind="config")
+    cz_phi = Cpt(Signal, value=7, kind="config")
+    # new good values -10,0,7
 
     # ------------------------------------------------------------------
     # BACKWARDS-COMPATIBLE AXIS ALIASES

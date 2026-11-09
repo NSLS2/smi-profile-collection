@@ -65,7 +65,7 @@ class SMIBeam(object):
 
     def _determineFoils(self):
         """Return the test alignment attenuation factor for the new attenuation object."""
-        return 1e6
+        return 3e7
 
         """
         Previous fixed individual-foil table, kept inactive while testing the
@@ -250,7 +250,7 @@ class SMI_Beamline(Beamline): # used in alignment
         yield from self.setReflectedBeamROI(technique=technique)
         yield from self.setDirectBeamROI()
 
-        if technique == "gisaxs":
+        if technique == "gisaxs" or technique == 'xrr':
             # Move the waxs detector out of the way
             if waxs.arc.position < 15:
                 yield from bps.mv(waxs.arc, 15)
