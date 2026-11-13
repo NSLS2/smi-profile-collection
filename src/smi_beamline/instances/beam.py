@@ -65,7 +65,7 @@ class SMIBeam(object):
 
     def _determineFoils(self):
         """Return the test alignment attenuation factor for the new attenuation object."""
-        return 3e7
+        return 1e6
 
         """
         Previous fixed individual-foil table, kept inactive while testing the

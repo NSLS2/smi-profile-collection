@@ -424,6 +424,8 @@ def alignement_gisaxs_rough(angle=0.15):
     # Scan height on the DB only
     yield from align_gisaxs_height(800, 21, der=True)
     yield from align_gisaxs_th(2.0, 40)  # was 1.5 27
+    yield from align_gisaxs_height(800, 21, der=True)
+
     cb=close_plots()
     yield from bpp.subs_wrapper(align_gisaxs_th(2.0, 40), cb) 
 

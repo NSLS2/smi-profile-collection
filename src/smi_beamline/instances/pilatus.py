@@ -205,6 +205,8 @@ telnet_command = 'telnet localhost 20002'
 
 #ToDo need to add the good threshold in the restart function> It currently run the default from the camserver
 def restartWAXS():
+    tn = None
+    ssh_shell = None
     try:
         # Connect to the SSH server
         client.connect(hostname=hostname,username=username, password=password)
@@ -247,12 +249,18 @@ def restartWAXS():
         if not completed:
             print('something went wrong, the detector is not ready to use')
         
-        # Close the SSH connection
-        client.close()
-
     finally:
-        # Close the SSH connection
-        client.close()
+        # Telnet wraps the SSH shell channel, not the remote TCP socket itself.
+        # Close both explicitly before closing the SSH transport, even on errors.
+        try:
+            if tn is not None:
+                tn.close()
+        finally:
+            try:
+                if ssh_shell is not None:
+                    ssh_shell.close()
+            finally:
+                client.close()
 
 
 
