@@ -28,6 +28,7 @@ if '__IPYTHON__' in globals():
 # section creates the session-level objects and services that downstream startup code expects:
 #
 # - RE / sd / bec via ``nslsii.configure_base``
+# - JSON-lines log and document-summary files via ``nslsii.configure_bluesky_json_logging``
 # - persistent Redis-backed config/sample stores: mdsave, samplestore
 # - ephemeral Redis status store used by GUI/RunEngine liveness helpers
 # - primary Tiled writer and optional interactive Tiled reader/databroker
@@ -97,6 +98,8 @@ nslsii.configure_base(
     broker_name=None,
     bec_derivative=True,
     publish_documents_with_kafka="smi",
+    # Logs go to the JSON-lines files configured below, not nslsii's text/syslog bluesky logging.
+    configure_logging=False,
     magics=not IS_QS_WORKER,
     mpl=not IS_QS_WORKER,
     redis_url="xf12id2-smi-redis1.nsls2.bnl.gov",
@@ -108,6 +111,9 @@ RE = _user_ns["RE"]
 bec = _user_ns["bec"]
 sd = _user_ns["sd"]
 RE.subscribe(tiled_inserter)
+# Files are written to $BLUESKY_JSON_LOG_DIR (default /var/log/bluesky) and must be rotated
+# outside Python (e.g. logrotate).
+nslsii.configure_bluesky_json_logging(ipython=ipython, RE=RE)
 
 from smi_beamline.devices import _context as _seam
 
