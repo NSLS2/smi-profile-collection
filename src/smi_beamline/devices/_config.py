@@ -96,14 +96,16 @@ CONFIG_KEYS = {
     ),
     "attenuator_tolerance": (
         0.10,
-        "Relative tolerance on a requested attenuation factor (0.10 = 10%).  The selector "
-        "uses the fewest foils that land within this; outside it, it applies the closest "
-        "match and warns.  The ACTUAL achieved factor is always what gets recorded.",
+        "Relative warning tolerance on a requested attenuation factor (0.10 = 10%). "
+        "Does not change the selected combination. The achieved modeled factor from "
+        "the foil readbacks is recorded and reported in shortfall/overshoot warnings.",
     ),
     "attenuator_select_mode": (
         "closest",
-        "Attenuation auto-select objective: 'closest' (match the requested factor on "
-        "either side) or 'atleast' (never less attenuation than requested).",
+        "Attenuation auto-select objective: 'closest' (closest multiplicative match "
+        "within a factor of two, otherwise nearest above target) or 'atleast' (nearest "
+        "above target). If upward selection is impossible, use the strongest allowed "
+        "combination and warn.",
     ),
 }
 

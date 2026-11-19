@@ -2,8 +2,8 @@
 
 Pure code -- no devices, no EPICS.  Exercises
 :mod:`smi_beamline.devices.attenuator_data`: the CXRO-derived transmission curves, the
-thickness-scaling / combination maths, and :func:`select_foils` (the "fewest foils within
-tolerance" auto-selector).
+thickness-scaling / combination maths, and :func:`select_foils` (closest within a
+factor of two, otherwise the nearest upward match).
 """
 import math
 
@@ -156,7 +156,7 @@ def test_foil_description_names_foil_material_and_thickness():
 
 
 # ---------------------------------------------------------------------------
-# selection: fewest foils within tolerance
+# selection: closest within a factor of two, otherwise round upward
 # ---------------------------------------------------------------------------
 def test_select_target_one_is_no_foils():
     labels, factor, ok = ad.select_foils(1.0, 10000.0)
@@ -174,19 +174,19 @@ def test_select_hits_target_within_tolerance():
         assert len(labels) <= 4
 
 
-def test_select_prefers_fewer_foils():
-    # A known two-foil target must not cause the selector to choose three foils.
+def test_select_exact_two_foil_target():
+    # An exact two-foil target must not cause the selector to choose three foils.
     target = ad.attenuation_factor(["2_9", "2_11"], 10000.)
     labels, factor, ok = ad.select_foils(target, 10000.0, tolerance=0.10)
     assert ok
     assert len(labels) <= 2
 
 
-def test_tighter_tolerance_may_use_more_foils():
+def test_warning_tolerance_does_not_change_selection():
     E = 10000.0
     n_loose = len(ad.select_foils(10, E, tolerance=0.10)[0])
     n_tight = len(ad.select_foils(10, E, tolerance=0.02)[0])
-    assert n_tight >= n_loose
+    assert n_tight == n_loose
 
 
 def test_select_respects_max_foils_and_flags_out_of_tolerance():
@@ -215,3 +215,69 @@ def test_candidates_restriction_is_honored():
     al_only = [l for l, (b, m) in ad.FOIL_LAYOUT.items() if b in ("Al_9um", "Al_102um")]
     labels, factor, ok = ad.select_foils(50, 10000.0, candidates=al_only, max_foils=4)
     assert set(labels) <= set(al_only)
+
+
+@pytest.mark.parametrize("target, expected", [
+    (1e6, ("2_9", "2_10")),
+    (5e6, ("2_9", "2_10")),
+    (8e6, ("2_1",)),
+    (1e7, ("2_1",)),
+    (4e7, ("2_1",)),
+])
+def test_2130ev_factor_two_policy(target, expected):
+    labels, factor, ok = ad.select_foils(target, 2130)
+    assert labels == expected
+    assert factor == pytest.approx(ad.attenuation_factor(expected, 2130))
+    assert not ok
+
+
+@pytest.mark.parametrize("fraction, expected", [
+    (0.5 * (1 - 1e-8), "2_1"),
+    (0.5, "2_9"),
+    (0.5 * (1 + 1e-8), "2_9"),
+])
+def test_factor_two_boundary_is_inclusive(monkeypatch, fraction, expected):
+    factors = {"2_9": 100 * fraction, "2_1": 1000}
+    monkeypatch.setattr(ad, "foil_optical_depth", lambda label, energy: math.log(factors[label]))
+    labels, factor, ok = ad.select_foils(100, 2130, candidates=factors, max_foils=1)
+    assert labels == (expected,)
+    assert factor == pytest.approx(factors[expected])
+    assert not ok
+
+
+def test_closest_search_does_not_stop_at_one_foil_within_tolerance(monkeypatch):
+    factors = {"1_1": 100, "1_2": 10, "1_3": 10.1}
+    monkeypatch.setattr(ad, "foil_optical_depth", lambda label, energy: math.log(factors[label]))
+    labels, factor, ok = ad.select_foils(101, 2130, candidates=factors, max_foils=2)
+    assert labels == ("1_2", "1_3")
+    assert factor == pytest.approx(101)
+    assert ok
+
+
+def test_equal_factors_prefer_fewer_foils(monkeypatch):
+    factors = {"1_1": 100, "1_2": 10, "1_3": 10}
+    monkeypatch.setattr(ad, "foil_optical_depth", lambda label, energy: math.log(factors[label]))
+    assert ad.select_foils(100, 2130, candidates=factors, max_foils=2)[0] == ("1_1",)
+
+
+def test_atleast_sparse_gap_uses_nearest_above_not_strongest():
+    labels, factor, ok = ad.select_foils(1e7, 2130, mode="atleast")
+    assert labels == ("2_1",)
+    assert factor == pytest.approx(5.0607865966e7)
+    assert not ok
+
+
+@pytest.mark.parametrize("mode", ["closest", "atleast"])
+def test_unreachable_upward_target_returns_strongest_flagged(mode):
+    labels, factor, ok = ad.select_foils(
+        1e7, 2130, candidates=["2_9", "2_10"], max_foils=2, mode=mode)
+    assert labels == ("2_9", "2_10")
+    assert factor == pytest.approx(3.284888083e6)
+    assert not ok
+
+
+def test_no_foils_is_a_candidate_for_near_unity():
+    labels, factor, ok = ad.select_foils(1.05, 2130)
+    assert labels == ()
+    assert factor == 1
+    assert ok

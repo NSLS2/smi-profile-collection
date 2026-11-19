@@ -375,11 +375,11 @@ class AttenuatorSet(Device):
 
     2. **Sets** a requested attenuation factor: ``yield from bps.mv(attenuation, 100)``
        picks the foil combination whose factor is closest to 100 at the current (or a
-       planned) energy, using as **few foils as possible** (more foils are harder to
-       normalize and scatter more), inserts them via the settled, all-or-nothing bank
+        planned) energy, allowing a closest match within a factor of two and otherwise
+        rounding upward, inserts them via the settled, all-or-nothing bank
        moves, and records the **actual achieved** factor (never the request).  If it
-       cannot get within tolerance with ``max_foils`` foils it still applies the best
-       combination, logs a warning, and the recorded factor reflects what was applied.
+        cannot get within tolerance with ``max_foils`` foils it applies the selected
+        combination and warns with the achieved modeled factor after reading the foils.
 
     3. Lets a plan **pre-compute** for a *planned* energy (before moving the mono) via
        :meth:`set_for_energy`, so attenuation can be staged for the energy a scan is
@@ -427,7 +427,7 @@ class AttenuatorSet(Device):
     max_foils = Cpt(Signal, value=_config.load("attenuator_max_foils"), kind="config")
     #: relative tolerance on the requested factor before a warning is emitted.
     tolerance = Cpt(Signal, value=_config.load("attenuator_tolerance"), kind="config")
-    #: "closest" (match either side) or "atleast" (never less attenuation than asked).
+    #: "closest" (factor-two limit, else round upward) or "atleast" (round upward).
     select_mode = Cpt(Signal, value=_config.load("attenuator_select_mode"), kind="config")
 
     #: the ``RE.md`` key under which the current attenuation state is mirrored, so it lands
@@ -657,31 +657,23 @@ class AttenuatorSet(Device):
         target_factor = float(target_factor)
         energy = self._current_energy(energy_eV)
         self.requested_factor.put(target_factor)
+        tolerance = float(self.tolerance.get())
+        mode = str(self.select_mode.get())
+        max_foils = int(self.max_foils.get())
 
         labels, predicted, ok = _ad.select_foils(
             target_factor, energy,
             candidates=list(self._label_to_bank.keys()),
-            max_foils=int(self.max_foils.get()),
-            tolerance=float(self.tolerance.get()),
-            mode=str(self.select_mode.get()),
+            max_foils=max_foils,
+            tolerance=tolerance,
+            mode=mode,
         )
         self.within_tolerance.put(bool(ok))
 
-        if not ok:
-            logger.warning(
-                "%s: requested attenuation factor %.4g at %.0f eV could not be matched "
-                "within %.0f%% using <=%d foils; applying closest = %.4g (%+.1f%%) with "
-                "foils %s.  The recorded factor reflects what was applied.",
-                self.name, target_factor, energy, 100 * float(self.tolerance.get()),
-                int(self.max_foils.get()), predicted,
-                (predicted / target_factor - 1.0) * 100.0 if target_factor else float("nan"),
-                ["att" + l for l in labels])
-        else:
-            logger.info(
-                "%s: attenuation factor %.4g at %.0f eV -> %d foil(s) %s (achieved ~%.4g, "
-                "%+.1f%%).", self.name, target_factor, energy, len(labels),
-                ["att" + l for l in labels], predicted,
-                (predicted / target_factor - 1.0) * 100.0 if target_factor else 0.0)
+        logger.info(
+            "%s: requested attenuation factor %.4g at %.0f eV; selecting %s "
+            "(predicted modeled factor %.4g; mode=%s).",
+            self.name, target_factor, energy, ["att" + l for l in labels], predicted, mode)
 
         # Drive each bank to exactly the requested subset (insert chosen, retract rest).
         statuses = []
@@ -701,16 +693,33 @@ class AttenuatorSet(Device):
 
         def _on_done(*a, **k):
             try:
-                self.compute(labels=labels, energy_eV=energy)
-            except Exception:
-                logger.exception("%s: failed to refresh reported factor after move",
-                                 self.name)
-            exc = None
-            try:
                 exc = combined.exception()
-            except Exception:
-                pass
-            if exc is not None:
+                if exc is not None:
+                    wrapper.set_exception(exc)
+                    return
+                # Only confirmed readbacks after successful motion describe delivery.
+                state = self.read_state(energy_eV=energy)
+                state = self.compute(labels=state["inserted"], energy_eV=energy)
+                delivered = state["attenuation_factor"]
+                matched = target_factor <= 1 or (
+                    abs(delivered / target_factor - 1.0) <= tolerance
+                    and (mode != "atleast" or delivered >= target_factor))
+                self.within_tolerance.put(bool(ok and matched))
+                if not (ok and matched):
+                    logger.warning(
+                        "%s: requested attenuation factor %.4g at %.0f eV; delivered "
+                        "modeled attenuation factor %.4g (%+.1f%%; %.4g times requested) "
+                        "from foil readbacks %s. Outside %.0f%% tolerance "
+                        "(mode=%s, max_foils=%d).%s",
+                        self.name, target_factor, energy, delivered,
+                        (delivered / target_factor - 1.0) * 100.0,
+                        delivered / target_factor, ["att" + l for l in state["inserted"]],
+                        100 * tolerance, mode, max_foils,
+                        " No allowed combination reaches the target."
+                        if predicted < target_factor and (mode == "atleast" or predicted < target_factor / 2)
+                        else "")
+            except Exception as exc:
+                logger.exception("%s: failed to verify attenuation after move", self.name)
                 wrapper.set_exception(exc)
             else:
                 wrapper.set_finished()

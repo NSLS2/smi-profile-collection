@@ -6,7 +6,7 @@ Builds fake (non-broadcasting) attenuator banks and a fake energy source via the
 * reports an attenuation factor / transmission / text description for the inserted foils
   at the current energy,
 * recomputes when the energy changes (so it works as a per-point primary reading), and
-* ``set(target_factor)`` selects the fewest foils, drives the banks, and records the
+* ``set(target_factor)`` selects the factor-two-policy match, drives the banks, and records the
   ACTUAL achieved factor (not the request).
 """
 import pytest
@@ -262,6 +262,60 @@ def test_set_out_of_tolerance_warns_but_applies(attset, caplog):
     assert att.inserted.get() != ""                 # the best-effort combo was applied
     # and the reported factor is the ACTUAL achieved one (used the closest combo)
     assert att.attenuation_factor.get() != 1.0
+
+
+def test_factor_two_step_up_warns_with_delivered_factor_and_metadata(attset, caplog):
+    from bluesky import RunEngine
+
+    att, b1, b2 = attset
+    _FakeEnergy.set_eV(2130)
+    re = RunEngine({})
+    _context.configure(run_engine=re, energy_source=_FakeEnergy())
+    preview = att.describe_factor(1e7)
+    assert preview[0] == ("2_1",)
+    att.set(1e7).wait(timeout=10)
+    assert b1.inserted_foils() == []
+    assert b2.inserted_foils() == ["f1"]
+    assert att.requested_factor.get() == 1e7
+    assert att.attenuation_factor.get() == pytest.approx(5.0607865966e7)
+    assert re.md[att.md_key]["attenuation_factor"] == att.attenuation_factor.get()
+    assert not att.within_tolerance.get()
+    assert "requested attenuation factor 1e+07 at 2130 eV" in caplog.text
+    assert "delivered modeled attenuation factor 5.061e+07" in caplog.text
+    assert "5.061 times requested" in caplog.text
+    assert "att2_1" in caplog.text
+
+
+@pytest.mark.parametrize("failure", [None, "motion", "readback"])
+def test_delivered_warning_requires_successful_motion_and_readback(attset, monkeypatch, caplog, failure):
+    from ophyd.status import DeviceStatus
+    from ophyd.utils.errors import UnknownStatusFailure
+
+    att, b1, b2 = attset
+    _FakeEnergy.set_eV(2130)
+    statuses = []
+    for bank in (b1, b2):
+        status = DeviceStatus(bank)
+        statuses.append(status)
+        monkeypatch.setattr(bank, "set", lambda want, status=status: status)
+    result = att.set(1e7)
+    assert "delivered modeled" not in caplog.text
+    statuses[0].set_finished()
+    if failure == "motion":
+        statuses[1].set_exception(RuntimeError("foil move failed"))
+    else:
+        # Deliberately different from the requested Mo: reporting must use readbacks.
+        b2.f9.status.sim_put("Open" if failure is None else "Moving")
+        statuses[1].set_finished()
+    if failure:
+        with pytest.raises(UnknownStatusFailure if failure == "motion" else ValueError):
+            result.wait(timeout=5)
+        assert "delivered modeled" not in caplog.text
+    else:
+        result.wait(timeout=5)
+        assert att.inserted.get() == "2_9"
+        assert att.attenuation_factor.get() == pytest.approx(149.838031688)
+        assert "delivered modeled attenuation factor 149.8" in caplog.text
 
 
 # ---------------------------------------------------------------------------

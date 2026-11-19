@@ -632,13 +632,13 @@ def attenuation_factor(labels, energy_eV, *, calibrated=True):
 
 def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
                  tolerance=0.10, mode="closest"):
-    """Choose a foil combination for ``target_factor``, favouring the **fewest foils**.
+    """Choose the closest factor, limiting under-attenuation to a factor of two.
 
-    More foils are harder to normalize and add scatter, so the search is biased toward
-    small sets: it returns the *fewest* foils that land **within ``tolerance``** of the
-    target, and only grows the set when a smaller one cannot get within tolerance.  If no
-    combination up to ``max_foils`` reaches tolerance, it returns the closest match found
-    (the caller is expected to warn and record the actual factor).
+    Search all combinations up to ``max_foils`` using logarithmic distance from the
+    target. Prefer fewer foils only for equally close matches. If the closest match
+    is outside a factor of two, choose the smallest factor at or above the target.
+    If no combination reaches the target in that case, return the strongest allowed
+    combination with ``within_tol=False``; the caller must warn and record it.
 
     Parameters
     ----------
@@ -651,14 +651,12 @@ def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
     max_foils : int, optional
         Hard cap on how many foils may be combined (default 4).
     tolerance : float, optional
-        Relative tolerance on the factor (default 0.10 = within 10%).  A combination is
-        "good enough" if ``|achieved/target - 1| <= tolerance``.  Used to decide when a
-        small foil set is acceptable so a larger, more-precise one is not needed.
+        Relative tolerance on the factor (default 0.10 = within 10%). Controls the
+        returned ``within_tol`` flag, not which combination is selected.
     mode : {"closest", "atleast"}, optional
-        ``"closest"`` (default): a combination counts as in-tolerance if within
-        ``tolerance`` on either side.  ``"atleast"``: only combinations with
-        ``factor >= target`` are acceptable (never less attenuation than requested); the
-        in-tolerance test additionally requires ``factor <= target*(1+tolerance)``.
+        ``"closest"``: closest multiplicative match within a factor of two, inclusive;
+        otherwise round upward. ``"atleast"``: always choose the smallest factor >=
+        target, or the strongest allowed combination if unreachable (flagged False).
 
     Returns
     -------
@@ -668,13 +666,16 @@ def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
 
     Notes
     -----
-    Search is by increasing size (1 foil, then 2, ...): the first size at which an
-    in-tolerance combination exists wins, taking the closest such combination at that
-    size.  With 24 foils this evaluates at most a few thousand combinations and runs only
-    when a *new* target is requested (not per data point).
+    With 24 foils and ``max_foils=4`` this evaluates 12,950 nonempty combinations.
+    An empty combination is also considered for targets near unity. Selection runs
+    when a target is requested, not per data point.
     """
     import itertools
 
+    if not _np.isfinite(target_factor):
+        raise ValueError("target_factor must be finite")
+    if mode not in ("closest", "atleast"):
+        raise ValueError("mode must be 'closest' or 'atleast'")
     if candidates is None:
         candidates = list(FOIL_LAYOUT.keys())
     candidates = list(candidates)
@@ -682,6 +683,8 @@ def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
     # No attenuation requested.
     if target_factor <= 1.0:
         return (), 1.0, True
+    if not candidates or max_foils < 1:
+        raise ValueError("positive attenuation requires candidates and max_foils >= 1")
 
     log_target = _np.log(target_factor)
     # Precompute each candidate's OD at this energy (log(factor) == optical depth).
@@ -692,14 +695,15 @@ def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
             return False
         return abs(factor / target_factor - 1.0) <= tolerance
 
-    # Track the globally closest combination (fallback if nothing is in tolerance), and
-    # for "atleast" the strongest combination (fallback if nothing reaches the target).
+    # Track the closest and nearest-upward matches independently. An under-target
+    # closest match does not mean that no combination reaches the target.
     overall_best = None          # (cost, n, factor, labels)
-    strongest = None             # (od, factor, labels)  for atleast fallback
+    above_best = None            # (od, n, factor, labels)
+    strongest = None             # (od, factor, labels)  for unreachable targets
 
     # Also seed with the empty set so a target ~1 is handled gracefully.
     def _track(labels, od):
-        nonlocal overall_best, strongest
+        nonlocal overall_best, above_best, strongest
         factor = float("inf") if od >= 700 else float(_np.exp(od))
         cost = abs(od - log_target)
         n = len(labels)
@@ -708,30 +712,24 @@ def select_foils(target_factor, energy_eV, candidates=None, max_foils=4,
             overall_best = (cost, n, factor, tuple(labels))
         if strongest is None or od > strongest[0]:
             strongest = (od, factor, tuple(labels))
-        return factor
+        if factor >= target_factor and (above_best is None or od < above_best[0] - 1e-12 or (
+                abs(od - above_best[0]) <= 1e-12 and n < above_best[1])):
+            above_best = (od, n, factor, tuple(labels))
 
+    _track((), 0.0)
     for n in range(1, max_foils + 1):
-        in_tol_at_this_size = None     # (cost, factor, labels)
         for combo in itertools.combinations(candidates, n):
             od = sum(od_at_e[c] for c in combo)
-            factor = _track(combo, od)
-            if _acceptable(factor):
-                cost = abs(od - log_target)
-                if in_tol_at_this_size is None or cost < in_tol_at_this_size[0]:
-                    in_tol_at_this_size = (cost, factor, tuple(combo))
-        if in_tol_at_this_size is not None:
-            # Fewest foils that meet tolerance -> done; take the closest at this size.
-            _, factor, labels = in_tol_at_this_size
-            return tuple(sorted(labels, key=_foil_sort_key)), factor, True
+            _track(combo, od)
 
-    # Nothing within tolerance up to max_foils -> return the best (closest) fallback.
-    if mode == "atleast" and strongest is not None and overall_best is not None \
-            and overall_best[2] < target_factor:
-        # nothing reached the target at all: use the strongest available set.
-        _, factor, labels = strongest
+    if mode == "atleast" or overall_best[0] > _np.log(2.0) + 1e-12:
+        if above_best is None:
+            _, factor, labels = strongest
+            return tuple(sorted(labels, key=_foil_sort_key)), factor, False
+        _, _, factor, labels = above_best
     else:
         _, _, factor, labels = overall_best
-    return tuple(sorted(labels, key=_foil_sort_key)), factor, False
+    return tuple(sorted(labels, key=_foil_sort_key)), factor, _acceptable(factor)
 
 
 def _foil_sort_key(label):
