@@ -59,6 +59,39 @@ RE(restore_beam_position_snapshot(
 ))
 ```
 
+## Readable comparison and dry-run reports
+
+Comparison and restore previews now lead with counts for the selected values:
+unchanged, would change, and other differences needing review. Unchanged rows
+are hidden by default. Changes and review items use boxed, aligned columns for
+setting name, current value, saved/target value, delta, units, and status.
+Long values wrap rather than overflowing columns or being silently truncated.
+Narrow terminals use a vertical field/value box for each setting.
+
+```python
+# Assign the result so IPython does not echo the entire returned list as well.
+rows = restore_beam_position_snapshot("good_focus", dry_run=True)
+rows = compare_beam_position_snapshot("good_focus")
+
+# Opt in to the full table, including unchanged values.
+rows = restore_beam_position_snapshot("good_focus", show_unchanged=True)
+```
+
+These are display changes only: all selected rows are still returned, and
+selection, tolerance, restoration eligibility, batching, shutter/feedback
+behavior, and default dry-run safety are unchanged. Comparison deltas retain
+their existing current-minus-saved sign; restore deltas are target-minus-current.
+The report labels a non-dry-run preview as a plan, not completed restoration.
+
+Missing values, failed readbacks, nonfinite values, and read-only differences
+remain visible under review items; they are never counted as verified unchanged.
+An unknown current value is shown for review even if the existing restoration
+policy schedules it as `would move`. This presentation does not add a new
+execution guard: resolve such uncertainty before explicitly executing a restore.
+Matching read-only settings are counted as unchanged but remain excluded from
+restoration by the existing policy. Group metadata remains in the returned rows.
+No camera overlay fields are added to snapshots by this display change.
+
 ## Restore Rules
 
 - New snapshots (schema version 3) contain 85 items, including all 17 CRL motors,

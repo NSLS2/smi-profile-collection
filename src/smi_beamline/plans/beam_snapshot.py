@@ -401,21 +401,11 @@ def _restore_rows(saved, current, *, names=None, groups=None, exclude=None, tole
     return rows
 
 
-def _print_restore_rows(rows, *, dry_run):
-    print("beam position snapshot restore {}".format("dry run" if dry_run else "plan"))
-    print("{:<24s} {:<16s} {:>14s} {:>14s} {:>12s} {:<8s} {}".format(
-        "name", "group", "current", "target", "delta", "units", "status"))
-    for row in rows:
-        delta = "" if row.get("delta") is None else "{:.6g}".format(row["delta"])
-        print("{:<24s} {:<16s} {:>14s} {:>14s} {:>12s} {:<8s} {}".format(
-            str(row.get("name")),
-            str(row.get("group") or ""),
-            str(row.get("current")),
-            str(row.get("target")),
-            delta,
-            str(row.get("units") or ""),
-            str(row.get("status")),
-        ))
+def _print_restore_rows(rows, *, dry_run, show_unchanged=False):
+    from smi_beamline.plans.snapshot_display import snapshot_report
+
+    title = "Beam snapshot restore: " + ("DRY RUN (no writes)" if dry_run else "PLAN (not completed)")
+    print(snapshot_report(rows, title=title, target_key="target", show_unchanged=show_unchanged))
 
 
 def format_snapshot_diff(current, saved):
@@ -440,36 +430,29 @@ def format_snapshot_diff(current, saved):
     return rows
 
 
-def _print_diff(rows):
-    print("{:<24s} {:<16s} {:>14s} {:>14s} {:>12s} {:<8s} {}".format(
-        "name", "group", "current", "snapshot", "delta", "units", "status"))
-    for row in rows:
-        delta = "" if row["delta"] is None else "{:.6g}".format(row["delta"])
-        print("{:<24s} {:<16s} {:>14s} {:>14s} {:>12s} {:<8s} {}".format(
-            str(row["name"]),
-            str(row.get("group") or ""),
-            str(row.get("current")),
-            str(row.get("snapshot")),
-            delta,
-            str(row.get("units") or ""),
-            str(row.get("status")),
-        ))
+def _print_diff(rows, *, show_unchanged=False):
+    from smi_beamline.plans.snapshot_display import snapshot_report
+
+    print(snapshot_report(rows, title="Beam snapshot comparison (no writes)",
+                          target_key="snapshot", show_unchanged=show_unchanged))
 
 
-def compare_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=None, print_table=True):
+def compare_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=None, print_table=True,
+                                   show_unchanged=False):
     """Dry-run comparison between current state and a saved snapshot.  Never moves hardware."""
     ns = namespace if namespace is not None else globals()
     saved = _load_snapshot(snapshot_or_name, ns, store)
     current = _collect_snapshot_items(ns)
     rows = format_snapshot_diff(current, saved)
     if print_table:
-        _print_diff(rows)
+        _print_diff(rows, show_unchanged=show_unchanged)
     return rows
 
 
 def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=None,
                                    names=None, groups=None, exclude=None, dry_run=True,
-                                   tolerance=0.0, print_table=True, bimorph_debug=False):
+                                    tolerance=0.0, print_table=True, bimorph_debug=False,
+                                    show_unchanged=False):
     """Restore motor positions and bimorph voltages from a beam-position snapshot.
 
     NEEDS TESTING: the shutter/feedback sequence and expanded restore scope.
@@ -499,6 +482,9 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
         If True, only report.  If False, move selected restorable motors to saved readbacks.
     tolerance : float
         Skip moves whose current readback is already within this absolute tolerance.
+    show_unchanged : bool
+        Include unchanged settings in the printed table (hidden by default).
+        All selected rows are still returned, regardless of this display option.
     bimorph_debug : bool
         Print timestamped bimorph staging/write/readback/apply diagnostics to stderr.
         Also leave CA messages unsuppressed during bimorph writes.
@@ -512,7 +498,7 @@ def restore_beam_position_snapshot(snapshot_or_name, *, namespace=None, store=No
     rows = _restore_rows(saved, current, names=names, groups=groups, exclude=exclude,
                          tolerance=tolerance)
     if print_table:
-        _print_restore_rows(rows, dry_run=dry_run)
+        _print_restore_rows(rows, dry_run=dry_run, show_unchanged=show_unchanged)
 
     if dry_run:
         return rows
