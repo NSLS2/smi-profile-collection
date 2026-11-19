@@ -41,6 +41,7 @@ DEVICE_MODULES = [
     ("amptek",         "smi_beamline.instances.amptek"),
     ("pilatus",        "smi_beamline.instances.pilatus"),
     ("prosilica",      "smi_beamline.instances.prosilica"),
+    ("diagnostic cameras", "smi_beamline.instances.diagnostic_cameras"),
     ("beam modes",     "smi_beamline.instances.beam"),
     ("alignment",      "smi_beamline.plans.alignment"),
     ("config",         "smi_beamline.plans.config"),
@@ -119,7 +120,7 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
                 paint(f"{dt:4.1f}s", "94"),
             )
             if err is not None:
-                line += "   " + paint("{}: {}".format(type(err).__name__, err), "91")
+                line += "   " + paint(f"{type(err).__name__}: {err}", "91")
             print(line)
         if err is not None and halt_on_error:
             raise err
@@ -127,10 +128,10 @@ def make_devices(context=None, *, modules=None, verbose=True, halt_on_error=Fals
     total = time.monotonic() - t_start
     n_fail = len(modules) - n_ok
     if verbose:
-        msg = "{} device groups built in {:.1f}s".format(n_ok, total)
+        msg = f"{n_ok} device groups built in {total:.1f}s"
         if n_fail:
             failed = ", ".join(r["label"] for r in report if r["status"] == "FAIL")
-            msg += "  ({} FAILED: {})".format(n_fail, failed)
+            msg += f"  ({n_fail} FAILED: {failed})"
         print(paint(msg, "93" if n_fail else "92"))
 
     from .layout import configure_layout
