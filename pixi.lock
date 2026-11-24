@@ -401,7 +401,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-base-1.15.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-httpserver-0.0.12-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-kafka-0.10.0-pyhd8ed1ab_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.25-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.27-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-api-0.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-tiled-plugins-2.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bokeh-3.10.0-pyhd8ed1ab_0.conda
@@ -1092,7 +1092,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-httpserver-0.0.12-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-kafka-0.10.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-live-0.0.8-pyhd8ed1ab_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.25-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.27-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-api-0.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-tiled-plugins-2.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-widgets-0.0.17-pyhd8ed1ab_1.conda
@@ -1774,7 +1774,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/backports.tarfile-1.2.0-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-base-1.15.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-kafka-0.10.0-pyhd8ed1ab_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.25-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.27-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-tiled-plugins-2.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bokeh-3.10.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/boltons-26.2.0-pyhd8ed1ab_0.conda
@@ -2445,7 +2445,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/backports.tarfile-1.2.0-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-base-1.15.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-kafka-0.10.0-pyhd8ed1ab_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.25-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.27-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-tiled-plugins-2.0.13-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/bokeh-3.10.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/boltons-26.2.0-pyhd8ed1ab_0.conda
@@ -8765,7 +8765,7 @@ packages:
   - python_abi 3.12.* *_cp312
   license: BSD-2-Clause
   purls:
-  - pkg:pypi/wrapt?source=compressed-mapping
+  - pkg:pypi/wrapt?source=hash-mapping
   run_exports: {}
   size: 153347
   timestamp: 1792013634085
@@ -9268,7 +9268,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/zstandard?source=compressed-mapping
+  - pkg:pypi/zstandard?source=hash-mapping
   run_exports: {}
   size: 466862
   timestamp: 1788604308908
@@ -9788,9 +9788,9 @@ packages:
   run_exports: {}
   size: 34118
   timestamp: 1734965301665
-- conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.25-pyhd8ed1ab_0.conda
-  sha256: 65866ec14dddd8e4a22102f6c0d02a94c049982af7fb46af3128a26277e3a643
-  md5: 18dc38b91e082e5fa238dafa873605a8
+- conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-0.0.27-pyhd8ed1ab_0.conda
+  sha256: 0efa934ebb2d0dfd4a42b00b56f5f4f484015e390e554a3b5c4b25f3d4f18678
+  md5: 746ed80f11aa1809eb5ef7b676201f00
   depends:
   - bluesky-base
   - hiredis
@@ -9804,7 +9804,7 @@ packages:
   - openpyxl
   - ophyd
   - pydantic
-  - python >=3.10
+  - python >=3.11
   - python-multipart
   - pyyaml
   - pyzmq
@@ -9815,8 +9815,8 @@ packages:
   purls:
   - pkg:pypi/bluesky-queueserver?source=hash-mapping
   run_exports: {}
-  size: 287392
-  timestamp: 1784295616236
+  size: 293968
+  timestamp: 1794888486443
 - conda: https://conda.anaconda.org/conda-forge/noarch/bluesky-queueserver-api-0.0.13-pyhd8ed1ab_0.conda
   sha256: 9d5e3de0d30dcce15aefcf8c2429e90368163de6bc371f4c9085567bd9f4a999
   md5: 32e2657e6f71e98255c8d86b444d6e3b
@@ -11044,7 +11044,7 @@ packages:
   license: BSD-2-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/imageio?source=compressed-mapping
+  - pkg:pypi/imageio?source=hash-mapping
   run_exports: {}
   size: 321602
   timestamp: 1791477236274
@@ -11345,7 +11345,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/jsonpointer?source=compressed-mapping
+  - pkg:pypi/jsonpointer?source=hash-mapping
   run_exports: {}
   size: 14728
   timestamp: 1791676993658
@@ -12170,7 +12170,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/pip?source=compressed-mapping
+  - pkg:pypi/pip?source=hash-mapping
   run_exports: {}
   size: 1201888
   timestamp: 1792524308470
