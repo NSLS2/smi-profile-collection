@@ -81,7 +81,7 @@ statusclient = redis.Redis("xf12id2-smi-redis1.nsls2.bnl.gov", db=3, ssl=True, p
 tiled_writing_client_raw = from_profile(
     "nsls2", api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_SMI"])["smi"]["raw"]
 tiled_writing_client_raw.context.http_client.headers["tiled-qos"] = "acquisition"
-TILED_BACKUP_ROOT = "/nsls2/data/smi/shared/config/bluesky/tiled_backup"
+TILED_BACKUP_ROOT = "/nsls2/auto-storage/smi/shared/config/bluesky/tiled_backup"
 
 tiled_inserter = TiledInserter(
     tiled_writing_client_raw,
