@@ -110,6 +110,23 @@ nslsii.configure_base(
 RE = _user_ns["RE"]
 bec = _user_ns["bec"]
 sd = _user_ns["sd"]
+
+if IS_QS_WORKER:
+    # Expose stock Bluesky plans for QueueServer discovery.
+    # user_group_permissions.yaml determines which ones clients may run.
+    from inspect import isgeneratorfunction as _is_plan_generator
+    from bluesky import plans as _stock_plans
+
+    globals().update({
+        name: plan
+        for name, plan in vars(_stock_plans).items()
+        if not name.startswith("_")
+        and _is_plan_generator(plan)
+        and plan.__module__ == _stock_plans.__name__
+    })
+
+
+
 RE.subscribe(tiled_inserter)
 # Files are written to $BLUESKY_JSON_LOG_DIR (default /var/log/bluesky) and must be rotated
 # outside Python (e.g. logrotate).
