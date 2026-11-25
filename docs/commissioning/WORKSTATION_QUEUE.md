@@ -8,7 +8,8 @@ components. The terminal namespace is unchanged.
 | Plan | Allowed device argument | Existing object | Value |
 | --- | --- | --- | --- |
 | `mv` | `oav_acquire_time` | `OAV.cam.acquire_time` (on-axis SAM camera) | Absolute exposure, 0.0001–2 s |
-| `mvr` | `sample_piezo_x` or `sample_piezo_y` | `piezo.x` or `piezo.y` | Relative displacement of one axis, native units |
+| `mvr` | `sample_piezo_x`, `_y`, `_z` (same prefix) | `piezo.x`, `.y`, `.z` | Relative displacement of one translational axis, um |
+| `mvr` | `sample_piezo_th`, `sample_piezo_chi` | `piezo.th`, `.ch` | Relative displacement of one angular axis, degrees |
 
 Run `python -m pytest tests/sim/test_workstation_queue.py` in the profile test environment
 for offline QueueServer introspection, permission filtering, device-name resolution
@@ -17,7 +18,7 @@ and execution on in-memory signals. This does not load the operational startup f
 After review and deployment to the **worker**, refresh the manager's effective
 permissions and its plan/device inventory using the site's normal idle-worker
 procedure. In the ws1 monitor verify `mv`, `mvr` and both aliases under
-**Queue & Console → Capabilities**. A missing device factory group means its
+**Queue & Console → Capabilities** (look for each configured piezo alias). A missing device factory group means its
 alias and plan will be absent; inspect the worker startup report. Changing only
 the workstation checkout or its CLI flags cannot register a worker plan.
 
@@ -28,7 +29,15 @@ restore the original exposure and check again. The app's relative-jog step
 and units must be selected separately after checking the installed axis, its
 direction, limits and available travel. No step size is prescribed here.
 
-### Shared sample loading
+### Reviewed piezo XY move
+
+For a reviewed on-axis camera move the worker exposes `move_piezo_xy(x0, y0,
+dx, dy)` when both `piezo.x` and `.y` are loaded. All values are native µm.
+One queue item checks both starting coordinates, the 100 µm per-axis hard
+limit on requested displacement, and both motor targets before yielding one
+grouped `bps.mv`. It does not address Z, rotations, or the Huber stack.
+
+### Bookmark positioning
 
 Bookmark editing stays in the existing shared `swaxssamples` db=2 namespace.
 `load_holder()` reads holder membership; it is not a holder transfer plan. The

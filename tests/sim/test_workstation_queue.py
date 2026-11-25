@@ -18,14 +18,15 @@ def worker():
     exposure = Signal(name='OAV_cam_acquire_time', value=1.)
     x = Signal(name='piezo_x', value=3.)
     ns = workstation_surface({'OAV': SimpleNamespace(cam=SimpleNamespace(acquire_time=exposure)),
-                              'piezo': SimpleNamespace(x=x, y=Signal(name='y', value=2.))})
+                              'piezo': SimpleNamespace(x=x, y=Signal(name='y', value=2.),
+                                  **{k: Signal(name=k, value=0.) for k in ('z','th','ch')})})
     plans, devices, ps, ds = existing_plans_and_devices_from_nspace(nspace=ns, max_depth=1)
     ap, ad = load_allowed_plans_and_devices(existing_plans=plans, existing_devices=devices,
         path_user_group_permissions=str(Path(__file__).resolve().parents[2] / 'startup' /
                                         'user_group_permissions.yaml'))
 
-    def prepare(group, name, alias, value):
-        item = dict(item_type='plan', name=name, args=[alias, value], user_group=group,
+    def prepare(group, name, *args):
+        item = dict(item_type='plan', name=name, args=list(args), user_group=group,
                     meta={'smi_acquire_command': 'trial'})
         return prepare_plan(item, plans_in_nspace=ps, devices_in_nspace=ds, allowed_plans=ap,
                             allowed_devices=ad, nspace=ns)
@@ -51,12 +52,35 @@ def test_workstation_items(worker, group):
     re(y['callable'](*y['args'], **y['kwargs']))
     assert y['args'][0].get() == pytest.approx(2.05)
     assert x.get() == pytest.approx(2.9)
+    for alias, attr in [('z','z'), ('th','th'), ('chi','ch')]:
+        p = prepare(group, 'mvr', 'sample_piezo_' + alias, -.025)
+        motor = p['args'][0]
+        assert motor.name == attr
+        re(p['callable'](*p['args'], **p['kwargs']))
+        assert motor.get() == pytest.approx(-.025)
+        assert x.get() == pytest.approx(2.9)
 
 
 def test_missing_targets_not_advertised():
     assert not workstation_surface({})
     assert set(workstation_surface({'piezo': SimpleNamespace(x=Signal(name='x'))})) == {
         'sample_piezo_x', 'mvr'}
+
+
+@pytest.mark.parametrize('group', ['primary','gui'])
+def test_reviewed_pair_moves_xy_only_and_rejects_stale_or_excessive_moves(worker, group):
+    _, x, _, prepare = worker
+    y = prepare(group, 'mvr', 'sample_piezo_y', .1)['args'][0]
+    engine = RunEngine({})
+    def run(*args):
+        item = prepare(group, 'move_piezo_xy', *args)
+        engine(item['callable'](*item['args']))
+    run(3., 2., -1., 4.)
+    assert (x.get(),y.get()) == (2.,6.)
+    for args in [(2., 2., 1., 2.), (2., 6., 0., 101.)]:
+        with pytest.raises(ValueError):
+            run(*args)
+        assert (x.get(),y.get()) == (2.,6.)
 
 
 def test_load_sample_resolves_shared_refined_version_at_execution():

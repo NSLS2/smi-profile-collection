@@ -50,6 +50,7 @@ user_groups:
       # profile acquisition / motion plans -----------------------------------------------------
       - "mv"                             # workstation: on-axis camera exposure only
       - "load_sample"                    # resolve a shared bookmark, move piezo XYZ only
+      - "move_piezo_xy"                  # reviewed on-axis camera preview, X/Y only
       - "mvr"                            # workstation: sample piezo X only
       - "move_energy"                    # energy.py: move the DCM/IVU to a target energy
       - "det_exposure_time"              # pilatus.py: set detector exposure (message-pure generator)
@@ -172,6 +173,7 @@ user_groups:
   # ------------------------------------------------------------------------------------------
   gui:
     allowed_plans:
+      - "move_piezo_xy"
       - "load_sample"
       - "mv"
       - "mvr"

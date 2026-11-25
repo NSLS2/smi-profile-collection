@@ -29,12 +29,12 @@ def workstation_surface(namespace):
 
         surface.update(oav_acquire_time=exposure, mv=mv)
 
-    if namespace.get('piezo') is not None:
-        x = namespace['piezo'].x
-
-        axes = {'sample_piezo_x': x}
-        if getattr(namespace['piezo'], 'y', None) is not None:
-            axes['sample_piezo_y'] = namespace['piezo'].y
+    axes = {}
+    for alias, attr in [('x', 'x'), ('y', 'y'), ('z', 'z'), ('th', 'th'), ('chi', 'ch')]:
+        motor = getattr(namespace.get('piezo'), attr, None)
+        if motor is not None:
+            axes['sample_piezo_' + alias] = motor
+    if axes:
 
         @_target(*axes)
         def mvr(device, delta: float):
@@ -44,6 +44,23 @@ def workstation_surface(namespace):
             yield from bps.mvr(device, delta)
 
         surface.update(axes, mvr=mvr)
+    if {'sample_piezo_x', 'sample_piezo_y'} <= axes.keys():
+        def move_piezo_xy(x0: float, y0: float, dx: float, dy: float):
+            """Move piezo X and Y to a reviewed target (um); reject a stale origin."""
+            if not all(map(math.isfinite, (x0, y0, dx, dy))) or max(abs(dx), abs(dy)) > 100:
+                raise ValueError('XY commission move limited to 100 um per axis')
+            moves = []
+            for motor, origin, delta in ((axes['sample_piezo_x'], x0, dx),
+                                         (axes['sample_piezo_y'], y0, dy)):
+                now = float((yield from bps.rd(motor)))
+                if not math.isclose(now, origin, abs_tol=.1, rel_tol=0):
+                    raise ValueError('Piezo moved since preview; no XY move issued')
+                target = origin + delta
+                motor.check_value(target)
+                moves.extend((motor, target))
+            yield from bps.mv(*moves)
+
+        surface['move_piezo_xy'] = move_piezo_xy
     return surface
 
 
