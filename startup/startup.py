@@ -287,6 +287,15 @@ except Exception as _exc:  # noqa: BLE001 -- never let smi-plans wiring block th
     print(f"\u2717 smi-plans queue surface NOT exposed: "
           f"{type(_exc).__name__}: {_exc}")
 
+# Worker-only workstation plans. Do not expose a generic imported move stub
+# under these allowed names if its intended target failed to load.
+if IS_QS_WORKER:
+    from smi_beamline.plans.workstation import workstation_surface as _workstation_surface
+
+    for _name in ('mv', 'mvr'):
+        globals().pop(_name, None)
+    globals().update(_workstation_surface(_devices_ns))
+
 # --- Default scan-naming preprocessor (recorded-field filename templating). ---
 # Append the modern replacement for get_scan_md() to RE.preprocessors so EVERY plan run through
 # the RunEngine gets its run-scoped sample_name extended with a recorded-field template

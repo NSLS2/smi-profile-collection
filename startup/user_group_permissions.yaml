@@ -17,7 +17,7 @@
 #   * `primary` -- full staff surface (all acquisition/alignment plans + bluesky scans + smi-plans
 #     + all real devices + safe control functions).
 #   * `gui` -- restricted surface for the alignment GUI / generic queue clients (only the data-only
-#     smi-plans `*_from_spec` wrappers + the bluesky scans; devices/functions locked down).
+#     smi-plans `*_from_spec` wrappers, selected scans and single-target workstation moves).
 #
 # After editing, regenerate the introspection cache and smoke-test the worker load:
 #   pixi run -e qs qs-list      # -> startup/existing_plans_and_devices.yaml
@@ -48,6 +48,8 @@ user_groups:
       - ":^fast_align"                   # fast_align, fast_align_procedure
       - "bisection_search_plan"          # alignment sub-plan (motor bisection to target intensity)
       # profile acquisition / motion plans -----------------------------------------------------
+      - "mv"                             # workstation: on-axis camera exposure only
+      - "mvr"                            # workstation: sample piezo X only
       - "move_energy"                    # energy.py: move the DCM/IVU to a target energy
       - "det_exposure_time"              # pilatus.py: set detector exposure (message-pure generator)
       - "multi_count"                    # pilatus.py: count multiple detectors
@@ -164,11 +166,13 @@ user_groups:
 
   # ------------------------------------------------------------------------------------------
   # gui: restricted surface for the alignment GUI / generic queue clients.
-  #   Only the data-only smi-plans `*_from_spec` wrappers (their single arg is a JSON spec, so a
-  #   queue client can build them) + the standard bluesky scans.  No bare control functions.
+  #   Data-only smi-plans wrappers, selected scans and single-target workstation moves.
+  #   No bare control functions.
   # ------------------------------------------------------------------------------------------
   gui:
     allowed_plans:
+      - "mv"
+      - "mvr"
       - ":.*_from_spec$"                 # acquire_from_spec / nexafs_from_spec / giwaxs_from_spec / temperature_ramp_from_spec
       - "count"                          # the data-only standard scans a GUI can fully specify
       - "scan"
