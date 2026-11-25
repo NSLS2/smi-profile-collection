@@ -295,6 +295,8 @@ if IS_QS_WORKER:
     for _name in ('mv', 'mvr'):
         globals().pop(_name, None)
     globals().update(_workstation_surface(_devices_ns))
+    from smi_beamline.plans.workstation import sample_loading_surface as _sample_loading_surface
+    globals().update(_sample_loading_surface(_devices_ns, samplestore))
 
 # --- Default scan-naming preprocessor (recorded-field filename templating). ---
 # Append the modern replacement for get_scan_md() to RE.preprocessors so EVERY plan run through

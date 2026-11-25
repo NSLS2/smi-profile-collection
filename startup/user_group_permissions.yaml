@@ -49,6 +49,7 @@ user_groups:
       - "bisection_search_plan"          # alignment sub-plan (motor bisection to target intensity)
       # profile acquisition / motion plans -----------------------------------------------------
       - "mv"                             # workstation: on-axis camera exposure only
+      - "load_sample"                    # resolve a shared bookmark, move piezo XYZ only
       - "mvr"                            # workstation: sample piezo X only
       - "move_energy"                    # energy.py: move the DCM/IVU to a target energy
       - "det_exposure_time"              # pilatus.py: set detector exposure (message-pure generator)
@@ -171,6 +172,7 @@ user_groups:
   # ------------------------------------------------------------------------------------------
   gui:
     allowed_plans:
+      - "load_sample"
       - "mv"
       - "mvr"
       - ":.*_from_spec$"                 # acquire_from_spec / nexafs_from_spec / giwaxs_from_spec / temperature_ramp_from_spec
